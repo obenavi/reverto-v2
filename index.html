@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
@@ -103,39 +103,39 @@
       </svg>
     </div>
     <div class="logo-name">Reverto</div>
-    <div class="logo-sub">ניהול רכש חכם למסעדות</div>
+    <div class="logo-sub">????? ??? ??? ???????</div>
 
     <div class="login-card">
-      <div class="login-title">כניסה למערכת</div>
-      <div class="login-desc">הכנס את קוד הגישה שקיבלת מ-Reverto</div>
+      <div class="login-title">????? ??????</div>
+      <div class="login-desc">???? ?? ??? ????? ?????? ?-Reverto</div>
 
-      <label class="input-label">קוד גישה</label>
+      <label class="input-label">??? ????</label>
       <div class="input-wrap">
-        <input class="input" id="access-code" type="text" placeholder="PILOT-XXXX"
+        <input class="input" id="access-code" type="text" placeholder="???? ??? ????"
           style="letter-spacing:2px;font-weight:700;text-transform:uppercase"
           oninput="this.value=this.value.toUpperCase()"
           onkeydown="if(event.key==='Enter')tryLogin()">
       </div>
 
-      <button class="btn-primary mt-12" onclick="tryLogin()" id="login-btn">כניסה</button>
-      <div class="error-msg" id="error-msg">קוד גישה שגוי. נסה שוב.</div>
+      <button class="btn-primary mt-12" onclick="tryLogin()" id="login-btn">?????</button>
+      <div class="error-msg" id="error-msg">??? ???? ????. ??? ???.</div>
 
-      <div class="divider">— אין לך קוד עדיין? —</div>
-      <div class="waitlist-link" onclick="showWaitlist()">הצטרף לרשימת המתנה</div>
+      <div class="divider">? ??? ?? ??? ?????? ?</div>
+      <div class="waitlist-link" onclick="showWaitlist()">????? ?????? ?????</div>
     </div>
   </div>
 
   <!-- Waitlist Modal -->
   <div id="waitlist-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;align-items:flex-end;justify-content:center">
     <div style="background:white;border-radius:24px 24px 0 0;padding:28px 24px 40px;width:100%;max-width:480px">
-      <div style="font-size:18px;font-weight:800;margin-bottom:6px">רשימת המתנה</div>
-      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:20px">נעדכן אותך ברגע שיהיה מקום</div>
-      <label class="input-label">שם העסק</label>
-      <input class="input mb-12" id="wl-name" type="text" placeholder="מסעדת הים">
-      <label class="input-label">טלפון</label>
+      <div style="font-size:18px;font-weight:800;margin-bottom:6px">????? ?????</div>
+      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:20px">????? ???? ???? ????? ????</div>
+      <label class="input-label">?? ????</label>
+      <input class="input mb-12" id="wl-name" type="text" placeholder="????? ???">
+      <label class="input-label">?????</label>
       <input class="input mb-16" id="wl-phone" type="tel" placeholder="050-0000000">
-      <button class="btn-primary" onclick="submitWaitlist()">שלח בקשה</button>
-      <button class="btn-ghost mt-8" onclick="hideWaitlist()">ביטול</button>
+      <button class="btn-primary" onclick="submitWaitlist()">??? ????</button>
+      <button class="btn-ghost mt-8" onclick="hideWaitlist()">?????</button>
     </div>
   </div>
 
@@ -148,7 +148,7 @@
       if (!code) return;
       const btn = document.getElementById('login-btn');
       const err = document.getElementById('error-msg');
-      btn.textContent = '...בודק';
+      btn.textContent = '...????';
       btn.disabled = true;
       err.style.display = 'none';
       try {
@@ -164,13 +164,13 @@
           window.location.href = '/app.html';
         } else {
           err.style.display = 'block';
-          btn.textContent = 'כניסה';
+          btn.textContent = '?????';
           btn.disabled = false;
         }
       } catch(e) {
-        err.textContent = 'שגיאת חיבור. בדוק אינטרנט.';
+        err.textContent = '????? ?????. ???? ???????.';
         err.style.display = 'block';
-        btn.textContent = 'כניסה';
+        btn.textContent = '?????';
         btn.disabled = false;
       }
     }
@@ -197,7 +197,7 @@
         body: JSON.stringify({business_name: name, phone})
       });
       hideWaitlist();
-      alert('תודה! נחזור אליך בקרוב.');
+      alert('????! ????? ???? ?????.');
     }
 
     // Auto-redirect if already logged in
@@ -207,3 +207,4 @@
   </script>
 </body>
 </html>
+
