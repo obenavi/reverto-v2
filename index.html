@@ -1,0 +1,209 @@
+﻿<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Reverto</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 24px;
+      background: var(--surface);
+    }
+    .logo-mark {
+      width: 72px;
+      height: 72px;
+      background: linear-gradient(135deg, var(--primary-dark), var(--primary-light));
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      box-shadow: 0 8px 32px rgba(107,53,184,0.3);
+    }
+    .logo-name {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--on-surface);
+      letter-spacing: -1px;
+      margin-bottom: 6px;
+    }
+    .logo-sub {
+      font-size: 14px;
+      color: var(--on-surface-3);
+      margin-bottom: 48px;
+      text-align: center;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--surface-card);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      padding: 28px 24px;
+    }
+    .login-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      color: var(--on-surface);
+    }
+    .login-desc {
+      font-size: 13px;
+      color: var(--on-surface-3);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .input-wrap {
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .input-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--on-surface-2);
+      margin-bottom: 6px;
+      display: block;
+    }
+    .error-msg {
+      font-size: 13px;
+      color: var(--error);
+      text-align: center;
+      margin-top: 12px;
+      display: none;
+    }
+    .divider {
+      text-align: center;
+      font-size: 12px;
+      color: var(--on-surface-3);
+      margin: 16px 0;
+    }
+    .waitlist-link {
+      font-size: 13px;
+      color: var(--primary);
+      text-align: center;
+      cursor: pointer;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="logo-mark">
+      <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
+        <path d="M8 10 L19 6 L30 10 L30 22 Q30 30 19 34 Q8 30 8 22 Z" fill="white" opacity="0.9"/>
+        <path d="M14 18 L17 21 L24 14" stroke="rgba(107,53,184,0.9)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    </div>
+    <div class="logo-name">Reverto</div>
+    <div class="logo-sub">ניהול רכש חכם למסעדות</div>
+
+    <div class="login-card">
+      <div class="login-title">כניסה למערכת</div>
+      <div class="login-desc">הכנס את קוד הגישה שקיבלת מ-Reverto</div>
+
+      <label class="input-label">קוד גישה</label>
+      <div class="input-wrap">
+        <input class="input" id="access-code" type="text" placeholder="PILOT-XXXX"
+          style="letter-spacing:2px;font-weight:700;text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase()"
+          onkeydown="if(event.key==='Enter')tryLogin()">
+      </div>
+
+      <button class="btn-primary mt-12" onclick="tryLogin()" id="login-btn">כניסה</button>
+      <div class="error-msg" id="error-msg">קוד גישה שגוי. נסה שוב.</div>
+
+      <div class="divider">— אין לך קוד עדיין? —</div>
+      <div class="waitlist-link" onclick="showWaitlist()">הצטרף לרשימת המתנה</div>
+    </div>
+  </div>
+
+  <!-- Waitlist Modal -->
+  <div id="waitlist-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;align-items:flex-end;justify-content:center">
+    <div style="background:white;border-radius:24px 24px 0 0;padding:28px 24px 40px;width:100%;max-width:480px">
+      <div style="font-size:18px;font-weight:800;margin-bottom:6px">רשימת המתנה</div>
+      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:20px">נעדכן אותך ברגע שיהיה מקום</div>
+      <label class="input-label">שם העסק</label>
+      <input class="input mb-12" id="wl-name" type="text" placeholder="מסעדת הים">
+      <label class="input-label">טלפון</label>
+      <input class="input mb-16" id="wl-phone" type="tel" placeholder="050-0000000">
+      <button class="btn-primary" onclick="submitWaitlist()">שלח בקשה</button>
+      <button class="btn-ghost mt-8" onclick="hideWaitlist()">ביטול</button>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://kykfrkoisbcjmipermxy.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt5a2Zya29pc2Jjam1pcGVybXh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTY4NTcsImV4cCI6MjA5MTAzMjg1N30.bJgulvCBjpAHRy1yTKKHE_N9K3el2YFvaXakiWYCdWs';
+
+    async function tryLogin() {
+      const code = document.getElementById('access-code').value.trim();
+      if (!code) return;
+      const btn = document.getElementById('login-btn');
+      const err = document.getElementById('error-msg');
+      btn.textContent = '...בודק';
+      btn.disabled = true;
+      err.style.display = 'none';
+      try {
+        const res = await fetch('/.netlify/functions/auth', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({code})
+        });
+        if (res.ok) {
+          const data = await res.json();
+          sessionStorage.setItem('rv_token', code);
+          sessionStorage.setItem('rv_user', JSON.stringify(data));
+          window.location.href = '/app.html';
+        } else {
+          err.style.display = 'block';
+          btn.textContent = 'כניסה';
+          btn.disabled = false;
+        }
+      } catch(e) {
+        err.textContent = 'שגיאת חיבור. בדוק אינטרנט.';
+        err.style.display = 'block';
+        btn.textContent = 'כניסה';
+        btn.disabled = false;
+      }
+    }
+
+    function showWaitlist() {
+      document.getElementById('waitlist-modal').style.display = 'flex';
+    }
+    function hideWaitlist() {
+      document.getElementById('waitlist-modal').style.display = 'none';
+    }
+
+    async function submitWaitlist() {
+      const name = document.getElementById('wl-name').value.trim();
+      const phone = document.getElementById('wl-phone').value.trim();
+      if (!name || !phone) return;
+      await fetch(`${SUPABASE_URL}/rest/v1/waitlist`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({business_name: name, phone})
+      });
+      hideWaitlist();
+      alert('תודה! נחזור אליך בקרוב.');
+    }
+
+    // Auto-redirect if already logged in
+    if (sessionStorage.getItem('rv_token')) {
+      window.location.href = '/app.html';
+    }
+  </script>
+</body>
+</html>

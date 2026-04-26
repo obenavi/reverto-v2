@@ -1,0 +1,273 @@
+﻿<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Reverto</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;background:linear-gradient(135deg,var(--primary-dark),var(--primary-light));border-radius:10px;display:flex;align-items:center;justify-content:center">
+        <svg width="18" height="18" viewBox="0 0 38 38" fill="none">
+          <path d="M8 10 L19 6 L30 10 L30 22 Q30 30 19 34 Q8 30 8 22 Z" fill="white" opacity="0.9"/>
+          <path d="M14 18 L17 21 L24 14" stroke="rgba(107,53,184,0.9)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
+      <span style="font-size:18px;font-weight:800;letter-spacing:-0.5px">Reverto</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div id="top-biz-name" style="font-size:12px;font-weight:700;color:var(--on-surface-3)"></div>
+      <button onclick="navTo('profile')" style="width:36px;height:36px;border-radius:50%;background:var(--surface-low);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center" id="top-avatar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- PAGES -->
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-content">
+
+      <!-- Greeting -->
+      <div style="margin-bottom:16px">
+        <div style="font-size:22px;font-weight:800;letter-spacing:-0.5px" id="dash-greeting">שלום!</div>
+        <div style="font-size:13px;color:var(--on-surface-3)" id="dash-date"></div>
+      </div>
+
+      <!-- Stat Cards -->
+      <div class="stat-grid">
+        <div class="stat-card card-tap" onclick="navTo('invoices')">
+          <div class="stat-label">רכש החודש</div>
+          <div class="stat-value" id="dash-monthly">₪0</div>
+          <div class="stat-sub" id="dash-monthly-sub">0 חשבוניות</div>
+        </div>
+        <div class="stat-card card-tap" onclick="navTo('insights')">
+          <div class="stat-label">חיסכון פוטנציאלי</div>
+          <div class="stat-value text-success" id="dash-saving">₪0</div>
+          <div class="stat-sub">לעומת שוק</div>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card card-tap" onclick="navTo('alerts')">
+          <div class="stat-label">התראות מחיר</div>
+          <div class="stat-value text-error" id="dash-alerts">0</div>
+          <div class="stat-sub">מוצרים שהתייקרו</div>
+        </div>
+        <div class="stat-card card-tap" onclick="navTo('foodcost')">
+          <div class="stat-label">Food Cost</div>
+          <div class="stat-value" id="dash-foodcost">--%</div>
+          <div class="stat-sub" id="dash-foodcost-sub">הכנס מחזור יומי</div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="card mb-12">
+        <div class="card-pad">
+          <div class="flex-between mb-8">
+            <div class="section-title">רכש לאורך זמן</div>
+            <div style="display:flex;gap:4px">
+              <button class="period-btn active" onclick="setPeriod('week',this)">שבוע</button>
+              <button class="period-btn" onclick="setPeriod('month',this)">חודש</button>
+              <button class="period-btn" onclick="setPeriod('quarter',this)">רבעון</button>
+              <button class="period-btn" onclick="setPeriod('year',this)">שנה</button>
+            </div>
+          </div>
+          <div class="chart-wrap" id="dash-chart">
+            <canvas id="chart-canvas" style="width:100%;height:130px"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Price Alerts -->
+      <div class="section-header">
+        <div class="section-title">התראות מחיר</div>
+        <button class="section-link" onclick="navTo('alerts')">הכל</button>
+      </div>
+      <div class="card mb-12" id="dash-alerts-list">
+        <div class="empty-state">
+          <div class="empty-state-title">אין התראות</div>
+          <div class="empty-state-sub">כשמחיר מוצר יעלה נדווח לך כאן</div>
+        </div>
+      </div>
+
+      <!-- Benchmark -->
+      <div class="section-header">
+        <div class="section-title">בנצ'מרק שוק</div>
+        <button class="section-link" onclick="navTo('market')">מחירון</button>
+      </div>
+      <div class="card mb-12" id="dash-benchmark">
+        <div class="card-pad">
+          <div style="font-size:13px;color:var(--on-surface-3);text-align:center;padding:12px 0">
+            טוען נתוני שוק...
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Invoices -->
+      <div class="section-header">
+        <div class="section-title">חשבוניות אחרונות</div>
+        <button class="section-link" onclick="navTo('invoices')">הכל</button>
+      </div>
+      <div class="card" id="dash-recent-invoices">
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="empty-state-title">אין חשבוניות עדיין</div>
+          <div class="empty-state-sub">סרוק את החשבונית הראשונה שלך</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SCANNER -->
+  <div class="page" id="page-scanner">
+    <div class="page-content">
+      <div style="font-size:22px;font-weight:800;margin-bottom:4px">סריקת חשבונית</div>
+      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:24px">צלם או העלה חשבונית לניתוח אוטומטי</div>
+
+      <!-- Scan Area -->
+      <div id="scanner-idle">
+        <div onclick="document.getElementById('scan-file').click()"
+          style="border:2px dashed var(--border);border-radius:var(--radius-xl);padding:48px 24px;text-align:center;cursor:pointer;background:var(--surface-card);transition:all 0.2s;margin-bottom:12px"
+          onmouseenter="this.style.borderColor='var(--primary)'"
+          onmouseleave="this.style.borderColor='var(--border)'">
+          <div style="width:64px;height:64px;background:linear-gradient(135deg,var(--primary-dark),var(--primary-light));border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+          <div style="font-size:16px;font-weight:800;margin-bottom:6px">צלם חשבונית</div>
+          <div style="font-size:13px;color:var(--on-surface-3)">לחץ לצילום או העלאת קובץ</div>
+        </div>
+        <input type="file" id="scan-file" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="scannerHandleFile(this.files[0])">
+        <button class="btn-ghost" onclick="document.getElementById('scan-file-gallery').click()">
+          העלה מהגלריה
+        </button>
+        <input type="file" id="scan-file-gallery" accept="image/*,application/pdf" style="display:none" onchange="scannerHandleFile(this.files[0])">
+      </div>
+
+      <!-- Loading -->
+      <div id="scanner-loading" style="display:none;text-align:center;padding:48px 0">
+        <div style="width:56px;height:56px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 16px"></div>
+        <div style="font-size:15px;font-weight:700" id="scanner-loading-text">מנתח חשבונית...</div>
+        <div style="font-size:13px;color:var(--on-surface-3);margin-top:6px">Azure OCR בפעולה</div>
+      </div>
+
+      <!-- Error -->
+      <div id="scanner-error" style="display:none">
+        <div class="card card-pad" style="border-color:var(--error);background:var(--error-bg);text-align:center">
+          <div style="font-size:15px;font-weight:800;color:var(--error);margin-bottom:6px" id="scanner-error-title">שגיאה</div>
+          <div style="font-size:13px;color:var(--error)" id="scanner-error-msg"></div>
+          <button class="btn-ghost mt-12" onclick="scannerReset()">נסה שוב</button>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="scanner-results" style="display:none"></div>
+
+    </div>
+  </div>
+
+  <!-- SUPPLIERS -->
+  <div class="page" id="page-suppliers">
+    <div class="page-content">
+      <div style="font-size:22px;font-weight:800;margin-bottom:16px">ספקים</div>
+      <div style="position:relative;margin-bottom:12px">
+        <input class="input" id="supplier-search" type="text" placeholder="חיפוש ספק..." oninput="filterSuppliers(this.value)" style="padding-right:40px">
+        <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--on-surface-3)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <div id="suppliers-list" class="card"></div>
+      <button class="btn-primary mt-12" onclick="showAddSupplier()">
+        + הוסף ספק
+      </button>
+    </div>
+  </div>
+
+  <!-- MARKET PRICES -->
+  <div class="page" id="page-market">
+    <div class="page-content">
+      <div style="font-size:22px;font-weight:800;margin-bottom:4px">מחירי שוק</div>
+      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:16px">מחירי תקליט עדכניים</div>
+      <div style="position:relative;margin-bottom:12px">
+        <input class="input" id="market-search" type="text" placeholder="חיפוש מוצר..." oninput="filterMarket(this.value)" style="padding-right:40px">
+        <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%)" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--on-surface-3)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <div id="market-list" class="card"></div>
+    </div>
+  </div>
+
+  <!-- PROFILE -->
+  <div class="page" id="page-profile">
+    <div class="page-content">
+      <div style="font-size:22px;font-weight:800;margin-bottom:20px">פרופיל</div>
+      <div class="card card-pad mb-12">
+        <label class="field-label">שם העסק</label>
+        <input class="input mb-12" id="prof-biz-name" type="text">
+        <label class="field-label">מחזור יומי ממוצע (₪)</label>
+        <input class="input mb-12" id="prof-revenue" type="number" min="0">
+        <button class="btn-primary" onclick="saveProfile()">שמור שינויים</button>
+      </div>
+      <div class="card card-pad">
+        <button class="btn-ghost" onclick="logout()" style="color:var(--error);border-color:var(--error)">יציאה מהמערכת</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" id="nav-dashboard" onclick="navTo('dashboard')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>דשבורד</span>
+    </button>
+    <button class="nav-item" id="nav-scanner" onclick="navTo('scanner')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      <span>סריקה</span>
+    </button>
+    <button class="nav-item" id="nav-suppliers" onclick="navTo('suppliers')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+      <span>ספקים</span>
+    </button>
+    <button class="nav-item" id="nav-market" onclick="navTo('market')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span>שוק</span>
+    </button>
+  </nav>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .period-btn {
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--on-surface-3);
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .period-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+  </style>
+
+  <script src="js/db.js"></script>
+  <script src="js/scanner.js"></script>
+  <script src="js/suppliers.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/market.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

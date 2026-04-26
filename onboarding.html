@@ -1,0 +1,354 @@
+﻿<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Reverto — הגדרה ראשונית</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .ob-wrap {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+    }
+    .ob-header {
+      padding: 20px 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .ob-step-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--on-surface-3);
+    }
+    .ob-progress {
+      height: 3px;
+      background: var(--border);
+      border-radius: 10px;
+      margin: 16px 20px 0;
+      overflow: hidden;
+    }
+    .ob-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary-dark), var(--primary-light));
+      border-radius: 10px;
+      transition: width 0.4s ease;
+    }
+    .ob-body {
+      flex: 1;
+      padding: 32px 20px 120px;
+      max-width: 480px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .ob-step { display: none; }
+    .ob-step.active { display: block; }
+    .ob-step-icon {
+      width: 56px;
+      height: 56px;
+      background: var(--surface-low);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .ob-step-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--on-surface);
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    .ob-step-desc {
+      font-size: 14px;
+      color: var(--on-surface-3);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .field-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--on-surface-2);
+      margin-bottom: 6px;
+      display: block;
+    }
+    .category-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .category-btn {
+      padding: 14px 10px;
+      border-radius: var(--radius-md);
+      border: 2px solid var(--border);
+      background: var(--surface-card);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--on-surface-2);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+      font-family: inherit;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .category-btn.selected {
+      border-color: var(--primary);
+      background: var(--surface-low);
+      color: var(--primary);
+    }
+    .ob-footer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      padding: 16px 20px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom));
+      background: rgba(248,247,252,0.95);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border);
+    }
+    .ob-footer-inner {
+      max-width: 480px;
+      margin: 0 auto;
+      display: flex;
+      gap: 10px;
+    }
+    .daily-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface-card);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0 14px;
+      margin-bottom: 12px;
+    }
+    .daily-input-wrap input {
+      border: none;
+      outline: none;
+      font-size: 22px;
+      font-weight: 800;
+      font-family: inherit;
+      color: var(--on-surface);
+      padding: 14px 0;
+      width: 100%;
+      background: transparent;
+    }
+    .daily-currency {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--on-surface-3);
+    }
+  </style>
+</head>
+<body>
+  <div class="ob-wrap">
+    <div class="ob-header">
+      <button onclick="obBack()" id="ob-back-btn" style="background:none;border:none;cursor:pointer;padding:8px;color:var(--on-surface-3);display:none">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="ob-step-label" id="ob-step-label">שלב 1 מתוך 4</span>
+      <div style="width:36px"></div>
+    </div>
+    <div class="ob-progress">
+      <div class="ob-progress-fill" id="ob-progress-fill" style="width:25%"></div>
+    </div>
+
+    <div class="ob-body">
+
+      <!-- Step 1: Business Name -->
+      <div class="ob-step active" id="ob-step-1">
+        <div class="ob-step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+        </div>
+        <div class="ob-step-title">ברוך הבא!</div>
+        <div class="ob-step-desc">בואו נגדיר את העסק שלך. זה ייקח רק דקה.</div>
+        <label class="field-label">שם העסק</label>
+        <input class="input mb-12" id="ob-biz-name" type="text" placeholder='מסעדת הים התיכון' maxlength="60">
+        <label class="field-label">שם איש קשר</label>
+        <input class="input mb-12" id="ob-contact-name" type="text" placeholder="ישראל ישראלי" maxlength="40">
+        <label class="field-label">טלפון</label>
+        <input class="input" id="ob-phone" type="tel" placeholder="050-0000000">
+      </div>
+
+      <!-- Step 2: Business Type -->
+      <div class="ob-step" id="ob-step-2">
+        <div class="ob-step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+        </div>
+        <div class="ob-step-title">סוג העסק</div>
+        <div class="ob-step-desc">נשתמש בזה להשוואה עם עסקים דומים בשוק</div>
+        <div class="category-grid">
+          <button class="category-btn" onclick="selectCategory(this,'מסעדה איטלקית')">
+            <span style="font-size:22px">🍕</span>איטלקי
+          </button>
+          <button class="category-btn" onclick="selectCategory(this,'מסעדה יפנית')">
+            <span style="font-size:22px">🍱</span>יפני / סושי
+          </button>
+          <button class="category-btn" onclick="selectCategory(this,'המבורגריה')">
+            <span style="font-size:22px">🍔</span>המבורגר
+          </button>
+          <button class="category-btn" onclick="selectCategory(this,'מסעדה ישראלית')">
+            <span style="font-size:22px">🥙</span>ישראלי
+          </button>
+          <button class="category-btn" onclick="selectCategory(this,'בית קפה')">
+            <span style="font-size:22px">☕</span>בית קפה
+          </button>
+          <button class="category-btn" onclick="selectCategory(this,'בייקרי')">
+            <span style="font-size:22px">🥐</span>בייקרי
+          </button>
+          <button class="category-btn" onclick="selectCategory(this,'בר')">
+            <span style="font-size:22px">🍸</span>בר
+          </button>
+          <button class="category-btn" onclick="selectCategory(this,'אחר')">
+            <span style="font-size:22px">🍽️</span>אחר
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 3: Daily Revenue -->
+      <div class="ob-step" id="ob-step-3">
+        <div class="ob-step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round">
+            <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+          </svg>
+        </div>
+        <div class="ob-step-title">מחזור יומי</div>
+        <div class="ob-step-desc">המחזור היומי הממוצע שלך עוזר לנו לחשב את ה-Food Cost ולהתריע כשהוצאות הרכש חורגות מהנורמה.</div>
+        <label class="field-label">מחזור יומי ממוצע (₪)</label>
+        <div class="daily-input-wrap">
+          <span class="daily-currency">₪</span>
+          <input id="ob-revenue" type="number" placeholder="0" min="0" max="999999">
+        </div>
+        <div style="font-size:12px;color:var(--on-surface-3);line-height:1.5">
+          לדוגמה: אם המחזור החודשי שלך הוא ₪150,000 — המחזור היומי הוא כ-₪5,000.<br>
+          <span style="color:var(--primary);font-weight:700">ניתן לעדכן בכל עת מהפרופיל.</span>
+        </div>
+      </div>
+
+      <!-- Step 4: Done -->
+      <div class="ob-step" id="ob-step-4">
+        <div style="text-align:center;padding-top:40px">
+          <div style="width:80px;height:80px;background:var(--success-bg);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 24px">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <div style="font-size:26px;font-weight:800;margin-bottom:10px">הכל מוכן!</div>
+          <div style="font-size:15px;color:var(--on-surface-3);line-height:1.6;margin-bottom:32px">
+            העסק שלך הוגדר בהצלחה.<br>עכשיו תוכל להתחיל לסרוק חשבוניות ולחסוך כסף.
+          </div>
+          <button class="btn-primary" onclick="finishOnboarding()">בואו נתחיל</button>
+        </div>
+      </div>
+
+    </div><!-- ob-body -->
+
+    <div class="ob-footer">
+      <div class="ob-footer-inner">
+        <button class="btn-primary" id="ob-next-btn" onclick="obNext()">המשך</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://kykfrkoisbcjmipermxy.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt5a2Zya29pc2Jjam1pcGVybXh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTY4NTcsImV4cCI6MjA5MTAzMjg1N30.bJgulvCBjpAHRy1yTKKHE_N9K3el2YFvaXakiWYCdWs';
+
+    let currentStep = 1;
+    const totalSteps = 4;
+    let selectedCategory = '';
+
+    const user = JSON.parse(sessionStorage.getItem('rv_user') || '{}');
+    if (!sessionStorage.getItem('rv_token')) window.location.href = '/';
+
+    function obNext() {
+      if (currentStep === 1) {
+        const name = document.getElementById('ob-biz-name').value.trim();
+        if (!name) { document.getElementById('ob-biz-name').focus(); return; }
+      }
+      if (currentStep === 2) {
+        if (!selectedCategory) { alert('בחר סוג עסק'); return; }
+      }
+      if (currentStep === totalSteps - 1) {
+        saveAndFinishStep3();
+        return;
+      }
+      if (currentStep < totalSteps) goToStep(currentStep + 1);
+    }
+
+    function obBack() {
+      if (currentStep > 1) goToStep(currentStep - 1);
+    }
+
+    function goToStep(n) {
+      document.getElementById(`ob-step-${currentStep}`).classList.remove('active');
+      currentStep = n;
+      document.getElementById(`ob-step-${currentStep}`).classList.add('active');
+      document.getElementById('ob-step-label').textContent = `שלב ${n} מתוך ${totalSteps}`;
+      document.getElementById('ob-progress-fill').style.width = `${(n / totalSteps) * 100}%`;
+      document.getElementById('ob-back-btn').style.display = n > 1 ? 'block' : 'none';
+      const nextBtn = document.getElementById('ob-next-btn');
+      const footer = document.querySelector('.ob-footer');
+      if (n === totalSteps) {
+        footer.style.display = 'none';
+      } else {
+        footer.style.display = 'block';
+        nextBtn.textContent = n === totalSteps - 1 ? 'סיום' : 'המשך';
+      }
+    }
+
+    function selectCategory(btn, cat) {
+      document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedCategory = cat;
+    }
+
+    async function saveAndFinishStep3() {
+      const profile = {
+        business_name: document.getElementById('ob-biz-name').value.trim(),
+        contact_name: document.getElementById('ob-contact-name').value.trim(),
+        phone: document.getElementById('ob-phone').value.trim(),
+        category: selectedCategory,
+        daily_revenue: parseFloat(document.getElementById('ob-revenue').value) || 0,
+        user_id: user.id || sessionStorage.getItem('rv_token'),
+        onboarding_done: true,
+        created_at: new Date().toISOString()
+      };
+      sessionStorage.setItem('rv_profile', JSON.stringify(profile));
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(profile.user_id)}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_KEY,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            business_name: profile.business_name,
+            category: profile.category,
+            daily_revenue: profile.daily_revenue,
+            onboarding_done: true
+          })
+        });
+      } catch(e) { console.log('Supabase save error', e); }
+      goToStep(4);
+    }
+
+    function finishOnboarding() {
+      window.location.href = '/app.html';
+    }
+  </script>
+</body>
+</html>
