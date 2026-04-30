@@ -52,6 +52,8 @@ async function appInit() {
   const name = profile.business_name || '';
   document.getElementById('dash-greeting').textContent = 'שלום, ' + name + '!';
   document.getElementById('top-biz-name').textContent = name;
+  document.getElementById('prof-biz-name').value = name;
+  document.getElementById('prof-revenue').value = profile.daily_revenue || 0;
 
   // Set date
   const now = new Date();
