@@ -36,7 +36,7 @@
 
       <!-- Greeting -->
       <div style="margin-bottom:16px">
-        <div style="font-size:22px;font-weight:800;letter-spacing:-0.5px" id="dash-greeting">שלום!</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:22px;font-weight:800;letter-spacing:-0.5px" id="dash-greeting">שלום!</div><div id="plan-badge"></div></div>
         <div style="font-size:13px;color:var(--on-surface-3)" id="dash-date"></div>
       </div>
 
@@ -71,7 +71,7 @@
       <div class="card mb-12">
         <div class="card-pad">
           <div class="flex-between mb-8">
-            <div class="section-title">רכש לאורך זמן</div>
+            <div class="section-title">רכש לאורך זמן<button onclick="showAIInsights('גרף משולב')" style="background:linear-gradient(135deg,#6B35B8,#C084FC);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-right:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></button></div>
             <div style="display:flex;gap:4px">
               <button class="period-btn active" onclick="setPeriod('week',this)">שבוע</button>
               <button class="period-btn" onclick="setPeriod('month',this)">חודש</button>
