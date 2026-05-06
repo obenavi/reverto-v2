@@ -140,9 +140,6 @@
   </div>
 
   <script>
-    const SUPABASE_URL = 'https://kykfrkoisbcjmipermxy.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt5a2Zya29pc2Jjam1pcGVybXh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTY4NTcsImV4cCI6MjA5MTAzMjg1N30.bJgulvCBjpAHRy1yTKKHE_N9K3el2YFvaXakiWYCdWs';
-
     async function tryLogin() {
       const code = document.getElementById('access-code').value.trim();
       if (!code) return;
@@ -154,14 +151,24 @@
       try {
         const res = await fetch('/.netlify/functions/auth', {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
+          headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({code})
         });
         if (res.ok) {
           const data = await res.json();
-          sessionStorage.setItem('rv_token', code);
-          sessionStorage.setItem('rv_user', JSON.stringify(data));
-          window.location.href = '/app.html';
+          if (data.new_user_signup) {
+            sessionStorage.setItem('rv_signup', JSON.stringify({
+              new_user_signup: true,
+              duration_months: data.duration_months,
+              signup_code: data.signup_code
+            }));
+            window.location.href = '/onboarding.html';
+          } else {
+            sessionStorage.setItem('rv_token', data.user.personal_code || code);
+            sessionStorage.setItem('rv_jwt', data.jwt);
+            sessionStorage.setItem('rv_user', JSON.stringify(data.user));
+            window.location.href = '/app.html';
+          }
         } else {
           err.style.display = 'block';
           btn.textContent = 'כניסה';
@@ -186,22 +193,17 @@
       const name = document.getElementById('wl-name').value.trim();
       const phone = document.getElementById('wl-phone').value.trim();
       if (!name || !phone) return;
-      await fetch(`${SUPABASE_URL}/rest/v1/waitlist`, {
+      await fetch('/.netlify/functions/db-write', {
         method: 'POST',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_KEY,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify({business_name: name, phone})
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ table: 'waitlist', action: 'insert', data: { business_name: name, phone } })
       });
       hideWaitlist();
       alert('תודה! נחזור אליך בקרוב.');
     }
 
     // Auto-redirect if already logged in
-    if (sessionStorage.getItem('rv_token')) {
+    if (sessionStorage.getItem('rv_jwt')) {
       window.location.href = '/app.html';
     }
   </script>
