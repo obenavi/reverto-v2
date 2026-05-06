@@ -65,12 +65,15 @@ exports.handler = async (event) => {
         personal_code,
         plan: 'pro',
         pro_until: proUntil.toISOString(),
-        code_duration_months: duration_months,
         onboarding_done: true,
         is_active: true
       })
     });
-    if (!ur.ok) return { statusCode: 500, body: JSON.stringify({ error: 'Failed to create user' }) };
+    if (!ur.ok) {
+      const detail = await ur.text();
+      console.error('User insert failed:', detail);
+      return { statusCode: 500, body: JSON.stringify({ error: 'Failed to create user', detail }) };
+    }
 
     const newUsers = await ur.json();
     const user = Array.isArray(newUsers) ? newUsers[0] : newUsers;
