@@ -51,17 +51,30 @@ function renderPlanBadge() {
 
 function renderStats() {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const monthlyInvoices = dashData.invoices.filter(i => i.date >= monthStart);
-  const monthlyTotal = monthlyInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 
-  document.getElementById('dash-monthly').textContent = '₪' + monthlyTotal.toLocaleString('he-IL', {maximumFractionDigits:0});
+  const monthlyInvoices = dashData.invoices.filter(i => i.date >= monthStart);
+  const monthlyPurchases = monthlyInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
+  const monthlyRevenue = dashData.revenues
+    .filter(r => r.date >= monthStart)
+    .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+
+  document.getElementById('dash-monthly').textContent = '₪' + monthlyPurchases.toLocaleString('he-IL', {maximumFractionDigits: 0});
   document.getElementById('dash-monthly-sub').textContent = monthlyInvoices.length + ' חשבוניות';
 
-  // Saving (placeholder for now)
   document.getElementById('dash-saving').textContent = '₪0';
 
-  // Alerts will be calculated in renderPriceAlerts
+  const fcEl = document.getElementById('dash-foodcost');
+  const fcSubEl = document.getElementById('dash-foodcost-sub');
+  if (monthlyRevenue > 0) {
+    const fc = (monthlyPurchases / monthlyRevenue * 100).toFixed(1);
+    fcEl.textContent = fc + '%';
+    fcEl.style.color = parseFloat(fc) > 35 ? 'var(--error)' : parseFloat(fc) > 28 ? 'var(--warning, #F59E0B)' : 'var(--success)';
+    fcSubEl.textContent = 'מחזור ₪' + monthlyRevenue.toLocaleString('he-IL', {maximumFractionDigits: 0});
+  } else {
+    fcEl.textContent = '--%';
+    fcSubEl.textContent = 'הכנס מחזור יומי';
+  }
 }
 
 function renderPriceAlerts() {

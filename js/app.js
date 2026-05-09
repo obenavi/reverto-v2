@@ -65,5 +65,19 @@ async function appInit() {
   renderDashboard();
 }
 
+async function saveProfile() {
+  const name = document.getElementById('prof-biz-name').value.trim();
+  if (!name) return;
+  const btn = document.querySelector('#page-profile .btn-primary');
+  btn.textContent = 'שומר...';
+  btn.disabled = true;
+  await DB.update('users', '', { business_name: name });
+  document.getElementById('top-biz-name').textContent = name;
+  document.getElementById('dash-greeting').textContent = 'שלום, ' + name + '!';
+  showToast('הפרופיל עודכן');
+  btn.textContent = 'שמור שינויים';
+  btn.disabled = false;
+}
+
 // Start
 appInit();
