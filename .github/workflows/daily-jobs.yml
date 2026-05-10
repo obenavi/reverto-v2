@@ -1,0 +1,33 @@
+name: Daily Jobs
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # 06:00 Israel time (UTC+2)
+  workflow_dispatch:        # Allow manual run from GitHub UI
+
+jobs:
+
+  update-market-prices:
+    name: Update Market Prices
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: node scrapers/update-market.js
+
+  aggregate-community:
+    name: Aggregate Community Prices
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger aggregate function
+        run: |
+          curl -f -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.NETLIFY_URL }}/.netlify/functions/aggregate-community"
