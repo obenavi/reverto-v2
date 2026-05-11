@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reverto · Admin Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;--surface:#13131a;--card:#1a1a24;--border:#2a2a3a;
+  --p:#8b5cf6;--p2:#a78bfa;--pink:#ec4899;--teal:#14b8a6;--amber:#f59e0b;--red:#ef4444;--green:#22c55e;
+  --text:#f1f0f5;--muted:#7a7a9a;--sub:#4a4a6a;
+  --gp:linear-gradient(135deg,#8b5cf6,#ec4899);
+}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{font-family:Montserrat,sans-serif;font-weight:900;font-size:18px;letter-spacing:.1em;background:var(--gp);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.badge{background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3);color:var(--p2);padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;overflow-x:auto;scrollbar-width:none;padding:0 12px}
+.nav::-webkit-scrollbar{display:none}
+.nb{background:none;border:none;color:var(--muted);padding:14px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;white-space:nowrap;border-bottom:2px solid transparent;transition:.2s}
+.nb.on{color:var(--p2);border-bottom-color:var(--p)}
+.nb:hover:not(.on){color:var(--text)}
+.main{flex:1;padding:20px;max-width:1400px;margin:0 auto;width:100%}
+.page{display:none}.page.on{display:block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:14px}
+.card-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.card-title span{color:var(--text);font-size:15px;font-weight:800;text-transform:none;letter-spacing:0}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+.kpi-lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.kpi-val{font-size:28px;font-weight:800;font-family:Montserrat,sans-serif;line-height:1}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:6px}
+.kpi.purple .kpi-val{color:var(--p2)}.kpi.pink .kpi-val{color:var(--pink)}.kpi.teal .kpi-val{color:var(--teal)}.kpi.amber .kpi-val{color:var(--amber)}.kpi.green .kpi-val{color:var(--green)}.kpi.red .kpi-val{color:var(--red)}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:rgba(139,92,246,.08);color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:10px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--border)}
+td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle}
+tr:hover td{background:rgba(139,92,246,.04)}
+.chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.chip.active{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.2)}
+.chip.new{background:rgba(139,92,246,.15);color:var(--p2);border:1px solid rgba(139,92,246,.2)}
+.chip.inactive{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.15)}
+.controls{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.inp{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none}
+.inp:focus{border-color:var(--p)}
+.inp::placeholder{color:var(--sub)}
+.btn{background:var(--gp);color:white;border:none;padding:8px 16px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer}
+.btn-o{background:transparent;color:var(--p2);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer}
+.btn-o:hover{border-color:var(--p)}
+.pbar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px}
+.pbar-fill{height:100%;border-radius:3px;background:var(--gp)}
+.insight{background:linear-gradient(135deg,rgba(139,92,246,.1),rgba(236,72,153,.05));border:1px solid rgba(139,92,246,.2);border-radius:12px;padding:14px;margin-bottom:10px}
+.insight-title{font-size:13px;font-weight:700;color:var(--p2);margin-bottom:6px}
+.insight-body{font-size:12px;color:var(--muted);line-height:1.7}
+.detail-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:14px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.detail-item{display:flex;flex-direction:column;gap:4px}
+.detail-lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.detail-val{font-size:14px;color:var(--text);font-weight:600}
+.loading{text-align:center;padding:40px;color:var(--muted)}
+.spin{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--p);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="logo">REVERTO</div>
+    <div class="badge">ADMIN</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div id="hdr-time" style="color:var(--muted);font-size:13px">--:--</div>
+    <div class="badge" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.2);color:#4ade80" id="live-badge">● טוען</div>
+    <a href="/app.html" style="color:var(--muted);font-size:12px;text-decoration:none;border:1px solid var(--border);padding:4px 10px;border-radius:20px">← חזרה לאפליקציה</a>
+  </div>
+</div>
+<div class="nav">
+  <button class="nb on" onclick="go('dashboard',this)">📊 דשבורד</button>
+  <button class="nb" onclick="go('clients',this)">👥 לקוחות</button>
+  <button class="nb" onclick="go('suppliers',this)">🏢 ספקים</button>
+  <button class="nb" onclick="go('products',this)">📦 מוצרים</button>
+  <button class="nb" onclick="go('market',this)">📈 שוק</button>
+  <button class="nb" onclick="go('waitlist',this)">⏳ המתנה</button>
+  <button class="nb" onclick="go('export',this)">⬇ ייצוא</button>
+</div>
+<div class="main">
+
+<!-- DASHBOARD -->
+<div class="page on" id="pg-dashboard">
+  <div class="kpi-grid">
+    <div class="kpi purple"><div class="kpi-lbl">לקוחות</div><div class="kpi-val" id="k-users">—</div><div class="kpi-sub" id="k-users-s">טוען...</div></div>
+    <div class="kpi teal"><div class="kpi-lbl">סריקות</div><div class="kpi-val" id="k-scans">—</div><div class="kpi-sub">חשבוניות</div></div>
+    <div class="kpi pink"><div class="kpi-lbl">פריטים</div><div class="kpi-val" id="k-items">—</div><div class="kpi-sub">invoice items</div></div>
+    <div class="kpi amber"><div class="kpi-lbl">ספקים</div><div class="kpi-val" id="k-suppliers">—</div><div class="kpi-sub">ייחודיים</div></div>
+    <div class="kpi green"><div class="kpi-lbl">מוצרים</div><div class="kpi-val" id="k-products">—</div><div class="kpi-sub">ייחודיים</div></div>
+    <div class="kpi red"><div class="kpi-lbl">המתנה</div><div class="kpi-val" id="k-waitlist">—</div><div class="kpi-sub">ממתינים</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+    <div class="card"><div class="card-title">פעילות אחרונה</div><div id="dash-feed"><div class="loading"><div class="spin"></div>טוען...</div></div></div>
+    <div class="card"><div class="card-title">התפלגות לקוחות</div><div id="dash-dist"></div></div>
+  </div>
+  <div class="card"><div class="card-title">תובנות <span style="font-size:11px;color:var(--p2)">מבוסס נתוני מערכת</span></div><div id="dash-insights"><div class="loading"><div class="spin"></div>מנתח...</div></div></div>
+</div>
+
+<!-- CLIENTS -->
+<div class="page" id="pg-clients">
+  <div class="controls">
+    <input class="inp" id="cli-q" placeholder="חיפוש לקוח..." oninput="renderClients()" style="flex:1;min-width:200px">
+    <select class="inp" id="cli-status" onchange="renderClients()"><option value="">כל הסטטוסים</option><option value="active">פעיל</option><option value="new">חדש</option><option value="inactive">לא פעיל</option></select>
+    <select class="inp" id="cli-sort" onchange="renderClients()"><option value="scans">לפי סריקות</option><option value="score">לפי דירוג</option><option value="joined">לפי הצטרפות</option></select>
+    <button class="btn-o" onclick="exportClients()">⬇ Excel</button>
+  </div>
+  <div class="card"><div class="tw"><table>
+    <thead><tr><th>#</th><th>שם עסק</th><th>עיר</th><th>קטגוריה</th><th>סטטוס</th><th>סריקות</th><th>ספקים</th><th>מחזור ₪</th><th>דירוג</th><th>הצטרף</th><th>פעולות</th></tr></thead>
+    <tbody id="clients-tbody"></tbody>
+  </table></div></div>
+  <div id="client-detail" style="display:none">
+    <div class="card" style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span id="cd-name" style="font-size:18px;font-weight:800">—</span>
+        <button onclick="document.getElementById('client-detail').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px">×</button>
+      </div>
+    </div>
+    <div class="detail-panel"><div class="detail-grid" id="cd-info"></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="card"><div class="card-title">ספקים</div><div id="cd-suppliers"></div></div>
+      <div class="card"><div class="card-title">מוצרים נרכשים</div><div id="cd-products"></div></div>
+    </div>
+    <div class="card"><div class="card-title">היסטוריית חשבוניות</div><div id="cd-scans"></div></div>
+  </div>
+</div>
+
+<!-- SUPPLIERS -->
+<div class="page" id="pg-suppliers">
+  <div class="controls">
+    <input class="inp" id="sup-q" placeholder="חיפוש ספק..." oninput="renderSuppliers()" style="flex:1">
+    <select class="inp" id="sup-sort" onchange="renderSuppliers()"><option value="clients">לפי לקוחות</option><option value="revenue">לפי מחזור</option><option value="score">לפי דירוג</option></select>
+    <button class="btn-o" onclick="exportSuppliers()">⬇ Excel</button>
+  </div>
+  <div class="card"><div class="tw"><table>
+    <thead><tr><th>#</th><th>שם ספק</th><th>לקוחות</th><th>מוצרים</th><th>מחזור ₪</th><th>מחיר ממוצע</th><th>טווח מחירים</th><th>דירוג</th><th>ערים</th></tr></thead>
+    <tbody id="suppliers-tbody"></tbody>
+  </table></div></div>
+  <div id="supplier-detail" style="display:none">
+    <div class="card" style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span id="sd-name" style="font-size:18px;font-weight:800">—</span>
+        <button onclick="document.getElementById('supplier-detail').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px">×</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+      <div class="card"><div class="card-title">לקוחות</div><div id="sd-clients"></div></div>
+      <div class="card"><div class="card-title">מוצרים ומחירים</div><div id="sd-products"></div></div>
+      <div class="card"><div class="card-title">ניתוח</div><div id="sd-analysis"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- PRODUCTS -->
+<div class="page" id="pg-products">
+  <div class="controls">
+    <input class="inp" id="prod-q" placeholder="חיפוש מוצר..." oninput="renderProducts()" style="flex:1">
+    <select class="inp" id="prod-sort" onchange="renderProducts()"><option value="volume">לפי כמות</option><option value="buyers">לפי קונים</option><option value="spread">לפי פיזור מחיר</option></select>
+    <button class="btn-o" onclick="exportProducts()">⬇ Excel</button>
+  </div>
+  <div class="card"><div class="tw"><table>
+    <thead><tr><th>#</th><th>מוצר</th><th>הזמנות</th><th>עסקים</th><th>מינימום ₪</th><th>מקסימום ₪</th><th>חציון ₪</th><th>פיזור %</th><th>ספקים</th><th>תובנה</th></tr></thead>
+    <tbody id="products-tbody"></tbody>
+  </table></div></div>
+</div>
+
+<!-- MARKET -->
+<div class="page" id="pg-market">
+  <div class="controls">
+    <input class="inp" id="mkt-q" placeholder="חיפוש מוצר..." oninput="renderMarket()" style="flex:1">
+    <button class="btn-o" onclick="exportMarket()">⬇ Excel</button>
+  </div>
+  <div class="card"><div class="tw"><table>
+    <thead><tr><th>מוצר</th><th>מחיר שוק ₪</th><th>ממוצע לקוחות ₪</th><th>הפרש</th><th>עדכון</th></tr></thead>
+    <tbody id="market-tbody"></tbody>
+  </table></div></div>
+</div>
+
+<!-- WAITLIST -->
+<div class="page" id="pg-waitlist">
+  <div class="controls">
+    <input class="inp" id="wl-q" placeholder="חיפוש..." oninput="renderWaitlist()" style="flex:1">
+    <button class="btn-o" onclick="exportWaitlist()">⬇ Excel</button>
+  </div>
+  <div class="card"><div class="tw"><table>
+    <thead><tr><th>#</th><th>שם עסק</th><th>טלפון</th><th>תאריך</th></tr></thead>
+    <tbody id="waitlist-tbody"></tbody>
+  </table></div></div>
+</div>
+
+<!-- EXPORT -->
+<div class="page" id="pg-export">
+  <div class="card">
+    <div class="card-title"><span>ייצוא נתונים</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+      ${[['👥 לקוחות','שם, עיר, קטגוריה, טלפון, מייל, סריקות, מחזור, דירוג','exportClients()'],
+         ['🏢 ספקים','שם, לקוחות, מוצרים, מחזור, טווח מחירים, ערים','exportSuppliers()'],
+         ['📦 מוצרים','מוצר, כמות, קונים, min/max/חציון, פיזור, ספקים','exportProducts()'],
+         ['📈 מחירי שוק','מוצר, מחיר שוק, ממוצע לקוחות, הפרש','exportMarket()'],
+         ['📋 הכל','ייצוא כל הטבלאות בבת אחת','exportAll()']].map(([t,d,fn])=>`
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px">${t}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6">${d}</div>
+        <button class="btn" onclick="${fn}">⬇ Excel / CSV</button>
+      </div>`).join('')}
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div style="font-size:13px;color:var(--muted);line-height:1.8"><strong style="color:var(--text)">ייבוא ל-Google Sheets:</strong> הורד CSV ← פתח Google Drive ← גרור קובץ ← "פתח עם Google Sheets"<br>לחלופין: ב-Google Sheets → File → Import → Upload.</div>
+    </div>
+  </div>
+</div>
+
+</div>
+<script>
+const JWT = sessionStorage.getItem('rv_jwt');
+if (!JWT) { alert('נדרשת כניסה עם PILOT-001'); location.href='/'; }
+
+let USERS=[],INVOICES=[],INVOICE_ITEMS=[],DB_SUPPLIERS=[],MARKET=[],WAITLIST=[];
+let CLIENTS=[],SUP_DATA=[],PROD_DATA=[];
+
+async function adminCall(action, extra={}) {
+  const r = await fetch('/.netlify/functions/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + JWT },
+    body: JSON.stringify({ action, ...extra })
+  });
+  if (r.status === 401 || r.status === 403) { alert('גישה נדחתה — כנס עם PILOT-001'); location.href='/'; }
+  return r.json();
+}
+
+async function init() {
+  document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+  const data = await adminCall('full_data');
+  USERS=data.users||[]; INVOICES=data.invoices||[]; INVOICE_ITEMS=data.items||[];
+  DB_SUPPLIERS=data.suppliers||[]; MARKET=data.market||[]; WAITLIST=data.waitlist||[];
+  buildClientData(); buildSupplierData(); buildProductData();
+  document.getElementById('k-users').textContent = USERS.length;
+  document.getElementById('k-scans').textContent = INVOICES.length;
+  document.getElementById('k-items').textContent = INVOICE_ITEMS.length;
+  document.getElementById('k-suppliers').textContent = [...new Set(DB_SUPPLIERS.map(s=>s.name))].length;
+  document.getElementById('k-products').textContent = [...new Set(INVOICE_ITEMS.map(i=>i.product_name).filter(Boolean))].length;
+  document.getElementById('k-waitlist').textContent = WAITLIST.length;
+  const proCount = USERS.filter(u => u.plan==='pro' && u.pro_until && new Date(u.pro_until)>new Date()).length;
+  document.getElementById('k-users-s').textContent = proCount + ' PRO · ' + (USERS.length - proCount) + ' חינמי';
+  document.getElementById('live-badge').textContent = '● Live';
+  renderDashboard(); renderClients(); renderSuppliers(); renderProducts(); renderMarket(); renderWaitlist();
+}
+
+function buildClientData() {
+  CLIENTS = USERS.map(u => {
+    const inv = INVOICES.filter(i=>i.user_id===u.id);
+    const items = INVOICE_ITEMS.filter(i=>i.user_id===u.id);
+    const sups = DB_SUPPLIERS.filter(s=>s.user_id===u.id);
+    const totalRevenue = inv.reduce((s,i)=>s+(parseFloat(i.total_amount)||0),0);
+    const daysJoined = u.created_at ? Math.max(1,Math.floor((Date.now()-new Date(u.created_at))/86400000)) : 30;
+    const lastInv = inv[0]?.created_at;
+    const daysSinceLast = lastInv ? Math.floor((Date.now()-new Date(lastInv))/86400000) : 999;
+    const scansPerMonth = (inv.length/(daysJoined/30)).toFixed(1);
+    let score = 1;
+    if(inv.length>=5)score++; if(inv.length>=15)score++;
+    if(totalRevenue>5000)score++; if(daysSinceLast<14)score++;
+    score = Math.min(5,score);
+    const status = daysJoined<=14?'new':daysSinceLast<7?'active':'inactive';
+    return {...u, invoices:inv, items, suppliers:sups, totalRevenue, avgInvoice:inv.length?totalRevenue/inv.length:0, daysSinceLast, scansPerMonth, score, status, joined:u.created_at?new Date(u.created_at).toLocaleDateString('he-IL'):'—'};
+  });
+}
+
+function buildSupplierData() {
+  const map = {};
+  DB_SUPPLIERS.forEach(s => {
+    const k = s.name?.trim(); if(!k) return;
+    if(!map[k]) map[k] = {name:k, clientIds:new Set(), items:[], cities:new Set()};
+    map[k].clientIds.add(s.user_id);
+  });
+  INVOICES.forEach(inv => {
+    const k = inv.supplier_name?.trim(); if(!k||!map[k]) return;
+    const u = USERS.find(u=>u.id===inv.user_id);
+    if(u?.city) map[k].cities.add(u.city);
+  });
+  INVOICE_ITEMS.forEach(item => {
+    const inv = INVOICES.find(i=>i.id===item.invoice_id); if(!inv?.supplier_name) return;
+    const k = inv.supplier_name.trim(); if(map[k]) map[k].items.push(item);
+  });
+  SUP_DATA = Object.values(map).map(s => {
+    const prices = s.items.map(i=>parseFloat(i.unit_price)).filter(p=>p>0);
+    const revenue = s.items.reduce((t,i)=>t+(parseFloat(i.unit_price)||0)*(parseFloat(i.quantity)||1),0);
+    let score=1;
+    if(s.clientIds.size>=2)score++; if(s.clientIds.size>=4)score++;
+    if(s.items.length>=10)score++; if(revenue>5000)score++;
+    return {...s, clientIds:[...s.clientIds], cities:[...s.cities], products:[...new Set(s.items.map(i=>i.product_name).filter(Boolean))], priceMin:prices.length?Math.min(...prices):0, priceMax:prices.length?Math.max(...prices):0, priceAvg:prices.length?prices.reduce((a,b)=>a+b,0)/prices.length:0, revenue, score:Math.min(5,score)};
+  });
+}
+
+function buildProductData() {
+  const map = {};
+  INVOICE_ITEMS.forEach(item => {
+    const name = item.product_name?.trim(); if(!name) return;
+    if(!map[name]) map[name] = {name, prices:[], buyers:new Set(), suppliers:new Set()};
+    const p = parseFloat(item.unit_price); if(p>0) map[name].prices.push(p);
+    if(item.user_id) map[name].buyers.add(item.user_id);
+    const inv = INVOICES.find(i=>i.id===item.invoice_id);
+    if(inv?.supplier_name) map[name].suppliers.add(inv.supplier_name);
+  });
+  PROD_DATA = Object.values(map).map(p => {
+    const sorted = [...p.prices].sort((a,b)=>a-b);
+    const median = sorted.length ? sorted[Math.floor(sorted.length/2)] : 0;
+    const min=sorted[0]||0, max=sorted[sorted.length-1]||0;
+    const avg = sorted.length ? sorted.reduce((a,b)=>a+b,0)/sorted.length : 0;
+    const spread = min>0 ? Math.round(((max-min)/min)*100) : 0;
+    let insight = spread>50?'⚠️ פיזור גבוה':p.buyers.size>=3?'🔥 מבוקש':p.suppliers.size>=2?'🔄 תחרות':'';
+    return {...p, buyers:p.buyers.size, suppliers:[...p.suppliers], supplierCount:p.suppliers.size, median, priceMin:min, priceMax:max, priceAvg:avg, spread, orderCount:p.prices.length, insight};
+  });
+}
+
+function stars(s) {
+  const c = s>=4?'#4ade80':s>=3?'#fbbf24':'#f87171';
+  return `<span style="color:${c};font-weight:800">${'★'.repeat(s)}${'☆'.repeat(5-s)}</span>`;
+}
+
+function renderDashboard() {
+  document.getElementById('dash-feed').innerHTML = CLIENTS.slice(0,8).map(c=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1"><div style="font-size:13px;font-weight:600">${c.business_name||'—'}</div><div style="font-size:11px;color:var(--muted)">${c.city||'—'} · ${c.joined}</div></div>
+      <div class="chip ${c.status}">${c.status==='active'?'פעיל':c.status==='new'?'חדש':'לא פעיל'}</div>
+    </div>`).join('') || '<div style="color:var(--muted);text-align:center;padding:20px">אין לקוחות</div>';
+
+  const total = CLIENTS.length||1;
+  const active=CLIENTS.filter(c=>c.status==='active').length, newC=CLIENTS.filter(c=>c.status==='new').length, inactive=CLIENTS.filter(c=>c.status==='inactive').length;
+  document.getElementById('dash-dist').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${[['פעיל',active,'#4ade80'],['חדש',newC,'#a78bfa'],['לא פעיל',inactive,'#f87171']].map(([l,n,c])=>`
+        <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;color:var(--muted)">${l}</span><span style="font-size:12px;font-weight:700;color:${c}">${n}</span></div>
+        <div class="pbar"><div class="pbar-fill" style="width:${Math.round(n/total*100)}%;background:${c}"></div></div></div>`).join('')}
+    </div>
+    <div style="margin-top:16px;font-size:12px;color:var(--muted)">${INVOICE_ITEMS.length} פריטים · ${SUP_DATA.length} ספקים · ${PROD_DATA.length} מוצרים</div>`;
+
+  const insights = [];
+  const highSpread = PROD_DATA.filter(p=>p.spread>40).slice(0,3);
+  if(highSpread.length) insights.push({t:'⚠️ מוצרים עם פיזור מחיר גבוה', b:highSpread.map(p=>`<strong>${p.name}</strong>: ₪${p.priceMin.toFixed(2)}–₪${p.priceMax.toFixed(2)} (${p.spread}%)`).join('<br>')});
+  const topSup = [...SUP_DATA].sort((a,b)=>b.clientIds.length-a.clientIds.length).slice(0,3);
+  if(topSup.length) insights.push({t:'🏆 ספקים מובילים', b:topSup.map(s=>`<strong>${s.name}</strong>: ${s.clientIds.length} לקוחות`).join('<br>')});
+  const inactive30 = CLIENTS.filter(c=>c.daysSinceLast>30).length;
+  if(inactive30>0) insights.push({t:'💤 לא פעילים 30+ יום', b:`${inactive30} לקוחות — שקול פנייה מחדש`});
+  if(WAITLIST.length) insights.push({t:'⏳ רשימת המתנה', b:`${WAITLIST.length} עסקים ממתינים לקוד גישה`});
+  document.getElementById('dash-insights').innerHTML = insights.length ? insights.map(i=>`<div class="insight"><div class="insight-title">${i.t}</div><div class="insight-body">${i.b}</div></div>`).join('') : '<div style="color:var(--muted);text-align:center;padding:20px">אין מספיק נתונים</div>';
+}
+
+function renderClients() {
+  const q=(document.getElementById('cli-q').value||'').toLowerCase();
+  const status=document.getElementById('cli-status').value;
+  const sort=document.getElementById('cli-sort').value;
+  let data = CLIENTS.filter(c => {
+    if(q&&!(c.business_name||'').toLowerCase().includes(q)&&!(c.city||'').toLowerCase().includes(q)) return false;
+    if(status&&c.status!==status) return false;
+    return true;
+  });
+  if(sort==='scans') data.sort((a,b)=>b.invoices.length-a.invoices.length);
+  else if(sort==='score') data.sort((a,b)=>b.score-a.score);
+  else data.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+  document.getElementById('clients-tbody').innerHTML = data.map((c,i)=>`
+    <tr style="cursor:pointer" onclick="showClientDetail('${c.id}')">
+      <td style="color:var(--muted)">${i+1}</td>
+      <td><strong>${c.business_name||'—'}</strong><br><span style="font-size:11px;color:var(--muted)">${c.email||''}</span></td>
+      <td>${c.city||'—'}</td><td>${c.category||'—'}</td>
+      <td><div class="chip ${c.status}">${c.status==='active'?'פעיל':c.status==='new'?'חדש':'לא פעיל'}</div></td>
+      <td><strong>${c.invoices.length}</strong><br><span style="font-size:11px;color:var(--muted)">${c.scansPerMonth}/חודש</span></td>
+      <td>${c.suppliers.length}</td>
+      <td>₪${c.totalRevenue.toLocaleString('he-IL',{maximumFractionDigits:0})}</td>
+      <td>${stars(c.score)}</td>
+      <td style="font-size:12px;color:var(--muted)">${c.joined}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-o" onclick="event.stopPropagation();editClient('${c.id}')">✏️</button>
+        <button class="btn-o" style="color:${c.is_active===false?'#4ade80':'#fbbf24'}" onclick="event.stopPropagation();toggleUser('${c.id}',${!c.is_active})">${c.is_active===false?'✅':'🔒'}</button>
+        <button class="btn-o" style="color:#f87171;border-color:rgba(239,68,68,.2)" onclick="event.stopPropagation();deleteUser('${c.id}','${(c.business_name||'').replace(/'/g,"\\'")}')">🗑️</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--muted)">אין נתונים</td></tr>';
+}
+
+function showClientDetail(userId) {
+  const c = CLIENTS.find(cl=>cl.id===userId); if(!c) return;
+  document.getElementById('client-detail').style.display='block';
+  document.getElementById('cd-name').textContent = c.business_name||'—';
+  document.getElementById('cd-info').innerHTML = [
+    ['עיר',c.city||'—'],['קטגוריה',c.category||'—'],['טלפון',c.phone||'—'],
+    ['מייל',c.email||'—'],['כתובת',c.address||'—'],['קוד אישי',c.personal_code||'—'],
+    ['הצטרף',c.joined],['סריקות',c.invoices.length],
+    ['מחזור','₪'+c.totalRevenue.toLocaleString()],['דירוג',stars(c.score)],
+  ].map(([l,v])=>`<div class="detail-item"><div class="detail-lbl">${l}</div><div class="detail-val">${v}</div></div>`).join('');
+  document.getElementById('cd-suppliers').innerHTML = c.suppliers.length ? c.suppliers.map(s=>`<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">${s.name||'—'}</div>`).join('') : '<div style="color:var(--muted);font-size:12px">אין</div>';
+  const pc={};c.items.forEach(i=>{if(i.product_name)pc[i.product_name]=(pc[i.product_name]||0)+1;});
+  document.getElementById('cd-products').innerHTML = Object.entries(pc).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([n,cnt])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px"><span>${n}</span><span style="color:var(--muted)">${cnt}x</span></div>`).join('') || '<div style="color:var(--muted);font-size:12px">אין</div>';
+  document.getElementById('cd-scans').innerHTML = c.invoices.slice(0,10).map(inv=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px"><span>${inv.supplier_name||'—'}</span><span style="color:var(--muted)">${inv.date||''}</span><span style="font-weight:700">₪${parseFloat(inv.total_amount||0).toFixed(0)}</span></div>`).join('') || '<div style="color:var(--muted);font-size:12px">אין</div>';
+  document.getElementById('client-detail').scrollIntoView({behavior:'smooth'});
+}
+
+function renderSuppliers() {
+  const q=(document.getElementById('sup-q').value||'').toLowerCase();
+  const sort=document.getElementById('sup-sort').value;
+  let data = SUP_DATA.filter(s=>!q||s.name.toLowerCase().includes(q));
+  if(sort==='clients') data.sort((a,b)=>b.clientIds.length-a.clientIds.length);
+  else if(sort==='revenue') data.sort((a,b)=>b.revenue-a.revenue);
+  else data.sort((a,b)=>b.score-a.score);
+  document.getElementById('suppliers-tbody').innerHTML = data.map((s,i)=>`
+    <tr style="cursor:pointer" onclick="showSupplierDetail(${i})">
+      <td style="color:var(--muted)">${i+1}</td><td><strong>${s.name}</strong></td>
+      <td><strong>${s.clientIds.length}</strong></td><td>${s.products.length}</td>
+      <td>₪${s.revenue.toLocaleString('he-IL',{maximumFractionDigits:0})}</td>
+      <td>₪${s.priceAvg.toFixed(2)}</td>
+      <td style="font-size:12px">₪${s.priceMin.toFixed(2)}–₪${s.priceMax.toFixed(2)}</td>
+      <td>${stars(s.score)}</td>
+      <td style="font-size:11px;color:var(--muted)">${s.cities.slice(0,3).join(', ')}</td>
+    </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--muted)">אין נתונים</td></tr>';
+}
+
+let _filteredSups = [];
+function showSupplierDetail(idx) {
+  const q=(document.getElementById('sup-q').value||'').toLowerCase();
+  const sort=document.getElementById('sup-sort').value;
+  let data = SUP_DATA.filter(s=>!q||s.name.toLowerCase().includes(q));
+  if(sort==='clients') data.sort((a,b)=>b.clientIds.length-a.clientIds.length);
+  else if(sort==='revenue') data.sort((a,b)=>b.revenue-a.revenue);
+  else data.sort((a,b)=>b.score-a.score);
+  const s = data[idx]; if(!s) return;
+  document.getElementById('supplier-detail').style.display='block';
+  document.getElementById('sd-name').textContent = s.name;
+  document.getElementById('sd-clients').innerHTML = s.clientIds.map(id=>{const u=USERS.find(u=>u.id===id);return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">${u?.business_name||'—'}</div>`;}).join('') || '<div style="color:var(--muted);font-size:12px">אין</div>';
+  const pp={};s.items.forEach(i=>{if(!i.product_name)return;if(!pp[i.product_name])pp[i.product_name]=[];const p=parseFloat(i.unit_price);if(p>0)pp[i.product_name].push(p);});
+  document.getElementById('sd-products').innerHTML = Object.entries(pp).slice(0,10).map(([name,prices])=>{const mn=Math.min(...prices),mx=Math.max(...prices),avg=prices.reduce((a,b)=>a+b,0)/prices.length;return`<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:600">${name}</div><div style="font-size:11px;color:var(--muted)">₪${mn.toFixed(2)}–₪${mx.toFixed(2)} · ממוצע ₪${avg.toFixed(2)}</div></div>`;}).join('') || '<div style="color:var(--muted);font-size:12px">אין</div>';
+  document.getElementById('sd-analysis').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">${[['לקוחות',s.clientIds.length],['מוצרים',s.products.length],['ערים',s.cities.length]].map(([l,n])=>`<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:var(--p2)">${n}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">${l}</div></div>`).join('')}</div>${stars(s.score)}<div style="margin-top:12px;font-size:12px;color:var(--muted)">מחזור: <strong style="color:var(--text)">₪${s.revenue.toLocaleString()}</strong></div>`;
+  document.getElementById('supplier-detail').scrollIntoView({behavior:'smooth'});
+}
+
+function renderProducts() {
+  const q=(document.getElementById('prod-q').value||'').toLowerCase();
+  const sort=document.getElementById('prod-sort').value;
+  let data = PROD_DATA.filter(p=>!q||p.name.toLowerCase().includes(q));
+  if(sort==='volume') data.sort((a,b)=>b.orderCount-a.orderCount);
+  else if(sort==='buyers') data.sort((a,b)=>b.buyers-a.buyers);
+  else data.sort((a,b)=>b.spread-a.spread);
+  document.getElementById('products-tbody').innerHTML = data.slice(0,80).map((p,i)=>`
+    <tr>
+      <td style="color:var(--muted)">${i+1}</td><td><strong>${p.name}</strong></td>
+      <td>${p.orderCount}</td><td>${p.buyers}</td>
+      <td>₪${p.priceMin.toFixed(2)}</td><td>₪${p.priceMax.toFixed(2)}</td><td>₪${p.median.toFixed(2)}</td>
+      <td><span style="color:${p.spread>40?'#f87171':p.spread>20?'#fbbf24':'#4ade80'}">${p.spread}%</span></td>
+      <td style="font-size:11px;color:var(--muted)">${p.suppliers.slice(0,2).join(', ')}${p.supplierCount>2?` +${p.supplierCount-2}`:''}</td>
+      <td style="font-size:12px">${p.insight}</td>
+    </tr>`).join('') || '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--muted)">אין נתונים</td></tr>';
+}
+
+function renderMarket() {
+  const q=(document.getElementById('mkt-q').value||'').toLowerCase();
+  const seen=new Set();
+  const data = MARKET.filter(m=>{
+    const name=m.name||''; if(!name||seen.has(name)) return false; seen.add(name);
+    if(!m.price||isNaN(parseFloat(m.price))) return false;
+    return !q||name.toLowerCase().includes(q);
+  });
+  document.getElementById('market-tbody').innerHTML = data.slice(0,100).map(m=>{
+    const name=m.name, mktPrice=parseFloat(m.price);
+    const prod=PROD_DATA.find(p=>p.name===name);
+    const avgPrice=prod?.priceAvg||0;
+    const diff=avgPrice>0&&mktPrice>0?((avgPrice-mktPrice)/mktPrice*100).toFixed(1):null;
+    return `<tr><td><strong>${name}</strong></td><td>₪${mktPrice.toFixed(2)}</td><td>${avgPrice?'₪'+avgPrice.toFixed(2):'—'}</td><td style="color:${diff===null?'var(--muted)':parseFloat(diff)>0?'#f87171':'#4ade80'}">${diff!==null?(parseFloat(diff)>0?'+':'')+diff+'%':'—'}</td><td style="font-size:11px;color:var(--muted)">${m.updated_at?new Date(m.updated_at).toLocaleDateString('he-IL'):'—'}</td></tr>`;
+  }).join('') || '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted)">אין נתוני שוק</td></tr>';
+}
+
+function renderWaitlist() {
+  const q=(document.getElementById('wl-q').value||'').toLowerCase();
+  const data = WAITLIST.filter(w=>!q||(w.business_name||w.name||'').toLowerCase().includes(q)||(w.phone||'').includes(q));
+  document.getElementById('waitlist-tbody').innerHTML = data.map((w,i)=>`
+    <tr><td style="color:var(--muted)">${i+1}</td><td>${w.business_name||w.name||'—'}</td><td>${w.phone||'—'}</td><td style="font-size:12px;color:var(--muted)">${w.created_at?new Date(w.created_at).toLocaleDateString('he-IL'):'—'}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--muted)">ריק</td></tr>';
+}
+
+function go(id,el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.getElementById('pg-'+id).classList.add('on');
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  if(el) el.classList.add('on');
+}
+
+// ── Edit client ───────────────────────────────────────────────
+function editClient(userId) {
+  const c = CLIENTS.find(cl=>cl.id===userId); if(!c) return;
+  const modal = document.createElement('div');
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML=`
+    <div style="background:#1a1a24;border:1px solid #2a2a3a;border-radius:16px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;margin-bottom:20px">
+        <div style="font-size:16px;font-weight:800">✏️ עריכת לקוח</div>
+        <button onclick="this.closest('[data-edit]').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px">×</button>
+      </div>
+      ${[['business_name','שם העסק'],['city','עיר'],['category','קטגוריה'],['phone','טלפון'],['email','מייל'],['address','כתובת']].map(([k,l])=>`
+        <div style="margin-bottom:12px">
+          <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${l}</div>
+          <input id="edit-${k}" class="inp" style="width:100%" value="${(c[k]||'').replace(/"/g,'&quot;')}">
+        </div>`).join('')}
+      <div style="display:flex;gap:8px;margin-top:20px">
+        <button class="btn" style="flex:1" onclick="saveEdit('${userId}')">שמור שינויים</button>
+        <button class="btn-o" onclick="this.closest('[data-edit]').remove()">ביטול</button>
+      </div>
+    </div>`;
+  modal.setAttribute('data-edit','');
+  document.body.appendChild(modal);
+}
+
+async function saveEdit(userId) {
+  const fields=['business_name','city','category','phone','email','address'];
+  const updates={};
+  fields.forEach(f=>{const el=document.getElementById('edit-'+f);if(el)updates[f]=el.value.trim()||null;});
+  await adminCall('update_user', {user_id:userId, updates});
+  document.querySelector('[data-edit]')?.remove();
+  const u=USERS.find(u=>u.id===userId); if(u) Object.assign(u,updates);
+  buildClientData(); renderClients();
+}
+
+async function toggleUser(userId, makeActive) {
+  if(!confirm((makeActive?'לשחרר':'להשעות')+' לקוח זה?')) return;
+  await adminCall('update_user', {user_id:userId, updates:{is_active:makeActive}});
+  const u=USERS.find(u=>u.id===userId); if(u) u.is_active=makeActive;
+  buildClientData(); renderClients();
+}
+
+async function deleteUser(userId, name) {
+  if(!confirm(`למחוק לצמיתות את "${name}"?\n\nכל הנתונים ימחקו — לא ניתן לשחזר.`)) return;
+  await adminCall('delete_user', {user_id:userId});
+  USERS=USERS.filter(u=>u.id!==userId);
+  INVOICES=INVOICES.filter(i=>i.user_id!==userId);
+  INVOICE_ITEMS=INVOICE_ITEMS.filter(i=>i.user_id!==userId);
+  DB_SUPPLIERS=DB_SUPPLIERS.filter(s=>s.user_id!==userId);
+  buildClientData(); buildSupplierData(); buildProductData(); renderClients();
+}
+
+// ── Exports ───────────────────────────────────────────────────
+function toCSV(rows,cols){
+  return cols.join(',')+'\n'+rows.map(r=>cols.map(c=>{const v=r[c]===undefined?'':String(r[c]);return v.includes(',')||v.includes('"')?`"${v.replace(/"/g,'""')}"`:v;}).join(',')).join('\n');
+}
+function download(csv,name){
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
+}
+function exportClients(){
+  const rows=CLIENTS.map(c=>({'שם_עסק':c.business_name||'','עיר':c.city||'','קטגוריה':c.category||'','טלפון':c.phone||'','מייל':c.email||'','כתובת':c.address||'','קוד_אישי':c.personal_code||'','סטטוס':c.status,'סריקות':c.invoices.length,'ספקים':c.suppliers.length,'מחזור':c.totalRevenue.toFixed(0),'דירוג':c.score,'הצטרף':c.joined}));
+  if(!rows.length) return;
+  download(toCSV(rows,Object.keys(rows[0])),'reverto-clients.csv');
+}
+function exportSuppliers(){
+  const rows=SUP_DATA.map(s=>({'שם_ספק':s.name,'לקוחות':s.clientIds.length,'מוצרים':s.products.length,'מחזור':s.revenue.toFixed(0),'מחיר_ממוצע':s.priceAvg.toFixed(2),'מינימום':s.priceMin.toFixed(2),'מקסימום':s.priceMax.toFixed(2),'ערים':s.cities.join('; '),'דירוג':s.score}));
+  if(!rows.length) return;
+  download(toCSV(rows,Object.keys(rows[0])),'reverto-suppliers.csv');
+}
+function exportProducts(){
+  const rows=PROD_DATA.map(p=>({'מוצר':p.name,'הזמנות':p.orderCount,'עסקים':p.buyers,'מינימום':p.priceMin.toFixed(2),'מקסימום':p.priceMax.toFixed(2),'חציון':p.median.toFixed(2),'פיזור_%':p.spread,'ספקים':p.suppliers.join('; ')}));
+  if(!rows.length) return;
+  download(toCSV(rows,Object.keys(rows[0])),'reverto-products.csv');
+}
+function exportMarket(){
+  const rows=MARKET.filter(m=>m.name&&m.price&&!isNaN(parseFloat(m.price))).map(m=>({'מוצר':m.name,'מחיר_שוק':parseFloat(m.price).toFixed(2),'יחידה':m.unit||'','עדכון':m.updated_at?new Date(m.updated_at).toLocaleDateString('he-IL'):''}));
+  if(!rows.length) return;
+  download(toCSV(rows,Object.keys(rows[0])),'reverto-market.csv');
+}
+function exportWaitlist(){
+  const rows=WAITLIST.map(w=>({'שם':w.business_name||w.name||'','טלפון':w.phone||'','תאריך':w.created_at?new Date(w.created_at).toLocaleDateString('he-IL'):''}));
+  if(!rows.length) return;
+  download(toCSV(rows,Object.keys(rows[0])),'reverto-waitlist.csv');
+}
+function exportAll(){exportClients();exportSuppliers();exportProducts();exportMarket();exportWaitlist();}
+
+init();
+</script>
+</body>
+</html>

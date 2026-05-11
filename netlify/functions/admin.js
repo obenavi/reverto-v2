@@ -133,6 +133,45 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: '{}' };
     }
 
+    // ── Full data dump (for rich admin page) ──────────────────
+    if (action === 'full_data') {
+      const [users, invoices, items, suppliers, market, waitlist] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/users?select=*&order=created_at.desc`, { headers: H }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/invoices?select=*&order=created_at.desc`, { headers: H }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/invoice_items?select=*`, { headers: H }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/suppliers?select=*`, { headers: H }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/market_prices?select=*&order=updated_at.desc&limit=500`, { headers: H }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/waitlist?select=*&order=created_at.desc`, { headers: H }).then(r => r.json()),
+      ]);
+      return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ users: users||[], invoices: invoices||[], items: items||[], suppliers: suppliers||[], market: market||[], waitlist: waitlist||[] }) };
+    }
+
+    // ── Update user fields ─────────────────────────────────────
+    if (action === 'update_user') {
+      const { user_id, updates } = parsed;
+      if (!user_id || !updates) return { statusCode: 400, body: JSON.stringify({ error: 'Missing data' }) };
+      const allowed = ['business_name', 'city', 'category', 'phone', 'email', 'address', 'plan', 'pro_until', 'is_active'];
+      const safe = {};
+      Object.keys(updates).forEach(k => { if (allowed.includes(k)) safe[k] = updates[k]; });
+      await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(user_id)}`, {
+        method: 'PATCH', headers: { ...H, 'Prefer': 'return=minimal' }, body: JSON.stringify(safe)
+      });
+      return { statusCode: 200, body: '{}' };
+    }
+
+    // ── Delete user + all their data ───────────────────────────
+    if (action === 'delete_user') {
+      const { user_id } = parsed;
+      if (!user_id) return { statusCode: 400, body: JSON.stringify({ error: 'Missing user_id' }) };
+      await fetch(`${SUPABASE_URL}/rest/v1/invoice_items?user_id=eq.${encodeURIComponent(user_id)}`, { method: 'DELETE', headers: H });
+      await fetch(`${SUPABASE_URL}/rest/v1/invoices?user_id=eq.${encodeURIComponent(user_id)}`, { method: 'DELETE', headers: H });
+      await fetch(`${SUPABASE_URL}/rest/v1/suppliers?user_id=eq.${encodeURIComponent(user_id)}`, { method: 'DELETE', headers: H });
+      await fetch(`${SUPABASE_URL}/rest/v1/daily_revenues?user_id=eq.${encodeURIComponent(user_id)}`, { method: 'DELETE', headers: H });
+      await fetch(`${SUPABASE_URL}/rest/v1/access_codes?user_id=eq.${encodeURIComponent(user_id)}`, { method: 'DELETE', headers: H });
+      await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(user_id)}`, { method: 'DELETE', headers: H });
+      return { statusCode: 200, body: '{}' };
+    }
+
     // ── Export users CSV ──────────────────────────────────────
     if (action === 'export_users') {
       const users = await fetch(
