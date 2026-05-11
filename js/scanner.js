@@ -291,7 +291,7 @@ async function upsertSupplier(userId, supplierName, amount, date, phone) {
 }
 
 function showWhatsAppPrompt(supplierName, phone) {
-  const waNumber = '972' + phone.replace(/^0/, '').replace(/\D/g, '');
+  const waNumber = formatWANumber(phone);
   const bizName = Auth.profile.business_name || '';
   const msg = encodeURIComponent(`שלום, ${bizName ? bizName + ' כאן. ' : ''}תודה על החשבונית האחרונה!`);
 

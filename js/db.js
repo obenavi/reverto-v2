@@ -80,6 +80,15 @@ const Auth = {
   }
 };
 
+// ── WhatsApp ──────────────────────────────────────────────────
+function formatWANumber(phone) {
+  const digits = (phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('972')) return digits;
+  if (digits.startsWith('0')) return '972' + digits.slice(1);
+  return '972' + digits;
+}
+
 // ── Toast ─────────────────────────────────────────────────────
 function showToast(msg, duration = 2500) {
   const t = document.getElementById('toast');
