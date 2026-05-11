@@ -31,8 +31,8 @@ function displayMarket(prices) {
     byDate[d].push(p);
   });
 
-  const latestDate = Object.keys(byDate).sort().reverse()[0];
-  const latest = byDate[latestDate] || prices;
+  const latestDate = Object.keys(byDate).filter(d => d).sort().reverse()[0];
+  const latest = (byDate[latestDate] || prices).filter(p => p.name && p.price != null && !isNaN(parseFloat(p.price)));
 
   el.innerHTML = `
     <div style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:11px;color:var(--on-surface-3);font-weight:700">

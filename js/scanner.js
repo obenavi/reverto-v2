@@ -5,15 +5,16 @@ const AZURE_KEY = ''; // יוגדר דרך Netlify Function
 
 let scannerData = null;
 
-function scannerReset() {
+function scannerReset(autoOpen = false) {
   document.getElementById('scanner-idle').style.display = 'block';
   document.getElementById('scanner-loading').style.display = 'none';
   document.getElementById('scanner-error').style.display = 'none';
   document.getElementById('scanner-results').style.display = 'none';
   document.getElementById('scanner-results').innerHTML = '';
-  document.getElementById('scan-file').value = '';
-  document.getElementById('scan-file-gallery').value = '';
+  const f = document.getElementById('scan-file');
+  if (f) f.value = '';
   scannerData = null;
+  if (autoOpen && f) setTimeout(() => f.click(), 100);
 }
 
 async function scannerHandleFile(file) {

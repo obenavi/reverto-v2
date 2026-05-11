@@ -11,7 +11,7 @@
 
   <!-- TOP BAR -->
   <div class="top-bar">
-    <div style="display:flex;align-items:center;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="showInfoPanel()">
       <div style="width:32px;height:32px;background:linear-gradient(135deg,var(--primary-dark),var(--primary-light));border-radius:10px;display:flex;align-items:center;justify-content:center">
         <svg width="18" height="18" viewBox="0 0 38 38" fill="none">
           <path d="M8 10 L19 6 L30 10 L30 22 Q30 30 19 34 Q8 30 8 22 Z" fill="white" opacity="0.9"/>
@@ -89,7 +89,7 @@
       <div class="card mb-12">
         <div class="card-pad">
           <div class="flex-between mb-8">
-            <div class="section-title">רכש לאורך זמן<button onclick="showAIInsights('גרף משולב')" style="background:linear-gradient(135deg,#6B35B8,#C084FC);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-right:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></button></div>
+            <div class="section-title">רכש / מחזורים<button onclick="showAIInsights('גרף משולב')" style="background:linear-gradient(135deg,#6B35B8,#C084FC);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-right:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></button></div>
             <div style="display:flex;gap:4px">
               <button class="period-btn active" onclick="setPeriod('week',this)">שבוע</button>
               <button class="period-btn" onclick="setPeriod('month',this)">חודש</button>
@@ -161,14 +161,10 @@
           <div style="width:64px;height:64px;background:linear-gradient(135deg,var(--primary-dark),var(--primary-light));border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </div>
-          <div style="font-size:16px;font-weight:800;margin-bottom:6px">צלם חשבונית</div>
-          <div style="font-size:13px;color:var(--on-surface-3)">לחץ לצילום או העלאת קובץ</div>
+          <div style="font-size:16px;font-weight:800;margin-bottom:6px">צלם או העלה חשבונית</div>
+          <div style="font-size:13px;color:var(--on-surface-3)">מצלמה · גלריה · הורדות</div>
         </div>
-        <input type="file" id="scan-file" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="scannerHandleFile(this.files[0])">
-        <button class="btn-ghost" onclick="document.getElementById('scan-file-gallery').click()">
-          העלה מהגלריה
-        </button>
-        <input type="file" id="scan-file-gallery" accept="image/*,application/pdf" style="display:none" onchange="scannerHandleFile(this.files[0])">
+        <input type="file" id="scan-file" accept="image/*,application/pdf" style="display:none" onchange="scannerHandleFile(this.files[0])">
       </div>
 
       <!-- Loading -->
@@ -233,8 +229,6 @@
       <div class="card card-pad mb-12">
         <label class="field-label">שם העסק</label>
         <input class="input mb-12" id="prof-biz-name" type="text">
-        <label class="field-label">מחזור יומי ממוצע (₪)</label>
-        <input class="input mb-12" id="prof-revenue" type="number" min="0">
         <button class="btn-primary" onclick="saveProfile()">שמור שינויים</button>
       </div>
       <div class="card card-pad mb-12" id="admin-link-wrap" style="display:none">
