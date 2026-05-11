@@ -200,11 +200,16 @@ async function saveSupplierPhone() {
 }
 
 function showAddSupplier() {
-  // Simple inline form
   const el = document.getElementById('suppliers-list');
+  const hasContacts = 'contacts' in navigator && navigator.contacts;
   el.innerHTML = `
     <div class="card-pad">
       <div style="font-size:16px;font-weight:800;margin-bottom:16px">ספק חדש</div>
+      ${hasContacts ? `
+        <button onclick="addSupplierFromContacts()" class="btn-ghost mb-12" style="width:100%;border-color:var(--primary);color:var(--primary);display:flex;align-items:center;justify-content:center;gap:8px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          הוסף מאנשי הקשר
+        </button>` : ''}
       <label class="field-label">שם ספק</label>
       <input class="input mb-12" id="new-sup-name" type="text" placeholder="שם הספק">
       <label class="field-label">טלפון (אופציונלי)</label>
@@ -213,6 +218,21 @@ function showAddSupplier() {
       <button class="btn-ghost" onclick="renderSuppliersList()">ביטול</button>
     </div>
   `;
+}
+
+async function addSupplierFromContacts() {
+  try {
+    const contacts = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+    if (contacts?.length) {
+      const c = contacts[0];
+      const name = c.name?.[0] || '';
+      const phone = c.tel?.[0] || '';
+      if (name) document.getElementById('new-sup-name').value = name;
+      if (phone) document.getElementById('new-sup-phone').value = phone;
+    }
+  } catch {
+    showToast('לא ניתן לגשת לאנשי הקשר');
+  }
 }
 
 async function saveNewSupplier() {

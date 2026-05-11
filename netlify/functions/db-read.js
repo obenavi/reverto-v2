@@ -7,6 +7,7 @@ const USER_TABLES = {
   invoice_items: 'user_id',
   suppliers: 'user_id',
   daily_revenues: 'user_id',
+  access_codes: 'user_id',
 };
 
 function verifyJWT(token, secret) {

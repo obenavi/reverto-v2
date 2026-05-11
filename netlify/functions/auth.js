@@ -60,14 +60,22 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, jwt }) };
     }
 
-    // ── Personal codes (RV-) → returning user ─────────────────
+    // ── Personal + partner codes (RV-) → returning user ───────
     if (codeUpper.startsWith('RV-')) {
-      const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/users?personal_code=eq.${encodeURIComponent(codeUpper)}&select=*`,
+      // Look up via access_codes — supports both personal and partner codes
+      const cr = await fetch(
+        `${SUPABASE_URL}/rest/v1/access_codes?code=eq.${encodeURIComponent(codeUpper)}&type=in.(personal,partner)&is_active=eq.true&select=user_id`,
         { headers: H }
       );
-      const users = await r.json();
-      if (!users?.length) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid code' }) };
+      const codes = await cr.json();
+      if (!codes?.length) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid code' }) };
+
+      const ur = await fetch(
+        `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(codes[0].user_id)}&select=*`,
+        { headers: H }
+      );
+      const users = await ur.json();
+      if (!users?.length) return { statusCode: 401, body: JSON.stringify({ error: 'User not found' }) };
 
       const user = users[0];
       if (user.is_active === false) return { statusCode: 403, body: JSON.stringify({ error: 'Account suspended' }) };

@@ -33,7 +33,8 @@ function renderAdminTabs() {
   const tabs = [
     { id: 'kpis', label: 'KPIs' },
     { id: 'users', label: 'לקוחות' },
-    { id: 'codes', label: 'קודים' }
+    { id: 'codes', label: 'קודים' },
+    { id: 'prices', label: 'מחירי שוק' }
   ];
   document.getElementById('admin-tabs').innerHTML = tabs.map(t => `
     <button onclick="loadAdminTab('${t.id}')" id="atab-${t.id}"
@@ -52,6 +53,7 @@ async function loadAdminTab(tab) {
   if (tab === 'kpis') await renderKPIs(body);
   if (tab === 'users') await renderUsers(body);
   if (tab === 'codes') await renderCodes(body);
+  if (tab === 'prices') renderPricesUpload(body);
 }
 
 async function renderKPIs(body) {
@@ -140,6 +142,79 @@ async function renderCodes(body) {
       `).join('') || '<div class="card-pad"><div style="color:var(--on-surface-3);font-size:13px">אין קודים</div></div>'}
     </div>
   `;
+}
+
+function renderPricesUpload(body) {
+  body.innerHTML = `
+    <div class="card card-pad mb-12">
+      <div style="font-size:14px;font-weight:800;margin-bottom:8px">העלאת מחירי שוק מ-CSV</div>
+      <div style="font-size:12px;color:var(--on-surface-3);margin-bottom:12px;line-height:1.6">
+        פורמט קובץ: שלוש עמודות — <strong>שם,מחיר,יחידה</strong><br>
+        דוגמה: <code style="background:var(--surface-low);padding:2px 6px;border-radius:4px">עגבניות,8.50,ק"ג</code><br>
+        שורה ראשונה יכולה להיות כותרת (תידלג אוטומטית)
+      </div>
+      <input type="file" id="csv-file" accept=".csv,.txt" style="display:none" onchange="handleCSVUpload(this)">
+      <button onclick="document.getElementById('csv-file').click()" class="btn-primary mb-8">בחר קובץ CSV</button>
+      <div id="csv-preview" style="display:none">
+        <div id="csv-preview-text" style="font-size:12px;color:var(--on-surface-3);margin-bottom:8px"></div>
+        <button onclick="uploadPrices()" class="btn-primary">העלה מחירים</button>
+      </div>
+      <div id="csv-result" style="display:none;margin-top:12px;font-size:13px;font-weight:700;color:var(--success)"></div>
+    </div>
+  `;
+}
+
+let parsedPrices = [];
+
+function handleCSVUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const lines = e.target.result.split('\n').map(l => l.trim()).filter(l => l);
+    parsedPrices = [];
+    let skipped = 0;
+    lines.forEach((line, i) => {
+      const parts = line.split(',').map(p => p.trim().replace(/^"|"$/g, ''));
+      if (parts.length < 2) { skipped++; return; }
+      const name = parts[0];
+      const price = parseFloat(parts[1]);
+      const unit = parts[2] || 'ק"ג';
+      if (!name || isNaN(price) || price <= 0) { skipped++; return; }
+      parsedPrices.push({ name, price, unit });
+    });
+    const preview = document.getElementById('csv-preview');
+    const previewText = document.getElementById('csv-preview-text');
+    if (parsedPrices.length) {
+      previewText.textContent = `נמצאו ${parsedPrices.length} מוצרים${skipped ? ` (${skipped} שורות דולגו)` : ''}`;
+      preview.style.display = 'block';
+    } else {
+      previewText.textContent = 'לא נמצאו שורות תקינות בקובץ';
+      preview.style.display = 'block';
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+async function uploadPrices() {
+  if (!parsedPrices.length) return;
+  const btn = document.querySelector('#admin-body .btn-primary:last-of-type');
+  if (btn) { btn.textContent = 'מעלה...'; btn.disabled = true; }
+
+  const res = await fetch('/.netlify/functions/upload-market-prices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt },
+    body: JSON.stringify({ prices: parsedPrices })
+  });
+  const data = await res.json();
+  const result = document.getElementById('csv-result');
+  if (result) {
+    result.style.display = 'block';
+    result.textContent = res.ok ? `✓ הועלו ${data.uploaded} מחירים בהצלחה` : `שגיאה: ${data.error}`;
+    result.style.color = res.ok ? 'var(--success)' : 'var(--error)';
+  }
+  if (btn) { btn.textContent = 'העלה מחירים'; btn.disabled = false; }
+  parsedPrices = [];
 }
 
 async function createCode() {
