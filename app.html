@@ -42,30 +42,48 @@
 
       <!-- Stat Cards -->
       <div class="stat-grid">
-        <div class="stat-card card-tap" onclick="navTo('invoices')">
-          <div class="stat-label">רכש החודש</div>
+        <div class="stat-card card-tap" onclick="showAIInsights('spending')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div class="stat-label">רכש החודש</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#6B35B8,#C084FC);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
+          </div>
           <div class="stat-value" id="dash-monthly">₪0</div>
           <div class="stat-sub" id="dash-monthly-sub">0 חשבוניות</div>
         </div>
-        <div class="stat-card card-tap" onclick="navTo('insights')">
-          <div class="stat-label">חיסכון פוטנציאלי</div>
+        <div class="stat-card card-tap" onclick="showAIInsights('savings')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div class="stat-label">חיסכון פוטנציאלי</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#6B35B8,#C084FC);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
+          </div>
           <div class="stat-value text-success" id="dash-saving">₪0</div>
           <div class="stat-sub">לעומת שוק</div>
         </div>
       </div>
 
       <div class="stat-grid">
-        <div class="stat-card card-tap" onclick="navTo('alerts')">
-          <div class="stat-label">התראות מחיר</div>
+        <div class="stat-card card-tap" onclick="showAIInsights('alerts')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div class="stat-label">התראות מחיר</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#6B35B8,#C084FC);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
+          </div>
           <div class="stat-value text-error" id="dash-alerts">0</div>
           <div class="stat-sub">מוצרים שהתייקרו</div>
         </div>
-        <div class="stat-card card-tap" onclick="navTo('foodcost')">
-          <div class="stat-label">Food Cost</div>
+        <div class="stat-card card-tap" onclick="showAIInsights('foodcost')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div class="stat-label">Food Cost</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#6B35B8,#C084FC);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
+          </div>
           <div class="stat-value" id="dash-foodcost">--%</div>
           <div class="stat-sub" id="dash-foodcost-sub">הכנס מחזור יומי</div>
         </div>
       </div>
+
+      <!-- Daily Revenue Entry -->
+      <button onclick="openRevenueModal()" style="width:100%;background:var(--surface-card);border:1.5px dashed var(--border);border-radius:var(--radius-md);padding:12px;font-size:13px;font-weight:700;color:var(--on-surface-3);cursor:pointer;font-family:inherit;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        הזן מחזור יומי
+      </button>
 
       <!-- Chart -->
       <div class="card mb-12">

@@ -314,6 +314,154 @@ function renderCombinedChart(period) {
   }
 }
 
+// ── Daily Revenue Modal ───────────────────────────────────────
+
+function openRevenueModal() {
+  const today = new Date().toISOString().slice(0, 10);
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;padding:28px 24px 40px;width:100%;max-width:480px">
+      <div style="font-size:18px;font-weight:800;margin-bottom:6px">הזנת מחזור יומי</div>
+      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:20px">המחזור משמש לחישוב Food Cost</div>
+      <label class="field-label">תאריך</label>
+      <input class="input mb-12" id="rev-date" type="date" value="${today}">
+      <label class="field-label">סכום (₪)</label>
+      <input class="input mb-16" id="rev-amount" type="number" min="0" step="1" placeholder="0">
+      <button class="btn-primary mb-8" onclick="saveRevenue()">שמור</button>
+      <button class="btn-ghost" onclick="this.closest('[data-rev-modal]').remove()">ביטול</button>
+    </div>
+  `;
+  modal.setAttribute('data-rev-modal', '');
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById('rev-amount')?.focus(), 100);
+}
+
+async function saveRevenue() {
+  const date = document.getElementById('rev-date')?.value;
+  const amount = parseFloat(document.getElementById('rev-amount')?.value);
+  if (!date || !amount || amount <= 0) return;
+
+  await DB.update('daily_revenues', `?date=eq.${date}`, { amount, date });
+  // If no row existed, insert instead (upsert)
+  const check = await DB.get('daily_revenues', `?date=eq.${date}&select=id`);
+  if (!check?.length) {
+    await DB.insert('daily_revenues', { date, amount });
+  } else {
+    await DB.update('daily_revenues', `?date=eq.${date}`, { amount });
+  }
+
+  document.querySelector('[data-rev-modal]')?.remove();
+  showToast('מחזור נשמר');
+  renderDashboard();
+}
+
+// ── AI Insights ───────────────────────────────────────────────
+
+function buildInsightData(topic) {
+  const profile = Auth.profile;
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
+
+  const monthlyInvoices = dashData.invoices.filter(i => i.date >= monthStart);
+  const lastMonthInvoices = dashData.invoices.filter(i => i.date >= lastMonthStart && i.date < monthStart);
+  const monthlyPurchases = monthlyInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
+  const lastMonthPurchases = lastMonthInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
+  const monthlyRevenue = dashData.revenues.filter(r => r.date >= monthStart).reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+
+  const supplierTotals = {};
+  monthlyInvoices.forEach(inv => {
+    supplierTotals[inv.supplier_name] = (supplierTotals[inv.supplier_name] || 0) + (parseFloat(inv.total_amount) || 0);
+  });
+  const topSupplier = Object.entries(supplierTotals).sort((a, b) => b[1] - a[1])[0];
+
+  const productPrices = {};
+  dashData.invoices.forEach(inv => {
+    let items;
+    try { items = typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items; } catch { return; }
+    (items || []).forEach(item => {
+      if (!item.product_name || !item.unit_price) return;
+      if (!productPrices[item.product_name]) productPrices[item.product_name] = [];
+      productPrices[item.product_name].push({ price: parseFloat(item.unit_price), date: inv.date });
+    });
+  });
+
+  const alerts = [];
+  Object.entries(productPrices).forEach(([name, entries]) => {
+    if (entries.length < 2) return;
+    entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const latest = entries[0].price, prev = entries[1].price;
+    if (latest > prev * 1.05) alerts.push({ product: name, prev_price: prev.toFixed(2), current_price: latest.toFixed(2), pct: ((latest - prev) / prev * 100).toFixed(0) + '%' });
+  });
+
+  const base = {
+    category: profile.category || 'עסק מזון',
+    city: profile.city || '',
+    monthly_purchases: Math.round(monthlyPurchases),
+    invoice_count: monthlyInvoices.length,
+    change_vs_last_month: lastMonthPurchases > 0 ? (((monthlyPurchases - lastMonthPurchases) / lastMonthPurchases) * 100).toFixed(0) + '%' : 'אין נתון קודם'
+  };
+
+  if (topic === 'spending') return { ...base, top_supplier: topSupplier ? { name: topSupplier[0], amount: Math.round(topSupplier[1]) } : null };
+  if (topic === 'foodcost') return { ...base, monthly_revenue: Math.round(monthlyRevenue), food_cost_pct: monthlyRevenue > 0 ? (monthlyPurchases / monthlyRevenue * 100).toFixed(1) : null, target: 30 };
+  if (topic === 'alerts') return { ...base, price_increases: alerts.slice(0, 5) };
+  if (topic === 'savings') return { ...base, top_suppliers: Object.entries(supplierTotals).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, amount]) => ({ name, amount: Math.round(amount) })) };
+  return base;
+}
+
+const INSIGHT_LABELS = { spending: 'ניתוח רכש', foodcost: 'Food Cost', alerts: 'התייקרויות', savings: 'חיסכון פוטנציאלי' };
+
+async function showAIInsights(topic) {
+  const profile = Auth.profile;
+  const isPro = profile.plan === 'pro' && profile.pro_until && new Date(profile.pro_until) > new Date();
+  if (!isPro) { showProModal(); return; }
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px)';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#6B35B8,#C084FC);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:16px;font-weight:800">תובנות AI</div>
+          <div style="font-size:12px;color:var(--on-surface-3)">${INSIGHT_LABELS[topic] || topic}</div>
+        </div>
+        <button onclick="this.closest('[data-insight-modal]').remove()" style="background:var(--surface-low);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+      <div id="insight-body" style="padding:24px">
+        <div style="display:flex;align-items:center;gap:12px;color:var(--on-surface-3)">
+          <div style="width:20px;height:20px;border:2px solid var(--primary);border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0"></div>
+          <span style="font-size:14px">מנתח את הנתונים שלך...</span>
+        </div>
+      </div>
+    </div>
+  `;
+  modal.setAttribute('data-insight-modal', '');
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+
+  try {
+    const data = buildInsightData(topic);
+    const res = await fetch('/.netlify/functions/ai-insight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt },
+      body: JSON.stringify({ topic, data })
+    });
+    const result = await res.json();
+    const body = document.getElementById('insight-body');
+    if (body) {
+      body.innerHTML = `<div style="font-size:15px;line-height:1.8;color:var(--on-surface);white-space:pre-line">${result.insight || 'לא ניתן לנתח כעת — נסה שוב.'}</div>`;
+    }
+  } catch {
+    const body = document.getElementById('insight-body');
+    if (body) body.innerHTML = `<div style="color:var(--error);font-size:14px">שגיאת חיבור — נסה שוב.</div>`;
+  }
+}
+
 function showProModal() {
   const modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px)';
