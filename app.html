@@ -237,9 +237,23 @@
         <input class="input mb-12" id="prof-revenue" type="number" min="0">
         <button class="btn-primary" onclick="saveProfile()">שמור שינויים</button>
       </div>
+      <div class="card card-pad mb-12" id="admin-link-wrap" style="display:none">
+        <button class="btn-ghost" onclick="navTo('admin')" style="color:var(--primary);border-color:var(--primary)">
+          ⚙️ פאנל ניהול
+        </button>
+      </div>
       <div class="card card-pad">
         <button class="btn-ghost" onclick="logout()" style="color:var(--error);border-color:var(--error)">יציאה מהמערכת</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="page" id="page-admin">
+    <div class="page-content">
+      <div style="font-size:22px;font-weight:800;margin-bottom:16px">פאנל ניהול</div>
+      <div id="admin-tabs" style="display:flex;gap:8px;margin-bottom:16px"></div>
+      <div id="admin-body"></div>
     </div>
   </div>
 
@@ -291,6 +305,7 @@
   <script src="js/suppliers.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/market.js"></script>
+  <script src="js/admin.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -22,6 +22,7 @@ function navTo(pageId) {
   if (pageId === 'market') renderMarket();
   if (pageId === 'profile') initProfile();
   if (pageId === 'scanner') scannerReset();
+  if (pageId === 'admin') initAdmin();
 }
 
 function logout() {
@@ -46,6 +47,12 @@ async function appInit() {
   if (!profile.onboarding_done) {
     window.location.href = '/onboarding.html';
     return;
+  }
+
+  // Show admin link if admin
+  if (isAdmin()) {
+    const wrap = document.getElementById('admin-link-wrap');
+    if (wrap) wrap.style.display = 'block';
   }
 
   // Set greeting

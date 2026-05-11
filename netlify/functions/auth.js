@@ -54,7 +54,7 @@ exports.handler = async (event) => {
 
       const user = { ...users[0], plan: 'pro', pro_until: '2099-12-31T00:00:00Z' };
       const jwt = signJWT(
-        { user_id: user.id, plan: 'pro', exp: Math.floor(Date.now() / 1000) + 7200 }, // 2 hours
+        { user_id: user.id, plan: 'pro', is_admin: true, exp: Math.floor(Date.now() / 1000) + 7200 }, // 2 hours
         JWT_SECRET
       );
       return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, jwt }) };
