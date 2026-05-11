@@ -343,13 +343,11 @@ async function saveRevenue() {
   const amount = parseFloat(document.getElementById('rev-amount')?.value);
   if (!date || !amount || amount <= 0) return;
 
-  await DB.update('daily_revenues', `?date=eq.${date}`, { amount, date });
-  // If no row existed, insert instead (upsert)
-  const check = await DB.get('daily_revenues', `?date=eq.${date}&select=id`);
-  if (!check?.length) {
-    await DB.insert('daily_revenues', { date, amount });
-  } else {
+  const existing = await DB.get('daily_revenues', `?date=eq.${date}&select=id`);
+  if (existing?.length) {
     await DB.update('daily_revenues', `?date=eq.${date}`, { amount });
+  } else {
+    await DB.insert('daily_revenues', { date, amount });
   }
 
   document.querySelector('[data-rev-modal]')?.remove();
@@ -496,37 +494,6 @@ function showProModal() {
     </div>
   `;
   modal.classList.add('pro-modal-wrap');
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-  document.body.appendChild(modal);
-}
-
-function showAIInsights(topic) {
-  const profile = Auth.profile;
-  const isPro = profile.plan === 'pro' && profile.pro_until && new Date(profile.pro_until) > new Date();
-  if (!isPro) { showProModal(); return; }
-
-  const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px)';
-  modal.innerHTML = `
-    <div style="background:white;border-radius:24px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-      <div style="padding:24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
-        <div style="width:36px;height:36px;background:linear-gradient(135deg,#6B35B8,#C084FC);border-radius:12px;display:flex;align-items:center;justify-content:center">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M9 12l2 2 4-4"/></svg>
-        </div>
-        <div style="flex:1">
-          <div style="font-size:16px;font-weight:800">תובנות AI</div>
-          <div style="font-size:12px;color:var(--on-surface-3)">${topic || 'ניתוח כללי'}</div>
-        </div>
-        <button onclick="this.closest('.ai-modal-wrap').remove()" style="background:var(--surface-low);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px">×</button>
-      </div>
-      <div style="padding:24px">
-        <div style="font-size:14px;line-height:1.7;color:var(--on-surface-2)">
-          🚧 ניתוח AI בבנייה. בקרוב כאן יופיעו תובנות מבוססות נתוני העסק שלך וביחס לעסקים דומים.
-        </div>
-      </div>
-    </div>
-  `;
-  modal.classList.add('ai-modal-wrap');
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
 }
