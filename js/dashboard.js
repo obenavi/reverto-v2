@@ -123,15 +123,16 @@ function renderPriceAlerts() {
 
 async function renderBenchmark() {
   const el = document.getElementById('dash-benchmark');
-  const market = await DB.get('market_prices', '?select=name,price,unit&limit=5&order=id.desc');
-  if (!market || !market.length) {
+  const market = await DB.get('market_prices', '?select=name,price,unit&order=updated_at.desc&limit=20');
+  const valid = (market || []).filter(m => m.name && m.price != null && !isNaN(parseFloat(m.price))).slice(0, 5);
+  if (!valid.length) {
     el.innerHTML = `<div class="card-pad"><div style="font-size:13px;color:var(--on-surface-3);text-align:center">אין נתוני שוק זמינים</div></div>`;
     return;
   }
-  el.innerHTML = market.map(m => `
+  el.innerHTML = valid.map(m => `
     <div class="list-row">
       <div style="flex:1;font-size:13px;font-weight:700">${m.name}</div>
-      <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${parseFloat(m.price||0).toFixed(2)}</div>
+      <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${parseFloat(m.price).toFixed(2)}</div>
       <div style="font-size:11px;color:var(--on-surface-3);margin-right:4px">/${m.unit||'יח׳'}</div>
     </div>
   `).join('');
