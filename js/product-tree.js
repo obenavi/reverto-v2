@@ -323,10 +323,12 @@ async function openRecipeBuilder(recipeId = null) {
           <input class="input" id="rb-target-fc" type="number" min="1" max="99" value="${recipe?.target_fc_pct || 30}" oninput="rbRecalc()">
         </div>
         <div>
-          <label class="field-label">עמלת OLT %</label>
+          <label class="field-label">עמלת משלוחים % *</label>
           <input class="input" id="rb-olt" type="number" min="0" max="50" value="${recipe?.olt_commission_pct || 0}" oninput="rbRecalc()">
         </div>
       </div>
+
+      <div style="font-size:11px;color:var(--on-surface-3);margin-bottom:14px">* עמלת משלוחים — Wolt / תן ביס / קובי / משלוחה (אחוז שהפלטפורמה לוקחת מהמחיר)</div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:14px;font-weight:800">רכיבים</div>
