@@ -408,14 +408,76 @@ function rbFilterSearch(q) {
   const el = document.getElementById('ing-list');
   if (!el) return;
   const filtered = ptCatalog.filter(p => !q || p.name.includes(q));
-  el.innerHTML = filtered.map(p => `
+  const addManualBtn = `
+    <div onclick="rbAddProductInline('${q.replace(/'/g, "\\'")}')" style="display:flex;align-items:center;gap:10px;padding:12px 0;cursor:pointer;border-top:1px solid var(--border);margin-top:4px">
+      <div style="width:36px;height:36px;background:var(--surface-low);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;font-weight:700;color:var(--primary)">+</div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary)">${q ? `הוסף "${q}" ידנית` : 'הוסף מוצר חדש ידנית'}</div>
+        <div style="font-size:11px;color:var(--on-surface-3)">יצירה ושמירה בקטלוג + הוספה למתכון</div>
+      </div>
+    </div>`;
+  el.innerHTML = (filtered.map(p => `
     <div onclick="rbSelectIngredient('${p.id}')" class="list-row" style="cursor:pointer">
       <div style="flex:1">
         <div style="font-size:13px;font-weight:700">${p.name}</div>
         <div style="font-size:11px;color:var(--on-surface-3)">${p.unit}${p.waste_pct > 0 ? ` · פחת ${p.waste_pct}%` : ''}</div>
       </div>
       <div style="font-size:13px;font-weight:800;color:var(--primary)">₪${p.price_per_unit.toFixed(2)}</div>
-    </div>`).join('') || '<div style="padding:20px;text-align:center;color:var(--on-surface-3)">לא נמצאו מוצרים</div>';
+    </div>`).join('') || '<div style="padding:12px 0;text-align:center;color:var(--on-surface-3);font-size:13px">לא נמצאו מוצרים</div>') + addManualBtn;
+}
+
+function rbAddProductInline(prefillName) {
+  document.querySelector('[data-ing-modal]')?.remove();
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-end;justify-content:center';
+  modal.setAttribute('data-inline-product-modal', '');
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;padding:24px 24px 48px;width:100%;max-width:480px">
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px">מוצר חדש</div>
+      <div style="font-size:12px;color:var(--on-surface-3);margin-bottom:16px">יישמר בקטלוג ויתווסף למתכון</div>
+      <label class="field-label">שם מוצר *</label>
+      <input class="input mb-12" id="ipm-name" type="text" placeholder="שם המוצר" value="${prefillName}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div>
+          <label class="field-label">מחיר ליחידה (₪) *</label>
+          <input class="input" id="ipm-price" type="number" step="0.01" placeholder="0.00">
+        </div>
+        <div>
+          <label class="field-label">יחידת מידה</label>
+          ${unitSelect('ק"ג', 'ipm-unit')}
+        </div>
+      </div>
+      <label class="field-label">אחוז פחת % (אופציונלי)</label>
+      <input class="input mb-16" id="ipm-waste" type="number" value="0" min="0" max="99">
+      <button onclick="rbSaveInlineProduct()" class="btn-primary mb-8">הוסף למתכון ולקטלוג</button>
+      <button onclick="this.closest('[data-inline-product-modal]').remove()" class="btn-ghost">ביטול</button>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById('ipm-price')?.focus(), 100);
+}
+
+async function rbSaveInlineProduct() {
+  const name = document.getElementById('ipm-name')?.value.trim();
+  const price = parseFloat(document.getElementById('ipm-price')?.value) || 0;
+  const unit = document.getElementById('ipm-unit')?.value || 'ק"ג';
+  const waste = parseFloat(document.getElementById('ipm-waste')?.value) || 0;
+  if (!name) { showToast('הכנס שם מוצר'); return; }
+
+  // Save to catalog
+  const result = await DB.insert('product_catalog', { name, price_per_unit: price, unit, waste_pct: waste });
+  if (result) {
+    ptCatalog.push(result);
+    ptCatalog.sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  }
+
+  // Add to recipe
+  const newIng = { product_name: name, unit, quantity: 0, product_id: result?.id || null };
+  rbIngredients.push(newIng);
+  document.querySelector('[data-inline-product-modal]')?.remove();
+  rbRenderIngredients();
+  rbRecalc();
+  showToast(`"${name}" נוסף לקטלוג ולמתכון`);
 }
 
 function rbSelectIngredient(productId) {
