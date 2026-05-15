@@ -9,6 +9,9 @@ const USER_TABLES = {
   daily_revenues: 'user_id',
   access_codes: 'user_id',
   locations: 'user_id',
+  product_catalog: 'user_id',
+  recipes: 'user_id',
+  recipe_ingredients: 'user_id',
 };
 
 function verifyJWT(token, secret) {

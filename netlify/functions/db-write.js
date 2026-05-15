@@ -11,6 +11,9 @@ const USER_TABLES = {
   suppliers: 'user_id',
   daily_revenues: 'user_id',
   locations: 'user_id',
+  product_catalog: 'user_id',
+  recipes: 'user_id',
+  recipe_ingredients: 'user_id',
 };
 
 const ALLOWED_ACTIONS = ['insert', 'update', 'delete'];

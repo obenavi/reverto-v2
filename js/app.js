@@ -23,6 +23,7 @@ function navTo(pageId) {
   if (pageId === 'profile') initProfile();
   if (pageId === 'scanner') scannerReset(true);
   if (pageId === 'admin') initAdmin();
+  if (pageId === 'product-tree') initProductTree();
 }
 
 function logout() {
