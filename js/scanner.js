@@ -149,7 +149,7 @@ function scannerShowResults(fields, items) {
     ? `<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-md);padding:12px 14px;margin-bottom:12px;font-size:13px;font-weight:700;color:var(--warning)">חשבונית זיכוי — הסכום יירשם כשלילי</div>`
     : '';
 
-  const html = `
+  document.getElementById('scanner-results').innerHTML = `
     ${creditBanner}
     <div class="card card-pad mb-12">
       <div class="section-title mb-12">פרטי חשבונית</div>
@@ -164,35 +164,79 @@ function scannerShowResults(fields, items) {
     </div>
 
     <div class="card mb-12">
-      <div class="card-pad" style="border-bottom:1px solid var(--border)">
-        <div class="section-title">פריטים (${items.length})</div>
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div class="section-title">פריטים (<span id="items-count">${items.length}</span>)</div>
+        <button onclick="addManualItem()" style="background:var(--primary);color:white;border:none;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ הוסף ידני</button>
       </div>
-      <div id="res-items-list">
-        ${items.map((item, i) => `
-          <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
-            <div style="font-size:13px;font-weight:700;margin-bottom:6px">${escHtml(item.product_name)}</div>
-            <div style="display:flex;gap:8px">
-              <input style="flex:1" class="input" placeholder="כמות" type="number" step="0.001" value="${item.quantity}" id="qty-${i}" oninput="recalcItem(${i})">
-              <input style="flex:1" class="input" placeholder="מחיר יחידה" type="number" step="0.01" value="${item.unit_price}" id="up-${i}" oninput="recalcItem(${i})">
-              <input style="flex:1" class="input" placeholder="סה״כ" type="number" step="0.01" value="${item.total_price.toFixed(2)}" id="tp-${i}" readonly style="background:var(--surface-low)">
-            </div>
-          </div>
-        `).join('')}
+      <div style="display:grid;grid-template-columns:1fr 58px 68px 68px 28px;gap:3px;padding:6px 10px;background:var(--surface-low);border-bottom:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;color:var(--on-surface-3)">שם פריט</div>
+        <div style="font-size:10px;font-weight:700;color:var(--on-surface-3);text-align:center">כמות</div>
+        <div style="font-size:10px;font-weight:700;color:var(--on-surface-3);text-align:center">מחיר/יח׳</div>
+        <div style="font-size:10px;font-weight:700;color:var(--on-surface-3);text-align:center">סה"כ</div>
+        <div></div>
       </div>
+      <div id="res-items-list"></div>
     </div>
 
     <button class="btn-primary mb-12" onclick="handleSaveInvoice()">שמור חשבונית</button>
     <button class="btn-ghost" onclick="scannerReset()">ביטול</button>
   `;
 
-  document.getElementById('scanner-results').innerHTML = html;
+  renderItemsList();
+}
+
+function renderItemsList() {
+  const el = document.getElementById('res-items-list');
+  if (!el || !scannerData) return;
+  const items = scannerData.items;
+  const countEl = document.getElementById('items-count');
+  if (countEl) countEl.textContent = items.length;
+
+  if (!items.length) {
+    el.innerHTML = '<div style="padding:14px;text-align:center;color:var(--on-surface-3);font-size:13px">אין פריטים — לחץ "+ הוסף ידני"</div>';
+    return;
+  }
+
+  el.innerHTML = items.map((item, i) => `
+    <div style="padding:6px 10px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 58px 68px 68px 28px;gap:3px;align-items:center">
+      <input class="input" style="font-size:12px;padding:5px 6px;font-weight:600"
+        id="pn-${i}" value="${escHtml(item.product_name)}" placeholder="שם פריט"
+        onchange="scannerData.items[${i}].product_name=this.value">
+      <input class="input" style="font-size:12px;padding:5px 3px;text-align:center"
+        type="number" step="0.001" id="qty-${i}" value="${item.quantity}"
+        oninput="scannerData.items[${i}].quantity=parseFloat(this.value)||0;recalcItem(${i})">
+      <input class="input" style="font-size:12px;padding:5px 3px;text-align:center"
+        type="number" step="0.01" id="up-${i}" value="${item.unit_price}"
+        oninput="scannerData.items[${i}].unit_price=parseFloat(this.value)||0;recalcItem(${i})">
+      <input class="input" style="font-size:12px;padding:5px 3px;text-align:center;background:var(--surface-low);color:var(--on-surface-2)"
+        type="number" step="0.01" id="tp-${i}" value="${(item.total_price||0).toFixed(2)}" readonly>
+      <button onclick="removeItem(${i})"
+        style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;padding:0;line-height:1;text-align:center">×</button>
+    </div>
+  `).join('');
+}
+
+function addManualItem() {
+  if (!scannerData) scannerData = { fields: {}, items: [], raw: null };
+  scannerData.items.push({ product_name: '', quantity: 1, unit_price: 0, total_price: 0 });
+  renderItemsList();
+  const lastIdx = scannerData.items.length - 1;
+  setTimeout(() => document.getElementById('pn-' + lastIdx)?.focus(), 80);
+}
+
+function removeItem(i) {
+  if (!scannerData) return;
+  scannerData.items.splice(i, 1);
+  renderItemsList();
 }
 
 function recalcItem(i) {
   const qty = parseFloat(document.getElementById('qty-'+i)?.value) || 0;
   const up = parseFloat(document.getElementById('up-'+i)?.value) || 0;
+  const total = qty * up;
   const tp = document.getElementById('tp-'+i);
-  if (tp) tp.value = (qty * up).toFixed(2);
+  if (tp) tp.value = total.toFixed(2);
+  if (scannerData?.items[i]) scannerData.items[i].total_price = total;
 }
 
 async function handleSaveInvoice() {
@@ -209,16 +253,15 @@ async function handleSaveInvoice() {
     return;
   }
 
-  // Collect items
-  const items = [];
-  const itemEls = document.querySelectorAll('#res-items-list > div');
-  itemEls.forEach((el, i) => {
-    const name = el.querySelector('div')?.textContent?.trim();
-    const qty = parseFloat(document.getElementById('qty-'+i)?.value) || 0;
-    const up = parseFloat(document.getElementById('up-'+i)?.value) || 0;
-    const tp = parseFloat(document.getElementById('tp-'+i)?.value) || 0;
-    if (name) items.push({ product_name: name, quantity: qty, unit_price: up, total_price: tp });
-  });
+  // Collect items from scannerData (source of truth, updated via oninput/onchange)
+  const items = (scannerData?.items || [])
+    .map((item, i) => ({
+      product_name: (document.getElementById('pn-'+i)?.value || item.product_name || '').trim(),
+      quantity: parseFloat(document.getElementById('qty-'+i)?.value) || item.quantity || 0,
+      unit_price: parseFloat(document.getElementById('up-'+i)?.value) || item.unit_price || 0,
+      total_price: parseFloat(document.getElementById('tp-'+i)?.value) || item.total_price || 0
+    }))
+    .filter(item => item.product_name);
 
   const btn = document.querySelector('#scanner-results .btn-primary');
   if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
