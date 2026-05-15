@@ -10,13 +10,22 @@ async function renderDashboard() {
   // Show plan badge
   renderPlanBadge();
 
-  // Load all data in parallel
+  // Load all data in parallel, filtered by active location if set
+  const loc = getActiveLocation();
+  const locFilter = loc ? `&location_id=eq.${encodeURIComponent(loc.id)}` : '';
   const [invoices, revenues] = await Promise.all([
-    DB.get('invoices', `?user_id=eq.${encodeURIComponent(userId)}&select=*&order=date.desc`),
-    DB.get('daily_revenues', `?user_id=eq.${encodeURIComponent(userId)}&select=*&order=date.desc`)
+    DB.get('invoices', `?select=*&order=date.desc${locFilter}`),
+    DB.get('daily_revenues', `?select=*&order=date.desc${locFilter}`)
   ]);
   dashData.invoices = invoices || [];
   dashData.revenues = revenues || [];
+
+  // Update greeting with location if active
+  const greeting = document.getElementById('dash-greeting');
+  if (greeting) {
+    const name = Auth.profile.business_name || '';
+    greeting.textContent = loc ? `שלום, ${name} — ${loc.name}` : `שלום, ${name}!`;
+  }
 
   // Stats
   renderStats();

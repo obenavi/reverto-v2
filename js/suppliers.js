@@ -10,7 +10,9 @@ async function renderSuppliersList() {
   const el = document.getElementById('suppliers-list');
   el.innerHTML = `<div class="card-pad"><div class="skeleton" style="height:48px;margin-bottom:8px"></div><div class="skeleton" style="height:48px;margin-bottom:8px"></div><div class="skeleton" style="height:48px"></div></div>`;
 
-  const suppliers = await DB.get('suppliers', `?user_id=eq.${encodeURIComponent(userId)}&select=*&order=total_amount.desc`);
+  const loc = getActiveLocation();
+  const locFilter = loc ? `&location_id=eq.${encodeURIComponent(loc.id)}` : '';
+  const suppliers = await DB.get('suppliers', `?select=*&order=total_amount.desc${locFilter}`);
   allSuppliers = suppliers || [];
 
   displaySuppliers(allSuppliers);

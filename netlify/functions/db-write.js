@@ -10,6 +10,7 @@ const USER_TABLES = {
   invoice_items: 'user_id',
   suppliers: 'user_id',
   daily_revenues: 'user_id',
+  locations: 'user_id',
 };
 
 const ALLOWED_ACTIONS = ['insert', 'update', 'delete'];

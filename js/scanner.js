@@ -224,6 +224,7 @@ async function handleSaveInvoice() {
   if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
 
   // Save invoice to Supabase
+  const activeLocation = getActiveLocation();
   const invoice = await DB.insert('invoices', {
     user_id: userId,
     supplier_name: vendorName,
@@ -231,6 +232,7 @@ async function handleSaveInvoice() {
     invoice_number: invoiceNumber,
     total_amount: total,
     items: JSON.stringify(items),
+    location_id: activeLocation?.id || null,
     created_at: new Date().toISOString()
   });
 

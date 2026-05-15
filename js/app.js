@@ -49,6 +49,9 @@ async function appInit() {
     return;
   }
 
+  // Show active location in top bar
+  updateTopBarLocation();
+
   // Show admin link if admin
   if (isAdmin()) {
     const wrap = document.getElementById('admin-link-wrap');
@@ -204,10 +207,104 @@ function showPayment() {
   showProModal();
 }
 
+// ── Location helpers ──────────────────────────────────────────
+function getActiveLocation() {
+  try { return JSON.parse(sessionStorage.getItem('rv_location') || 'null'); } catch { return null; }
+}
+
+function setActiveLocation(loc) {
+  if (loc) sessionStorage.setItem('rv_location', JSON.stringify(loc));
+  else sessionStorage.removeItem('rv_location');
+  updateTopBarLocation();
+  if (currentPage === 'dashboard') renderDashboard();
+}
+
+function updateTopBarLocation() {
+  const loc = getActiveLocation();
+  const el = document.getElementById('top-location');
+  if (!el) return;
+  if (loc) { el.textContent = '📍 ' + loc.name; el.style.display = 'block'; }
+  else el.style.display = 'none';
+}
+
+async function loadLocations() {
+  const el = document.getElementById('locations-list');
+  const countEl = document.getElementById('location-count');
+  if (!el) return;
+  const locs = await DB.get('locations', '?select=*&order=created_at.asc&is_active=eq.true');
+  const activeLoc = getActiveLocation();
+  if (countEl) countEl.textContent = (locs?.length || 0) + ' / 20';
+  if (!locs?.length) {
+    el.innerHTML = `<div style="font-size:12px;color:var(--on-surface-3)">אין סניפים — הנתונים מוצגים עבור כל העסק</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div onclick="setActiveLocation(null)" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;margin-bottom:4px;background:${!activeLoc ? 'var(--surface-low)' : 'transparent'};border:1.5px solid ${!activeLoc ? 'var(--primary)' : 'var(--border)'}">
+      <div style="flex:1;font-size:13px;font-weight:700">כל הסניפים</div>
+      ${!activeLoc ? '<div style="font-size:11px;color:var(--primary);font-weight:700">פעיל</div>' : ''}
+    </div>
+    ${locs.map(l => `
+      <div onclick="setActiveLocation({id:'${l.id}',name:'${escHtml(l.name)}'})" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;margin-bottom:4px;background:${activeLoc?.id===l.id?'var(--surface-low)':'transparent'};border:1.5px solid ${activeLoc?.id===l.id?'var(--primary)':'var(--border)'}">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${escHtml(l.name)}</div>
+          ${l.city ? `<div style="font-size:11px;color:var(--on-surface-3)">${escHtml(l.city)}</div>` : ''}
+        </div>
+        ${activeLoc?.id===l.id ? '<div style="font-size:11px;color:var(--primary);font-weight:700">פעיל</div>' : ''}
+        <button onclick="event.stopPropagation();deleteLocation('${l.id}')" style="background:none;border:none;color:var(--on-surface-3);cursor:pointer;font-size:16px;padding:0 4px">×</button>
+      </div>
+    `).join('')}
+  `;
+}
+
+function showAddLocation() {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;padding:28px 24px 48px;width:100%;max-width:480px">
+      <div style="font-size:18px;font-weight:800;margin-bottom:20px">סניף חדש</div>
+      <label class="field-label">שם הסניף *</label>
+      <input class="input mb-12" id="loc-name" type="text" placeholder="סניף תל אביב">
+      <label class="field-label">עיר</label>
+      <input class="input mb-12" id="loc-city" type="text" placeholder="תל אביב">
+      <label class="field-label">כתובת</label>
+      <input class="input mb-16" id="loc-address" type="text" placeholder="רחוב הרצל 1">
+      <button onclick="saveNewLocation()" class="btn-primary mb-8">הוסף סניף</button>
+      <button onclick="this.closest('[data-loc-modal]').remove()" class="btn-ghost">ביטול</button>
+    </div>
+  `;
+  modal.setAttribute('data-loc-modal', '');
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function saveNewLocation() {
+  const name = document.getElementById('loc-name')?.value.trim();
+  if (!name) return;
+  const locs = await DB.get('locations', '?select=id&is_active=eq.true');
+  if ((locs?.length || 0) >= 20) { showToast('מקסימום 20 סניפים'); return; }
+  const city = document.getElementById('loc-city')?.value.trim();
+  const address = document.getElementById('loc-address')?.value.trim();
+  await DB.insert('locations', { name, city: city||null, address: address||null });
+  document.querySelector('[data-loc-modal]')?.remove();
+  showToast('הסניף נוסף');
+  loadLocations();
+}
+
+async function deleteLocation(id) {
+  if (!confirm('למחוק סניף זה?')) return;
+  await DB.update('locations', `?id=eq.${id}`, { is_active: false });
+  const active = getActiveLocation();
+  if (active?.id === id) setActiveLocation(null);
+  loadLocations();
+}
+
+function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
 function initProfile() {
   const profile = Auth.profile;
   const nameEl = document.getElementById('prof-biz-name');
   if (nameEl) nameEl.value = profile.business_name || '';
+  loadLocations();
   loadPartnerCodes();
 }
 
