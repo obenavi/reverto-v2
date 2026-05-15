@@ -1,5 +1,39 @@
 // ── עץ מוצר — Product Tree (PRO) ─────────────────────────────
 
+const PT_UNITS = ['ק"ג', 'גרם', 'ליטר', 'מ"ל', 'יחידה'];
+
+// Conversion to base (kg for weight, litre for volume, 1 for count)
+const UNIT_BASE = {
+  'ק"ג':    { family: 'weight', toBase: 1 },
+  'גרם':    { family: 'weight', toBase: 0.001 },
+  'ליטר':   { family: 'volume', toBase: 1 },
+  'מ"ל':    { family: 'volume', toBase: 0.001 },
+  'יחידה':  { family: 'count',  toBase: 1 }
+};
+
+// Convert qty from one unit to another (same family)
+function convertUnit(qty, fromUnit, toUnit) {
+  if (!fromUnit || !toUnit || fromUnit === toUnit) return qty;
+  const from = UNIT_BASE[fromUnit], to = UNIT_BASE[toUnit];
+  if (!from || !to || from.family !== to.family) return qty; // different family — treat as 1:1
+  return qty * from.toBase / to.toBase;
+}
+
+// Cost of one ingredient in a recipe, accounting for waste and unit conversion
+function calcIngCost(ing, product) {
+  if (!product || !ing.quantity) return 0;
+  const ingUnit = ing.unit || product.unit;
+  const qtyInProductUnit = convertUnit(ing.quantity, ingUnit, product.unit);
+  const wasteFactor = Math.max(0.01, 1 - (product.waste_pct || 0) / 100);
+  return (product.price_per_unit / wasteFactor) * qtyInProductUnit;
+}
+
+function unitSelect(selectedUnit, id, onchange) {
+  return `<select class="input" id="${id}" style="padding:8px 4px;font-size:12px" ${onchange ? 'onchange="' + onchange + '"' : ''}>
+    ${PT_UNITS.map(u => `<option value="${u}"${u === selectedUnit ? ' selected' : ''}>${u}</option>`).join('')}
+  </select>`;
+}
+
 let ptCatalog = [];
 let ptRecipes = [];
 let ptCurrentTab = 'products';
@@ -101,7 +135,7 @@ function editProduct(id) {
       <label class="field-label">קטגוריה</label>
       <input class="input mb-12" id="ep-cat" type="text" placeholder="ירקות, בשר, ים..." value="${p.category || ''}">
       <label class="field-label">יחידת מידה</label>
-      <input class="input mb-16" id="ep-unit" type="text" value="${p.unit}">
+      <div class="mb-16">${unitSelect(p.unit, 'ep-unit')}</div>
       <button onclick="saveProduct('${id}')" class="btn-primary mb-8">שמור</button>
       <button onclick="this.closest('[data-ep-modal]').remove()" class="btn-ghost">ביטול</button>
     </div>`;
@@ -132,7 +166,7 @@ async function addProductManually() {
       <label class="field-label">שם מוצר *</label>
       <input class="input mb-12" id="np-name" type="text" placeholder="שמן זית">
       <label class="field-label">יחידת מידה</label>
-      <input class="input mb-12" id="np-unit" type="text" value='ק"ג'>
+      <div class="mb-12">${unitSelect('ק"ג', 'np-unit')}</div>
       <label class="field-label">מחיר ליחידה (₪) *</label>
       <input class="input mb-12" id="np-price" type="number" step="0.01" placeholder="0.00">
       <label class="field-label">אחוז פחת % (אופציונלי)</label>
@@ -168,12 +202,10 @@ function calcRecipe(recipe) {
   const cm = catalogMap();
   let totalCost = 0;
   const breakdown = (recipe.ingredients || []).map(ing => {
-    const p = cm[ing.product_name] || { price_per_unit: 0, waste_pct: 0 };
-    const wasteFactor = Math.max(0.01, 1 - (p.waste_pct || 0) / 100);
-    const effectivePrice = p.price_per_unit / wasteFactor;
-    const cost = effectivePrice * (ing.quantity || 0);
+    const p = cm[ing.product_name];
+    const cost = p ? calcIngCost(ing, p) : 0;
     totalCost += cost;
-    const priceChanged = p.previous_price && Math.abs((p.price_per_unit - p.previous_price) / p.previous_price * 100) >= 1;
+    const priceChanged = p?.previous_price && Math.abs((p.price_per_unit - p.previous_price) / p.previous_price * 100) >= 1;
     return { ...ing, cost, priceChanged };
   });
 
@@ -323,20 +355,36 @@ function rbRenderIngredients() {
   const cm = catalogMap();
   el.innerHTML = rbIngredients.map((ing, i) => {
     const p = cm[ing.product_name];
-    const costPreview = p ? ((p.price_per_unit / Math.max(0.01, 1 - p.waste_pct / 100)) * (ing.quantity || 0)).toFixed(2) : '—';
+    const ingUnit = ing.unit || (p?.unit || 'ק"ג');
+    const cost = p ? calcIngCost({ ...ing, unit: ingUnit }, p) : 0;
     return `
-      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;background:var(--surface-card);border-radius:var(--radius-md);padding:8px 10px;border:1px solid var(--border)">
-        <div style="flex:2">
-          <div style="font-size:12px;font-weight:700;color:var(--primary)">${ing.product_name}</div>
-          <div style="font-size:10px;color:var(--on-surface-3)">₪${costPreview}</div>
+      <div style="background:var(--surface-card);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:8px;border:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:700;color:var(--primary)">${ing.product_name}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:13px;font-weight:800;color:var(--on-surface)" id="rbi-cost-${i}">₪${cost.toFixed(2)}</div>
+            <button onclick="rbIngredients.splice(${i},1);rbRenderIngredients();rbRecalc()" style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;padding:0;line-height:1">×</button>
+          </div>
         </div>
-        <input style="flex:1;max-width:80px" class="input" type="number" step="0.001" placeholder="כמות"
-          value="${ing.quantity || ''}" id="rbq-${i}"
-          oninput="rbIngredients[${i}].quantity=parseFloat(this.value)||0;rbRecalc();document.getElementById('rbi-cost-${i}').textContent='₪'+((${p ? p.price_per_unit / Math.max(0.01, 1 - (p.waste_pct || 0) / 100) : 0}*(parseFloat(this.value)||0)).toFixed(2))">
-        <div style="font-size:11px;color:var(--on-surface-3);flex-shrink:0;min-width:20px">${ing.unit || p?.unit || ''}</div>
-        <button onclick="rbIngredients.splice(${i},1);rbRenderIngredients();rbRecalc()" style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;padding:0 2px;flex-shrink:0">×</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input style="flex:1" class="input" type="number" step="0.001" placeholder="כמות"
+            value="${ing.quantity || ''}" id="rbq-${i}"
+            oninput="rbIngredients[${i}].quantity=parseFloat(this.value)||0;rbUpdateIngCost(${i});rbRecalc()">
+          <div style="flex:1">${unitSelect(ingUnit, 'rbu-' + i, 'rbIngredients[' + i + '].unit=this.value;rbUpdateIngCost(' + i + ');rbRecalc()')}</div>
+          ${p ? `<div style="font-size:10px;color:var(--on-surface-3);white-space:nowrap">₪${p.price_per_unit.toFixed(2)}/${p.unit}</div>` : ''}
+        </div>
       </div>`;
   }).join('');
+}
+
+function rbUpdateIngCost(i) {
+  const cm = catalogMap();
+  const ing = rbIngredients[i];
+  if (!ing) return;
+  const p = cm[ing.product_name];
+  const cost = p ? calcIngCost(ing, p) : 0;
+  const el = document.getElementById('rbi-cost-' + i);
+  if (el) el.textContent = '₪' + cost.toFixed(2);
 }
 
 function rbAddIngredient() {
@@ -378,7 +426,8 @@ function rbSelectIngredient(productId) {
     document.querySelector('[data-ing-modal]')?.remove();
     return;
   }
-  rbIngredients.push({ product_name: p.name, unit: p.unit, quantity: 0, product_id: p.id });
+  // Default recipe unit = product base unit (user can change to compatible unit)
+  rbIngredients.push({ product_name: p.name, unit: p.unit || 'ק"ג', quantity: 0, product_id: p.id });
   document.querySelector('[data-ing-modal]')?.remove();
   rbRenderIngredients();
   rbRecalc();
@@ -393,9 +442,8 @@ function rbRecalc() {
   const cm = catalogMap();
   let totalCost = 0;
   rbIngredients.forEach(ing => {
-    const p = cm[ing.product_name] || { price_per_unit: 0, waste_pct: 0 };
-    const wf = Math.max(0.01, 1 - (p.waste_pct || 0) / 100);
-    totalCost += (p.price_per_unit / wf) * (ing.quantity || 0);
+    const p = cm[ing.product_name];
+    if (p) totalCost += calcIngCost(ing, p);
   });
   const fcPct = menuPrice > 0 ? (totalCost / menuPrice * 100) : 0;
   const recommendedPrice = totalCost > 0 ? Math.ceil(totalCost / (targetFc / 100)) : 0;
@@ -405,29 +453,30 @@ function rbRecalc() {
   const netProfitPct = menuPrice > 0 ? (netProfit / menuPrice * 100) : 0;
   const fcColor = fcPct === 0 ? 'var(--on-surface-3)' : fcPct <= 28 ? 'var(--success)' : fcPct <= 35 ? '#F59E0B' : 'var(--error)';
 
+  const rows = [
+    { label: 'עלות כוללת', value: `₪${totalCost.toFixed(2)}`, big: true, color: 'var(--on-surface)' },
+    { label: 'FC% בפועל', value: fcPct > 0 ? fcPct.toFixed(1) + '%' : '—', big: true, color: fcColor },
+    { label: 'רווח גולמי', value: menuPrice ? `₪${grossProfit.toFixed(2)} (${grossProfitPct.toFixed(0)}%)` : '—', color: grossProfit >= 0 ? 'var(--success)' : 'var(--error)' },
+    ...(oltPct > 0 && menuPrice ? [{ label: `רווח נטו אחרי ${oltPct}% OLT`, value: `₪${netProfit.toFixed(2)} (${netProfitPct.toFixed(0)}%)`, color: netProfit >= 0 ? 'var(--success)' : 'var(--error)' }] : [])
+  ];
+
   el.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <div>
-        <div style="font-size:11px;color:var(--on-surface-3)">עלות מנה</div>
-        <div style="font-size:20px;font-weight:800">₪${totalCost.toFixed(2)}</div>
-      </div>
-      <div>
-        <div style="font-size:11px;color:var(--on-surface-3)">FC% בפועל</div>
-        <div style="font-size:20px;font-weight:800;color:${fcColor}">${fcPct > 0 ? fcPct.toFixed(1) + '%' : '—'}</div>
-      </div>
-      <div>
-        <div style="font-size:11px;color:var(--on-surface-3)">רווח גולמי</div>
-        <div style="font-size:20px;font-weight:800;color:${grossProfit >= 0 ? 'var(--success)' : 'var(--error)'}">${menuPrice ? '₪' + grossProfit.toFixed(2) + ' (' + grossProfitPct.toFixed(0) + '%)' : '—'}</div>
-      </div>
-      <div>
-        <div style="font-size:11px;color:var(--on-surface-3)">רווח נטו${oltPct > 0 ? ' (אחרי ' + oltPct + '% OLT)' : ''}</div>
-        <div style="font-size:20px;font-weight:800;color:${netProfit >= 0 ? 'var(--success)' : 'var(--error)'}">${menuPrice && oltPct > 0 ? '₪' + netProfit.toFixed(2) + ' (' + netProfitPct.toFixed(0) + '%)' : '—'}</div>
+    <div style="border-bottom:2px solid var(--primary);padding-bottom:12px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--on-surface-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">סיכום מחירים</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${rows.map(r => `
+          <div style="background:white;border-radius:8px;padding:10px;border:1px solid var(--border)">
+            <div style="font-size:10px;color:var(--on-surface-3)">${r.label}</div>
+            <div style="font-size:${r.big ? '20px' : '15px'};font-weight:800;color:${r.color}">${r.value}</div>
+          </div>`).join('')}
       </div>
     </div>
     ${recommendedPrice > 0 ? `
-      <div style="border-top:1px solid var(--border);padding-top:10px;font-size:13px">
-        💡 <strong>מחיר מומלץ</strong> ל-${targetFc}% FC: <span style="color:var(--primary);font-weight:800;font-size:16px">₪${recommendedPrice}</span>
-        ${oltPct > 0 ? `<span style="font-size:11px;color:var(--on-surface-3)"> (₪${Math.ceil(recommendedPrice / (1 - oltPct / 100))} כולל OLT)</span>` : ''}
+      <div style="background:rgba(107,53,184,0.06);border-radius:8px;padding:12px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:13px;color:var(--on-surface-2)">💡 מחיר מומלץ ל-<strong>${targetFc}%</strong> FC</div>
+        <div style="font-size:20px;font-weight:800;color:var(--primary)">₪${recommendedPrice}
+          ${oltPct > 0 ? `<span style="font-size:12px;color:var(--on-surface-3)"> / ₪${Math.ceil(recommendedPrice/(1-oltPct/100))} +OLT</span>` : ''}
+        </div>
       </div>` : ''}`;
 }
 
