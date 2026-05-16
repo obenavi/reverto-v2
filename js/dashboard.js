@@ -63,7 +63,7 @@ function renderStats() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 
   const monthlyInvoices = dashData.invoices.filter(i => i.date >= monthStart);
-  const monthlyPurchases = monthlyInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
+  const monthlyPurchases = monthlyInvoices.reduce((s, i) => s + (parseFloat(i.total_amount || i.total) || 0), 0);
   const monthlyRevenue = dashData.revenues
     .filter(r => r.date >= monthStart)
     .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
@@ -403,8 +403,8 @@ function buildInsightData(topic) {
 
   const monthlyInvoices = dashData.invoices.filter(i => i.date >= monthStart);
   const lastMonthInvoices = dashData.invoices.filter(i => i.date >= lastMonthStart && i.date < monthStart);
-  const monthlyPurchases = monthlyInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
-  const lastMonthPurchases = lastMonthInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
+  const monthlyPurchases = monthlyInvoices.reduce((s, i) => s + (parseFloat(i.total_amount || i.total) || 0), 0);
+  const lastMonthPurchases = lastMonthInvoices.reduce((s, i) => s + (parseFloat(i.total_amount || i.total) || 0), 0);
   const monthlyRevenue = dashData.revenues.filter(r => r.date >= monthStart).reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
 
   const supplierTotals = {};
