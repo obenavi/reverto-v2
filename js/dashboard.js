@@ -444,10 +444,18 @@ function buildInsightData(topic) {
   if (topic === 'foodcost') return { ...base, monthly_revenue: Math.round(monthlyRevenue), food_cost_pct: monthlyRevenue > 0 ? (monthlyPurchases / monthlyRevenue * 100).toFixed(1) : null, target: 30 };
   if (topic === 'alerts') return { ...base, price_increases: alerts.slice(0, 5) };
   if (topic === 'savings') return { ...base, top_suppliers: Object.entries(supplierTotals).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, amount]) => ({ name, amount: Math.round(amount) })) };
+  if (topic === 'overview') return {
+    ...base,
+    top_supplier: topSupplier ? { name: topSupplier[0], amount: Math.round(topSupplier[1]) } : null,
+    monthly_revenue: Math.round(monthlyRevenue),
+    food_cost_pct: monthlyRevenue > 0 ? (monthlyPurchases / monthlyRevenue * 100).toFixed(1) : null,
+    alerts_count: alerts.length,
+    top_suppliers: Object.entries(supplierTotals).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, amount]) => ({ name, amount: Math.round(amount) }))
+  };
   return base;
 }
 
-const INSIGHT_LABELS = { spending: 'ניתוח רכש', foodcost: 'Food Cost', alerts: 'התייקרויות', savings: 'חיסכון פוטנציאלי' };
+const INSIGHT_LABELS = { spending: 'ניתוח רכש', foodcost: 'Food Cost', alerts: 'התייקרויות', savings: 'חיסכון פוטנציאלי', overview: 'ניתוח עסקי מקיף' };
 
 async function showAIInsights(topic) {
   const profile = Auth.profile;

@@ -43,42 +43,36 @@
         <div style="font-size:13px;color:var(--on-surface-3)" id="dash-date"></div>
       </div>
 
-      <!-- Stat Cards -->
-      <div class="stat-grid">
-        <div class="stat-card card-tap" onclick="showAIInsights('spending')">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <!-- Combined Business Overview Card -->
+      <div class="card card-pad mb-12">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:800">סיכום עסקי</div>
+          <button onclick="showAIInsights('overview')" style="background:linear-gradient(135deg,#6B35B8,#C084FC);border:none;border-radius:20px;padding:7px 14px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;font-size:12px;font-weight:700;color:white">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            ניתוח AI
+          </button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="card-tap" onclick="showAIInsights('spending')" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
             <div class="stat-label">רכש החודש</div>
-            <div style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#6B35B8,#C084FC);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
+            <div class="stat-value" id="dash-monthly" style="font-size:20px">₪0</div>
+            <div class="stat-sub" id="dash-monthly-sub">0 חשבוניות</div>
           </div>
-          <div class="stat-value" id="dash-monthly">₪0</div>
-          <div class="stat-sub" id="dash-monthly-sub">0 חשבוניות</div>
-        </div>
-        <div class="stat-card card-tap" onclick="showAIInsights('savings')">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div class="stat-label">חיסכון פוטנציאלי</div>
-            <div style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#6B35B8,#C084FC);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
-          </div>
-          <div class="stat-value text-success" id="dash-saving">₪0</div>
-          <div class="stat-sub">לעומת שוק</div>
-        </div>
-      </div>
-
-      <div class="stat-grid">
-        <div class="stat-card card-tap" onclick="openRevenueHistory()">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="card-tap" onclick="openRevenueHistory()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
             <div class="stat-label">מחזור</div>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            <div class="stat-value" id="dash-today-revenue" style="font-size:20px">—</div>
+            <div class="stat-sub" id="dash-today-revenue-sub">לחץ לפירוט</div>
           </div>
-          <div class="stat-value" id="dash-today-revenue">—</div>
-          <div class="stat-sub" id="dash-today-revenue-sub">לחץ לפירוט</div>
-        </div>
-        <div class="stat-card card-tap" onclick="showAIInsights('foodcost')">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="card-tap" onclick="showAIInsights('foodcost')" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
             <div class="stat-label">Food Cost</div>
-            <div style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#6B35B8,#C084FC);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
+            <div class="stat-value" id="dash-foodcost" style="font-size:20px">--%</div>
+            <div class="stat-sub" id="dash-foodcost-sub">הכנס מחזור</div>
           </div>
-          <div class="stat-value" id="dash-foodcost">--%</div>
-          <div class="stat-sub" id="dash-foodcost-sub">הכנס מחזור יומי</div>
+          <div class="card-tap" onclick="showAIInsights('savings')" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
+            <div class="stat-label">חיסכון פוטנציאלי</div>
+            <div class="stat-value text-success" id="dash-saving" style="font-size:20px">₪0</div>
+            <div class="stat-sub">לעומת שוק</div>
+          </div>
         </div>
       </div>
 

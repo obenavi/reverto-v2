@@ -51,7 +51,19 @@ ${data.top_suppliers?.map(s => `- ${s.name}: ₪${s.amount?.toLocaleString()}`).
 - עסק: ${data.category}${data.city ? ' ב' + data.city : ''}
 - רכש כולל: ₪${data.monthly_purchases?.toLocaleString()}
 
-נתח: האם הפיזור בין ספקים בריא, איפה יש פוטנציאל למשא ומתן, והמלצה ספציפית.`
+נתח: האם הפיזור בין ספקים בריא, איפה יש פוטנציאל למשא ומתן, והמלצה ספציפית.`,
+
+  overview: (data) => `אתה יועץ עסקי בכיר לעסקי מזון בישראל. דבר ישירות לבעל העסק בגוף שני, בעברית שוטפת, 5-6 משפטים.
+
+ניתוח עסקי כולל — ${data.category}${data.city ? ' ב' + data.city : ''}:
+- רכש החודש: ₪${data.monthly_purchases?.toLocaleString()} (${data.invoice_count} חשבוניות, ${data.change_vs_last_month} לעומת חודש קודם)
+- מחזור החודש: ${data.monthly_revenue > 0 ? '₪' + data.monthly_revenue?.toLocaleString() : 'לא הוזן'}
+- Food Cost: ${data.food_cost_pct ? data.food_cost_pct + '%' : 'לא ניתן לחשב'} (יעד ענפי: 28–32%)
+- ספק מוביל: ${data.top_supplier ? data.top_supplier.name + ' — ₪' + data.top_supplier.amount?.toLocaleString() : 'לא זוהה'}
+- מוצרים שהתייקרו: ${data.alerts_count}
+- שינוי לעומת חודש קודם: ${data.change_vs_last_month}
+
+ספק ניתוח אסטרטגי מקיף: (1) הערכת מצב בריאות עסקי כוללת, (2) הבעיה או ההזדמנות הגדולה ביותר שזיהית, (3) 2 המלצות אסטרטגיות ספציפיות עם מספרים בשקלים, (4) פוטנציאל חיסכון חודשי אם תבצע את ההמלצות. היה ספציפי וממוקד — לא כללי.`
 };
 
 exports.handler = async (event) => {
