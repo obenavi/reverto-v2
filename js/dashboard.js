@@ -538,26 +538,44 @@ function showProModal() {
 
 // ── Revenue History ───────────────────────────────────────────
 
+let _revView = 'list';
+
 function openRevenueHistory() {
+  _revView = 'list';
   const modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
   modal.setAttribute('data-rev-history', '');
   modal.innerHTML = `
-    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column">
-      <div style="padding:20px 20px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:90vh;display:flex;flex-direction:column">
+      <div style="padding:20px 20px 10px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
         <div style="font-size:18px;font-weight:800">מחזור יומי</div>
         <div style="display:flex;gap:8px;align-items:center">
           <button onclick="showAddRevenue()" style="background:var(--primary);color:white;border:none;border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ הוסף</button>
           <button onclick="this.closest('[data-rev-history]').remove()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--on-surface-3);padding:0;line-height:1">×</button>
         </div>
       </div>
-      <div style="display:flex;gap:4px;padding:0 20px 12px;flex-shrink:0">
+
+      <!-- Monthly hero total (always shown) -->
+      <div id="rev-monthly-hero" style="padding:4px 20px 12px;text-align:center;flex-shrink:0"></div>
+
+      <!-- Period tabs -->
+      <div style="display:flex;gap:4px;padding:0 20px 8px;flex-shrink:0">
         ${[['month','חודש'],['quarter','רבעון'],['half','חצי שנה'],['year','שנה']].map(([p,l]) =>
           `<button onclick="setRevPeriod('${p}')" id="revp-${p}" class="period-btn${p==='month'?' active':''}" style="flex:1">${l}</button>`
         ).join('')}
       </div>
-      <div id="rev-total-box" style="padding:0 20px 12px;text-align:center;flex-shrink:0"></div>
-      <div id="rev-list" style="overflow-y:auto;flex:1;padding:0 20px 20px"></div>
+
+      <!-- Period sub-total + list/chart toggle -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0 20px 8px;flex-shrink:0">
+        <div id="rev-period-total" style="font-size:13px;color:var(--on-surface-3)"></div>
+        <div style="display:flex;gap:4px">
+          <button onclick="setRevView('list')" id="revv-list" class="period-btn active">רשימה</button>
+          <button onclick="setRevView('chart')" id="revv-chart" class="period-btn">גרף</button>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div id="rev-content" style="overflow-y:auto;flex:1;padding:0 20px 20px"></div>
     </div>`;
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
@@ -570,8 +588,17 @@ function setRevPeriod(period) {
   renderRevHistory(period);
 }
 
+function setRevView(view) {
+  _revView = view;
+  document.querySelectorAll('[id^="revv-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('revv-' + view)?.classList.add('active');
+  const period = document.querySelector('[id^="revp-"].active')?.id.replace('revp-', '') || 'month';
+  renderRevHistory(period);
+}
+
 function renderRevHistory(period) {
   const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
   let startDate;
   if (period === 'month')   startDate = new Date(now.getFullYear(), now.getMonth(), 1);
   if (period === 'quarter') startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
@@ -579,23 +606,37 @@ function renderRevHistory(period) {
   if (period === 'year')    startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
   const startStr = startDate.toISOString().slice(0, 10);
 
-  const filtered = (dashData.revenues || [])
-    .filter(r => r.date >= startStr)
-    .sort((a, b) => b.date.localeCompare(a.date));
-  const total = filtered.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const all = dashData.revenues || [];
+  const filtered = all.filter(r => r.date >= startStr).sort((a, b) => b.date.localeCompare(a.date));
+  const periodTotal = filtered.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
 
-  const totalEl = document.getElementById('rev-total-box');
-  if (totalEl) totalEl.innerHTML = `
-    <div style="font-size:34px;font-weight:800;color:var(--primary)">₪${Math.round(total).toLocaleString('he-IL')}</div>
-    <div style="font-size:12px;color:var(--on-surface-3)">${filtered.length} ימים</div>`;
+  // Monthly hero — always show current month
+  const monthlyTotal = all.filter(r => r.date >= monthStart).reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const heroEl = document.getElementById('rev-monthly-hero');
+  if (heroEl) heroEl.innerHTML = `
+    <div style="font-size:38px;font-weight:800;color:var(--primary);line-height:1">₪${Math.round(monthlyTotal).toLocaleString('he-IL')}</div>
+    <div style="font-size:12px;color:var(--on-surface-3);margin-top:2px">סה"כ החודש</div>`;
 
-  const listEl = document.getElementById('rev-list');
-  if (!listEl) return;
-  if (!filtered.length) {
-    listEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--on-surface-3);font-size:13px">אין נתונים לתקופה זו</div>';
+  // Period sub-total
+  const periodEl = document.getElementById('rev-period-total');
+  if (periodEl) periodEl.innerHTML = period === 'month' ? '' :
+    `<span style="font-weight:700">₪${Math.round(periodTotal).toLocaleString('he-IL')}</span> · ${filtered.length} ימים`;
+
+  const contentEl = document.getElementById('rev-content');
+  if (!contentEl) return;
+
+  if (_revView === 'chart') {
+    contentEl.innerHTML = '<canvas id="rev-chart-canvas" style="width:100%;display:block"></canvas>';
+    setTimeout(() => renderRevChart(filtered), 50);
     return;
   }
-  listEl.innerHTML = filtered.map(r => {
+
+  // List view
+  if (!filtered.length) {
+    contentEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--on-surface-3);font-size:13px">אין נתונים לתקופה זו</div>';
+    return;
+  }
+  contentEl.innerHTML = filtered.map(r => {
     const d = new Date(r.date + 'T00:00:00');
     const dateStr = d.toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'short' });
     return `
@@ -605,6 +646,60 @@ function renderRevHistory(period) {
         <button onclick="editRevEntry('${r.date}',${r.amount})" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-2)">עריכה</button>
       </div>`;
   }).join('');
+}
+
+function renderRevChart(filtered) {
+  const canvas = document.getElementById('rev-chart-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 320;
+  canvas.width = W; canvas.height = 180;
+
+  if (!filtered.length) return;
+
+  const sorted = [...filtered].reverse(); // oldest first
+  const maxAmt = Math.max(...sorted.map(r => parseFloat(r.amount)));
+  const padL = 48, padR = 8, padT = 12, padB = 28;
+  const cW = W - padL - padR, cH = 180 - padT - padB;
+
+  ctx.clearRect(0, 0, W, 180);
+
+  // Grid
+  ctx.strokeStyle = '#E4DFF2'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 3; i++) {
+    const y = padT + cH * i / 3;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + cW, y); ctx.stroke();
+  }
+
+  // Bars
+  const barW = Math.max(3, cW / sorted.length * 0.6);
+  sorted.forEach((r, i) => {
+    const x = padL + (cW / sorted.length) * (i + 0.2);
+    const h = (parseFloat(r.amount) / maxAmt) * cH;
+    const y = padT + cH - h;
+    const grad = ctx.createLinearGradient(0, y, 0, y + h);
+    grad.addColorStop(0, '#10B981'); grad.addColorStop(1, '#34D399');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.roundRect(x, y, barW, Math.max(h, 1), 2); ctx.fill();
+  });
+
+  // X labels (every few days)
+  ctx.fillStyle = '#9889AE'; ctx.font = '500 9px Manrope,sans-serif'; ctx.textAlign = 'center';
+  const step = Math.ceil(sorted.length / 7);
+  sorted.forEach((r, i) => {
+    if (i % step === 0 || i === sorted.length - 1) {
+      const x = padL + (cW / sorted.length) * (i + 0.5);
+      const d = new Date(r.date + 'T00:00:00');
+      ctx.fillText(d.getDate() + '/' + (d.getMonth() + 1), x, 176);
+    }
+  });
+
+  // Y labels
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 3; i++) {
+    const v = maxAmt * (1 - i / 3);
+    ctx.fillText('₪' + (v >= 1000 ? Math.round(v/1000) + 'K' : Math.round(v)), padL - 3, padT + cH * i / 3 + 3);
+  }
 }
 
 function showAddRevenue() {
