@@ -353,16 +353,32 @@ async function saveRevenue() {
   const amount = parseFloat(document.getElementById('rev-amount')?.value);
   if (!date || !amount || amount <= 0) return;
 
-  const existing = await DB.get('daily_revenues', `?date=eq.${date}&select=id`);
-  if (existing?.length) {
-    await DB.update('daily_revenues', `?date=eq.${date}`, { amount });
-  } else {
-    await DB.insert('daily_revenues', { date, amount });
-  }
+  const btn = document.querySelector('[data-rev-modal] .btn-primary');
+  if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
 
-  document.querySelector('[data-rev-modal]')?.remove();
-  showToast('מחזור נשמר');
-  renderDashboard();
+  try {
+    const existing = await DB.get('daily_revenues', `?date=eq.${date}&select=id`);
+    let ok = false;
+    if (existing?.length) {
+      ok = await DB.update('daily_revenues', `?date=eq.${date}`, { amount });
+    } else {
+      const result = await DB.insert('daily_revenues', { date, amount });
+      ok = !!result;
+    }
+
+    if (!ok) {
+      showToast('שגיאה בשמירה — כנס מחדש עם PILOT-001');
+      if (btn) { btn.textContent = 'שמור'; btn.disabled = false; }
+      return;
+    }
+
+    document.querySelector('[data-rev-modal]')?.remove();
+    showToast('מחזור נשמר ✓');
+    renderDashboard();
+  } catch(e) {
+    showToast('שגיאה: ' + e.message);
+    if (btn) { btn.textContent = 'שמור'; btn.disabled = false; }
+  }
 }
 
 // ── AI Insights ───────────────────────────────────────────────
