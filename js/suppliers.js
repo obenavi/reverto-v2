@@ -234,6 +234,19 @@ async function removeArea(index) {
 
 // ── הזמנת סחורה ──────────────────────────────────────────────
 
+function unitKind(unit) {
+  const u = (unit || '').replace(/"/g, '').toLowerCase();
+  if (['קג','גרם','ג','kg','g'].some(w => u.includes(w))) return 'weight';
+  if (['ליטר','מל','מ"ל','ml','l','cc','סמ'].some(w => u.includes(w))) return 'volume';
+  return 'count';
+}
+
+function unitStep(unit) { return unitKind(unit) === 'count' ? 1 : 0.1; }
+function unitColor(unit) {
+  const k = unitKind(unit);
+  return k === 'weight' ? '#0891B2' : k === 'volume' ? '#059669' : '#7C3AED';
+}
+
 let _orderQty = {};
 
 function openOrderForm() {
@@ -282,18 +295,28 @@ function showOrderModal(products) {
       </div>
 
       <div style="overflow-y:auto;flex:1;padding:0 20px">
-        ${products.length ? products.map((p, i) => `
+        ${products.length ? products.map((p, i) => {
+          const kind = unitKind(p.unit);
+          const color = unitColor(p.unit);
+          const step = unitStep(p.unit);
+          const kindLabel = kind === 'weight' ? 'משקל' : kind === 'volume' ? 'נפח' : 'יחידות';
+          return `
           <div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px">
             <div style="flex:1">
-              <div style="font-size:13px;font-weight:700">${p.product_name}</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="font-size:13px;font-weight:700">${p.product_name}</div>
+                <span style="font-size:10px;font-weight:700;color:${color};background:${color}18;border-radius:10px;padding:2px 6px">${kindLabel}</span>
+              </div>
               <div style="font-size:11px;color:var(--on-surface-3)">₪${parseFloat(p.unit_price||0).toFixed(2)} / ${p.unit||'יח\''}</div>
             </div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <button onclick="orderAdj(${i},-1)" style="width:32px;height:32px;border-radius:50%;border:2px solid var(--border);background:none;font-size:18px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center">−</button>
-              <div id="oq-${i}" style="min-width:28px;text-align:center;font-size:15px;font-weight:800">0</div>
-              <button onclick="orderAdj(${i},1)" style="width:32px;height:32px;border-radius:50%;border:2px solid var(--primary);background:var(--primary);color:white;font-size:18px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center">+</button>
+            <div style="display:flex;align-items:center;gap:5px">
+              <button onclick="orderAdj(${i},-${step})" style="width:30px;height:30px;border-radius:50%;border:2px solid var(--border);background:none;font-size:16px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;flex-shrink:0">−</button>
+              <div id="oq-${i}" style="min-width:36px;text-align:center;font-size:14px;font-weight:800">0</div>
+              <div style="font-size:11px;color:${color};font-weight:700;flex-shrink:0">${p.unit||'יח\''}</div>
+              <button onclick="orderAdj(${i},${step})" style="width:30px;height:30px;border-radius:50%;border:2px solid ${color};background:${color};color:white;font-size:16px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
             </div>
-          </div>`).join('') : '<div style="padding:20px;text-align:center;color:var(--on-surface-3)">אין מוצרים — סרוק חשבונית ראשונה מספק זה</div>'}
+          </div>`;
+        }).join('') : '<div style="padding:20px;text-align:center;color:var(--on-surface-3)">אין מוצרים — סרוק חשבונית ראשונה מספק זה</div>'}
       </div>
 
       <div style="padding:14px 20px;border-top:1px solid var(--border);flex-shrink:0">
@@ -315,10 +338,12 @@ function showOrderModal(products) {
 }
 
 function orderAdj(i, delta) {
-  _orderQty[i] = Math.max(0, (_orderQty[i] || 0) + delta);
+  const step = delta < 0 ? -Math.abs(delta) : Math.abs(delta);
+  _orderQty[i] = Math.max(0, Math.round((_orderQty[i] || 0) * 10 + step * 10) / 10);
   const el = document.getElementById('oq-' + i);
-  if (el) el.textContent = _orderQty[i];
-  // Update total
+  const p = (window._orderProducts || [])[i];
+  const isCount = unitKind(p?.unit) === 'count';
+  if (el) el.textContent = isCount ? _orderQty[i] : _orderQty[i].toFixed(1);
   let total = 0;
   (window._orderProducts || []).forEach((p, idx) => {
     total += (parseFloat(p.unit_price) || 0) * (_orderQty[idx] || 0);
@@ -334,12 +359,14 @@ function buildOrderMessage() {
   const lines = prods.map((p, i) => {
     const q = _orderQty[i] || 0;
     if (!q) return null;
-    return `• ${p.product_name}: ${q} ${p.unit || 'יח\''}`;
+    const isCount = unitKind(p.unit) === 'count';
+    const qStr = isCount ? q : q.toFixed(1);
+    return `• ${p.product_name}: ${qStr} ${p.unit || 'יח\''}`;
   }).filter(Boolean);
   if (!lines.length && !notes) return null;
-  let msg = `שלום, הזמנה מ-${biz}:`;
-  if (lines.length) msg += `\n${lines.join('\n')}`;
-  if (notes) msg += `\n\n${notes}`;
+  let msg = `היי, זאת הזמנה מ-${biz} שנשלחת דרך מערכת REVERTO — המקום שבו כל הנתונים מתחברים 🔗\n\n`;
+  if (lines.length) msg += `${lines.join('\n')}\n`;
+  if (notes) msg += `\n📝 ${notes}\n`;
   msg += '\nתודה!';
   return msg;
 }
