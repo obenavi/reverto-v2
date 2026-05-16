@@ -73,19 +73,14 @@ function renderStats() {
 
   document.getElementById('dash-saving').textContent = '₪0';
 
-  // Today's revenue card
+  // Revenue card — monthly total + today indicator
   const today = new Date().toISOString().slice(0, 10);
   const todayRevenue = dashData.revenues.find(r => r.date === today);
-  const todayEl = document.getElementById('dash-today-revenue');
-  const todaySubEl = document.getElementById('dash-today-revenue-sub');
-  if (todayEl) {
-    if (todayRevenue) {
-      todayEl.textContent = '₪' + parseFloat(todayRevenue.amount).toLocaleString('he-IL', { maximumFractionDigits: 0 });
-      if (todaySubEl) todaySubEl.textContent = 'היום ✓';
-    } else {
-      todayEl.textContent = '—';
-      if (todaySubEl) todaySubEl.textContent = 'הקש להזנה';
-    }
+  const revEl = document.getElementById('dash-today-revenue');
+  const revSubEl = document.getElementById('dash-today-revenue-sub');
+  if (revEl) {
+    revEl.textContent = monthlyRevenue > 0 ? '₪' + Math.round(monthlyRevenue).toLocaleString('he-IL') : '—';
+    if (revSubEl) revSubEl.textContent = todayRevenue ? `היום: ₪${parseFloat(todayRevenue.amount).toLocaleString('he-IL', {maximumFractionDigits:0})} ✓` : 'היום: לא הוזן';
   }
 
   const fcEl = document.getElementById('dash-foodcost');
@@ -389,7 +384,9 @@ async function saveRevenue() {
 
     document.querySelector('[data-rev-modal]')?.remove();
     showToast('מחזור נשמר ✓');
-    renderDashboard();
+    await renderDashboard();
+    // Re-open history view so user sees updated list
+    openRevenueHistory();
   } catch(e) {
     showToast('שגיאה: ' + e.message);
     if (btn) { btn.textContent = 'שמור'; btn.disabled = false; }
@@ -536,6 +533,101 @@ function showProModal() {
   `;
   modal.classList.add('pro-modal-wrap');
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+// ── Revenue History ───────────────────────────────────────────
+
+function openRevenueHistory() {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.setAttribute('data-rev-history', '');
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column">
+      <div style="padding:20px 20px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div style="font-size:18px;font-weight:800">מחזור יומי</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button onclick="showAddRevenue()" style="background:var(--primary);color:white;border:none;border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ הוסף</button>
+          <button onclick="this.closest('[data-rev-history]').remove()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--on-surface-3);padding:0;line-height:1">×</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;padding:0 20px 12px;flex-shrink:0">
+        ${[['month','חודש'],['quarter','רבעון'],['half','חצי שנה'],['year','שנה']].map(([p,l]) =>
+          `<button onclick="setRevPeriod('${p}')" id="revp-${p}" class="period-btn${p==='month'?' active':''}" style="flex:1">${l}</button>`
+        ).join('')}
+      </div>
+      <div id="rev-total-box" style="padding:0 20px 12px;text-align:center;flex-shrink:0"></div>
+      <div id="rev-list" style="overflow-y:auto;flex:1;padding:0 20px 20px"></div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  renderRevHistory('month');
+}
+
+function setRevPeriod(period) {
+  document.querySelectorAll('[id^="revp-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('revp-' + period)?.classList.add('active');
+  renderRevHistory(period);
+}
+
+function renderRevHistory(period) {
+  const now = new Date();
+  let startDate;
+  if (period === 'month')   startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (period === 'quarter') startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  if (period === 'half')    startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  if (period === 'year')    startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+  const startStr = startDate.toISOString().slice(0, 10);
+
+  const filtered = (dashData.revenues || [])
+    .filter(r => r.date >= startStr)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const total = filtered.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+
+  const totalEl = document.getElementById('rev-total-box');
+  if (totalEl) totalEl.innerHTML = `
+    <div style="font-size:34px;font-weight:800;color:var(--primary)">₪${Math.round(total).toLocaleString('he-IL')}</div>
+    <div style="font-size:12px;color:var(--on-surface-3)">${filtered.length} ימים</div>`;
+
+  const listEl = document.getElementById('rev-list');
+  if (!listEl) return;
+  if (!filtered.length) {
+    listEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--on-surface-3);font-size:13px">אין נתונים לתקופה זו</div>';
+    return;
+  }
+  listEl.innerHTML = filtered.map(r => {
+    const d = new Date(r.date + 'T00:00:00');
+    const dateStr = d.toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'short' });
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1;font-size:13px;font-weight:600">${dateStr}</div>
+        <div style="font-size:15px;font-weight:800;color:var(--primary)">₪${Math.round(parseFloat(r.amount)).toLocaleString('he-IL')}</div>
+        <button onclick="editRevEntry('${r.date}',${r.amount})" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-2)">עריכה</button>
+      </div>`;
+  }).join('');
+}
+
+function showAddRevenue() {
+  document.querySelector('[data-rev-history]')?.remove();
+  openRevenueModal();
+}
+
+function editRevEntry(date, amount) {
+  document.querySelector('[data-rev-history]')?.remove();
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.setAttribute('data-rev-modal', '');
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;padding:28px 24px 48px;width:100%;max-width:480px">
+      <div style="font-size:18px;font-weight:800;margin-bottom:20px">עריכת מחזור</div>
+      <label class="field-label">תאריך</label>
+      <input class="input mb-12" id="rev-date" type="date" value="${date}">
+      <label class="field-label">סכום (₪)</label>
+      <input class="input mb-16" id="rev-amount" type="number" min="0" step="1" value="${Math.round(amount)}">
+      <button class="btn-primary mb-8" onclick="saveRevenue()">שמור</button>
+      <button class="btn-ghost" onclick="this.closest('[data-rev-modal]').remove();openRevenueHistory()">ביטול</button>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
 }
 
