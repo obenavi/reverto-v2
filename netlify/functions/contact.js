@@ -23,7 +23,7 @@ exports.handler = async (event) => {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + RESEND_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'Reverto Contact <noreply@reverto.cloud>',
+        from: 'Reverto Contact <noreply@mail.reverto.cloud>',
         to: ['revertoo.ino@gmail.com'],
         reply_to: email,
         subject: `פנייה חדשה: ${name} — ${restaurant || 'ללא שם מסעדה'}`,

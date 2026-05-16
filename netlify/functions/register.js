@@ -31,7 +31,7 @@ async function sendCodeEmail(toEmail, businessName, personalCode) {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'Reverto <noreply@reverto.cloud>',
+        from: 'Reverto <noreply@mail.reverto.cloud>',
         to: [toEmail],
         subject: 'הקוד האישי שלך ל-Reverto — ' + personalCode,
         html: codeEmailHtml(businessName, personalCode, siteUrl)

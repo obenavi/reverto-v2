@@ -54,7 +54,7 @@ exports.handler = async (event) => {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + RESEND_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: 'Reverto <noreply@reverto.cloud>',
+          from: 'Reverto <noreply@mail.reverto.cloud>',
           to: [email],
           subject: 'הקוד האישי שלך ל-Reverto',
           html: codeEmailHtml(user.business_name, user.personal_code, siteUrl)
