@@ -73,6 +73,21 @@ function renderStats() {
 
   document.getElementById('dash-saving').textContent = '₪0';
 
+  // Today's revenue card
+  const today = new Date().toISOString().slice(0, 10);
+  const todayRevenue = dashData.revenues.find(r => r.date === today);
+  const todayEl = document.getElementById('dash-today-revenue');
+  const todaySubEl = document.getElementById('dash-today-revenue-sub');
+  if (todayEl) {
+    if (todayRevenue) {
+      todayEl.textContent = '₪' + parseFloat(todayRevenue.amount).toLocaleString('he-IL', { maximumFractionDigits: 0 });
+      if (todaySubEl) todaySubEl.textContent = 'היום ✓';
+    } else {
+      todayEl.textContent = '—';
+      if (todaySubEl) todaySubEl.textContent = 'הקש להזנה';
+    }
+  }
+
   const fcEl = document.getElementById('dash-foodcost');
   const fcSubEl = document.getElementById('dash-foodcost-sub');
   if (monthlyRevenue > 0) {
