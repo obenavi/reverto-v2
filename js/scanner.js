@@ -52,11 +52,31 @@ async function scannerRun(file, attempt) {
   }
 
   const data = await res.json();
-  document.getElementById('scanner-loading-text').textContent = 'מעבד תוצאות...';
+  document.getElementById('scanner-loading-text').textContent = 'מנתח עם AI...';
 
   const fields = parseInvoiceFields(data);
-  const items = parseLineItems(data);
+  const azureItems = parseLineItems(data);
 
+  // Try Claude-enhanced parsing for Israeli invoice logic (קר'×יח', הנחה%, etc.)
+  let items = azureItems;
+  try {
+    const rawText = data?.analyzeResult?.content || '';
+    if (rawText.length > 100 && Auth.jwt) {
+      const claudeRes = await fetch('/.netlify/functions/parse-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt },
+        body: JSON.stringify({ text: rawText })
+      });
+      if (claudeRes.ok) {
+        const claudeData = await claudeRes.json();
+        if (claudeData.items?.length > 0) items = claudeData.items;
+      }
+    }
+  } catch(e) {
+    console.log('Claude parse fallback to Azure:', e.message);
+  }
+
+  document.getElementById('scanner-loading-text').textContent = 'מוכן לעריכה';
   scannerData = { fields, items, raw: data };
   scannerShowResults(fields, items);
 }
