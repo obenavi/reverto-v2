@@ -114,6 +114,18 @@ function parseInvoiceFields(data) {
     || docFields.SupplierPhone?.valueString
     || '';
 
+  // Extended vendor info
+  fields.vendorAddress = docFields.VendorAddress?.content
+    || docFields.VendorAddress?.valueAddress?.road || '';
+  fields.vendorEmail = docFields.VendorEmail?.content || '';
+  fields.vendorTaxId = docFields.VendorTaxId?.content
+    || docFields.VendorTaxId?.valueString || '';
+
+  // Customer (the restaurant) info — useful for cross-reference
+  fields.customerName = docFields.CustomerName?.content
+    || docFields.CustomerName?.valueString || '';
+  fields.customerAddress = docFields.CustomerAddress?.content || '';
+
   // Is credit note
   const content = data?.analyzeResult?.content || '';
   fields.isCreditNote = /זיכוי|credit.?note|CC/i.test(content);
@@ -287,6 +299,9 @@ async function handleSaveInvoice() {
   if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
 
   // Save invoice to Supabase
+  // Extract supplier contact info from invoice fields
+  const invFields = scannerData?.fields || {};
+
   const activeLocation = getActiveLocation();
   const invoice = await DB.insert('invoices', {
     user_id: userId,
@@ -322,7 +337,11 @@ async function handleSaveInvoice() {
   }
 
   // Update supplier in suppliers table
-  const supplierPhone = await upsertSupplier(userId, vendorName, total, date, scannerData.fields.vendorPhone || '');
+  const supplierPhone = await upsertSupplier(userId, vendorName, total, date, invFields.vendorPhone || '', {
+    address: invFields.vendorAddress,
+    email: invFields.vendorEmail,
+    tax_id: invFields.vendorTaxId
+  });
 
   showToast('החשבונית נשמרה בהצלחה');
   if (supplierPhone) {
@@ -332,21 +351,30 @@ async function handleSaveInvoice() {
   }
 }
 
-async function upsertSupplier(userId, supplierName, amount, date, phone) {
+async function upsertSupplier(userId, supplierName, amount, date, phone, extraInfo = {}) {
   const existing = await DB.get('suppliers', `?user_id=eq.${encodeURIComponent(userId)}&name=eq.${encodeURIComponent(supplierName)}&select=id,total_amount,invoice_count,phone`);
   if (existing && existing[0]) {
     const sup = existing[0];
-    await DB.update('suppliers', `?id=eq.${sup.id}`, {
+    const update = {
       total_amount: (parseFloat(sup.total_amount) || 0) + amount,
       invoice_count: (parseInt(sup.invoice_count) || 0) + 1,
       last_invoice_date: date
-    });
+    };
+    // Fill in contact info if we found it and it's not set yet
+    if (phone && !sup.phone) update.phone = phone;
+    if (extraInfo.address) update.address = extraInfo.address;
+    if (extraInfo.email) update.email = extraInfo.email;
+    if (extraInfo.tax_id) update.tax_id = extraInfo.tax_id;
+    await DB.update('suppliers', `?id=eq.${sup.id}`, update);
     return sup.phone || phone || '';
   } else {
     await DB.insert('suppliers', {
       user_id: userId,
       name: supplierName,
       phone: phone || null,
+      address: extraInfo.address || null,
+      email: extraInfo.email || null,
+      tax_id: extraInfo.tax_id || null,
       total_amount: amount,
       invoice_count: 1,
       last_invoice_date: date,
