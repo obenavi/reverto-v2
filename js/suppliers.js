@@ -95,7 +95,7 @@ async function viewSupplier(id) {
       <!-- Product Price History -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="section-title">מחירי מוצרים</div>
-        <div style="font-size:10px;color:var(--on-surface-3);background:var(--surface-low);padding:3px 8px;border-radius:12px">לפני מע"מ 17%</div>
+        <div style="font-size:10px;color:var(--on-surface-3);background:var(--surface-low);padding:3px 8px;border-radius:12px">לפני מע"מ 18%</div>
       </div>
       <div class="card mb-12">
         ${Object.entries(productHistory).slice(0,15).map(([name, history]) => {
