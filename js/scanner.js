@@ -188,7 +188,10 @@ function scannerShowResults(fields, items) {
       <label class="field-label">שם ספק</label>
       <input class="input mb-12" id="res-vendor" value="${escHtml(fields.vendorName)}">
       <label class="field-label">תאריך</label>
-      <input class="input mb-12" id="res-date" type="date" value="${fields.date}">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input class="input" id="res-date" type="date" value="${fields.date}" style="flex:1">
+        <button onclick="document.getElementById('res-date').value=new Date().toISOString().slice(0,10)" style="background:none;border:1px solid var(--primary);color:var(--primary);border-radius:var(--radius-sm);padding:0 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">היום</button>
+      </div>
       <label class="field-label">מספר חשבונית</label>
       <input class="input mb-12" id="res-invnum" value="${escHtml(fields.invoiceNumber)}">
       <label class="field-label">סה"כ (₪)</label>
