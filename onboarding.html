@@ -263,9 +263,10 @@
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || 'שגיאה');
-          sessionStorage.setItem('rv_jwt', data.jwt);
-          sessionStorage.setItem('rv_token', data.personal_code);
-          sessionStorage.setItem('rv_user', JSON.stringify(data.user));
+          const _s = (k,v) => { sessionStorage.setItem(k,v); localStorage.setItem(k,v); };
+          _s('rv_jwt', data.jwt);
+          _s('rv_token', data.personal_code);
+          _s('rv_user', JSON.stringify(data.user));
           sessionStorage.removeItem('rv_signup');
           document.getElementById('ob-personal-code').textContent = data.personal_code;
           document.getElementById('ob-personal-code-box').style.display = 'block';

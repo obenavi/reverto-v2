@@ -57,25 +57,35 @@ const DB = {
 };
 
 // ── Auth State ────────────────────────────────────────────────
+const _store = {
+  get: (k) => sessionStorage.getItem(k) || localStorage.getItem(k),
+  set: (k, v) => { sessionStorage.setItem(k, v); localStorage.setItem(k, v); },
+  clear: () => {
+    ['rv_token','rv_jwt','rv_user','rv_profile'].forEach(k => {
+      sessionStorage.removeItem(k); localStorage.removeItem(k);
+    });
+  }
+};
+
 const Auth = {
-  get token() { return sessionStorage.getItem('rv_token'); },
-  get jwt() { return sessionStorage.getItem('rv_jwt'); },
-  get user() { return JSON.parse(sessionStorage.getItem('rv_user') || '{}'); },
-  get profile() { return JSON.parse(sessionStorage.getItem('rv_profile') || '{}'); },
+  get token() { return _store.get('rv_token'); },
+  get jwt() { return _store.get('rv_jwt'); },
+  get user() { return JSON.parse(_store.get('rv_user') || '{}'); },
+  get profile() { return JSON.parse(_store.get('rv_profile') || '{}'); },
   get userId() { return this.user.id || this.token; },
 
   async loadProfile() {
     if (!this.jwt) return null;
     const rows = await DB.get('users', '?select=*');
     if (rows && rows[0]) {
-      sessionStorage.setItem('rv_profile', JSON.stringify(rows[0]));
+      _store.set('rv_profile', JSON.stringify(rows[0]));
       return rows[0];
     }
     return null;
   },
 
   logout() {
-    sessionStorage.clear();
+    _store.clear();
     window.location.href = '/';
   }
 };

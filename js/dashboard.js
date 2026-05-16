@@ -544,6 +544,65 @@ function showProModal() {
   document.body.appendChild(modal);
 }
 
+// ── Invoice List Modal ────────────────────────────────────────
+
+function openInvoiceList() {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.setAttribute('data-inv-list', '');
+  const all = dashData.invoices || [];
+  const total = all.reduce((s, i) => s + (parseFloat(i.total_amount || i.total) || 0), 0);
+
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:88vh;display:flex;flex-direction:column">
+      <div style="padding:20px 20px 10px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div>
+          <div style="font-size:18px;font-weight:800">רכש</div>
+          <div style="font-size:13px;color:var(--on-surface-3)">${all.length} חשבוניות · ₪${Math.round(total).toLocaleString('he-IL')} סה"כ</div>
+        </div>
+        <button onclick="this.closest('[data-inv-list]').remove()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--on-surface-3);padding:0;line-height:1">×</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;padding:0 20px 20px">
+        ${all.length ? all.map((inv, i) => {
+          const invItems = inv.items ? (typeof inv.items === 'string' ? (() => { try { return JSON.parse(inv.items); } catch { return []; } })() : inv.items) : [];
+          const invTotal = parseFloat(inv.total_amount || inv.total || 0);
+          return `
+            <div style="border-bottom:1px solid var(--border)">
+              <div style="display:flex;align-items:center;gap:10px;padding:12px 0;cursor:pointer" onclick="toggleDashInv(${i})">
+                <div style="width:36px;height:36px;background:var(--surface-low);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0">${(inv.supplier_name||'?')[0]}</div>
+                <div style="flex:1">
+                  <div style="font-size:13px;font-weight:700">${inv.supplier_name||'—'}</div>
+                  <div style="font-size:11px;color:var(--on-surface-3)">${inv.date ? new Date(inv.date+'T00:00:00').toLocaleDateString('he-IL',{day:'numeric',month:'short',year:'numeric'}) : '—'}${inv.invoice_number ? ' · ' + inv.invoice_number : ''}</div>
+                </div>
+                <div style="text-align:left">
+                  <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${Math.round(invTotal).toLocaleString('he-IL')}</div>
+                </div>
+                <svg id="darr-${i}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-surface-3)" stroke-width="2" stroke-linecap="round" style="transition:transform 0.2s;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+              <div id="dinv-${i}" style="display:none;padding:0 0 10px 46px">
+                ${invItems.length ? invItems.map(it => `
+                  <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px">
+                    <span style="color:var(--on-surface-2)">${it.product_name||'—'}</span>
+                    <span style="color:var(--on-surface-3)">${it.quantity||''} × ₪${parseFloat(it.unit_price||0).toFixed(2)}</span>
+                  </div>`).join('') : '<div style="font-size:11px;color:var(--on-surface-3)">אין פרטי פריטים</div>'}
+              </div>
+            </div>`;
+        }).join('') : '<div style="padding:24px;text-align:center;color:var(--on-surface-3)">אין חשבוניות</div>'}
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+function toggleDashInv(i) {
+  const el = document.getElementById('dinv-' + i);
+  const arr = document.getElementById('darr-' + i);
+  if (!el) return;
+  const open = el.style.display === 'none';
+  el.style.display = open ? 'block' : 'none';
+  if (arr) arr.style.transform = open ? 'rotate(180deg)' : '';
+}
+
 // ── Revenue History ───────────────────────────────────────────
 
 let _revView = 'list';

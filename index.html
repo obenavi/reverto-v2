@@ -180,9 +180,11 @@
             }));
             window.location.href = '/onboarding.html';
           } else {
-            sessionStorage.setItem('rv_token', data.user.personal_code || code);
-            sessionStorage.setItem('rv_jwt', data.jwt);
-            sessionStorage.setItem('rv_user', JSON.stringify(data.user));
+            ['rv_token','rv_jwt','rv_user'].forEach(k => localStorage.removeItem(k));
+            const _s = (k,v) => { sessionStorage.setItem(k,v); localStorage.setItem(k,v); };
+            _s('rv_token', data.user.personal_code || code);
+            _s('rv_jwt', data.jwt);
+            _s('rv_user', JSON.stringify(data.user));
             window.location.href = '/app.html';
           }
         } else {
@@ -237,8 +239,8 @@
       alert('תודה! נחזור אליך בקרוב.');
     }
 
-    // Auto-redirect if already logged in
-    if (sessionStorage.getItem('rv_jwt')) {
+    // Auto-redirect if already logged in (check both storages)
+    if (sessionStorage.getItem('rv_jwt') || localStorage.getItem('rv_jwt')) {
       window.location.href = '/app.html';
     }
   </script>
