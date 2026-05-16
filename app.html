@@ -293,10 +293,11 @@
 
       <!-- Products -->
       <div id="pt-products">
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button id="build-catalog-btn" onclick="buildCatalog()" class="btn-primary" style="flex:1;font-size:13px">🔄 רענן מחירים מחשבוניות</button>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button id="build-catalog-btn" onclick="buildCatalog()" class="btn-primary" style="flex:1;font-size:13px">🔄 רענן מחירים</button>
           <button onclick="addProductManually()" class="btn-ghost" style="font-size:13px">+ ידני</button>
         </div>
+        <button id="detect-dupes-btn" onclick="detectDuplicates()" class="btn-ghost mb-12" style="width:100%;font-size:13px;border-color:var(--primary);color:var(--primary)">🔍 זיהוי כפילויות</button>
         <div id="catalog-list"></div>
       </div>
 

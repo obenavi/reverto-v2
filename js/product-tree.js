@@ -105,6 +105,101 @@ function renderCatalog() {
   }).join('')}</div>`;
 }
 
+async function detectDuplicates() {
+  const btn = document.getElementById('detect-dupes-btn');
+  if (btn) { btn.textContent = 'מנתח...'; btn.disabled = true; }
+
+  try {
+    const res = await fetch('/.netlify/functions/normalize-products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt }
+    });
+    const data = await res.json();
+    if (btn) { btn.textContent = '🔍 זיהוי כפילויות'; btn.disabled = false; }
+
+    if (!data.groups?.length) {
+      showToast('לא נמצאו כפילויות ב-' + data.total_names + ' מוצרים');
+      return;
+    }
+
+    showNormalizeModal(data.groups);
+  } catch {
+    if (btn) { btn.textContent = '🔍 זיהוי כפילויות'; btn.disabled = false; }
+    showToast('שגיאה בניתוח');
+  }
+}
+
+let _normGroups = [];
+let _normIdx = 0;
+
+function showNormalizeModal(groups) {
+  _normGroups = groups;
+  _normIdx = 0;
+  renderNormGroup();
+}
+
+function renderNormGroup() {
+  document.querySelector('[data-norm-modal]')?.remove();
+  if (_normIdx >= _normGroups.length) {
+    showToast('כל הקבוצות טופלו ✓');
+    loadCatalog();
+    return;
+  }
+
+  const group = _normGroups[_normIdx];
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.setAttribute('data-norm-modal', '');
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px;max-width:420px;width:100%;padding:28px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:16px;font-weight:800">כפילות מוצר</div>
+        <div style="font-size:12px;color:var(--on-surface-3)">${_normIdx + 1} / ${_normGroups.length}</div>
+      </div>
+      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:20px">Claude זיהה שמות דומים — בחר שם קנוני</div>
+
+      <label class="field-label">שם קנוני (ישמר)</label>
+      <input class="input mb-16" id="norm-canonical" value="${group.canonical}">
+
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px">שמות שימוזגו לתוכו:</div>
+      <div style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;margin-bottom:20px">
+        ${group.alternatives.map(a => `<div style="font-size:13px;padding:4px 0;color:var(--error)">✕ ${a}</div>`).join('')}
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <button onclick="applyMerge()" class="btn-primary" style="flex:1">מזג</button>
+        <button onclick="_normIdx++;renderNormGroup()" class="btn-ghost" style="flex:1">דלג</button>
+      </div>
+      <button onclick="_normIdx=_normGroups.length;renderNormGroup()" class="btn-ghost mt-8" style="width:100%;font-size:12px;color:var(--on-surface-3)">סיים</button>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function applyMerge() {
+  const canonical = document.getElementById('norm-canonical')?.value.trim();
+  if (!canonical) return;
+
+  const group = _normGroups[_normIdx];
+  const btn = document.querySelector('[data-norm-modal] .btn-primary');
+  if (btn) { btn.textContent = 'ממזג...'; btn.disabled = true; }
+
+  // Rename all alternative names in invoice_items and product_catalog
+  for (const alt of group.alternatives) {
+    await DB.update('invoice_items', `?product_name=eq.${encodeURIComponent(alt)}`, { product_name: canonical });
+    await DB.update('product_catalog', `?name=eq.${encodeURIComponent(alt)}`, { name: canonical });
+  }
+
+  // Also rename canonical if user changed it
+  if (canonical !== group.canonical) {
+    await DB.update('invoice_items', `?product_name=eq.${encodeURIComponent(group.canonical)}`, { product_name: canonical });
+    await DB.update('product_catalog', `?name=eq.${encodeURIComponent(group.canonical)}`, { name: canonical });
+  }
+
+  showToast(`"${canonical}" עודכן`);
+  _normIdx++;
+  renderNormGroup();
+}
+
 async function buildCatalog() {
   const btn = document.getElementById('build-catalog-btn');
   if (btn) { btn.textContent = 'מעדכן...'; btn.disabled = true; }
