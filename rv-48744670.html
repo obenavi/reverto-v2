@@ -174,24 +174,61 @@ tr:hover td{background:rgba(139,92,246,.04)}
 <!-- MARKET -->
 <div class="page" id="pg-market">
 
-  <!-- Upload market prices -->
+  <!-- Scan / Upload price list -->
   <div class="card" style="margin-bottom:14px">
-    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div>
-        <div style="font-size:15px;font-weight:800;color:var(--text)">העלאת מחירון תקליט</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:3px">CSV: שם מוצר, מחיר, יחידה — שורה לכל מוצר</div>
-      </div>
-      <input type="file" id="mkt-csv-file" accept=".csv,.txt" style="display:none" onchange="handleMktCSV(this)">
-      <button class="btn" onclick="document.getElementById('mkt-csv-file').click()">📂 בחר קובץ</button>
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border)">
+      <div style="font-size:15px;font-weight:800;color:var(--text)">📋 סריקת מחירון תקליט</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">העלה PDF / תמונה / צלם — AI מחלץ מחירים, עורך לפני שמירה</div>
     </div>
-    <div id="mkt-preview" style="display:none;padding:14px 18px">
+    <div style="padding:14px 18px;display:flex;gap:8px;flex-wrap:wrap">
+      <input type="file" id="mkt-ocr-file" accept="image/*,application/pdf" style="display:none" onchange="scanPriceList(this)">
+      <button class="btn" onclick="document.getElementById('mkt-ocr-file').click()">📷 סרוק / העלה קובץ</button>
+      <span style="font-size:12px;color:var(--muted);align-self:center">— או —</span>
+      <input type="file" id="mkt-csv-file" accept=".csv,.txt" style="display:none" onchange="handleMktCSV(this)">
+      <button class="btn-o" onclick="document.getElementById('mkt-csv-file').click()">📂 CSV ידני</button>
+    </div>
+    <div id="mkt-scan-loading" style="display:none;padding:14px 18px;text-align:center">
+      <div style="font-size:13px;color:var(--muted)">🔍 מנתח מסמך עם AI... (עד 30 שניות)</div>
+    </div>
+  </div>
+
+  <!-- Editable extracted prices table -->
+  <div id="mkt-edit-section" style="display:none;margin-bottom:14px">
+    <div class="card">
+      <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:var(--text)">עריכת מחירים לפני שמירה</div>
+          <div style="font-size:12px;color:var(--muted)" id="mkt-edit-count"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-o" onclick="addMktRow()">+ הוסף שורה</button>
+          <button class="btn" onclick="saveMktPrices()" id="mkt-save-btn">💾 שמור לכל המשתמשים</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px" id="mkt-edit-table">
+          <thead><tr>
+            <th style="background:rgba(139,92,246,.08);color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">שם מוצר</th>
+            <th style="background:rgba(139,92,246,.08);color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">מחיר ₪</th>
+            <th style="background:rgba(139,92,246,.08);color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">יחידה</th>
+            <th style="background:rgba(139,92,246,.08);padding:10px 12px;border-bottom:1px solid var(--border)"></th>
+          </tr></thead>
+          <tbody id="mkt-edit-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="mkt-save-result" style="display:none;margin-top:10px;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:700"></div>
+  </div>
+
+  <!-- CSV preview (for manual CSV upload) -->
+  <div id="mkt-preview" style="display:none;margin-bottom:14px">
+    <div class="card" style="padding:14px 18px">
       <div id="mkt-preview-text" style="font-size:13px;color:var(--muted);margin-bottom:10px"></div>
       <div style="display:flex;gap:8px">
-        <button class="btn" onclick="uploadMktPrices()" id="mkt-upload-btn">⬆ העלה לכל המשתמשים</button>
+        <button class="btn" onclick="loadCsvToEditor()" id="mkt-upload-btn">עבור לעריכה</button>
         <button class="btn-o" onclick="document.getElementById('mkt-preview').style.display='none'">ביטול</button>
       </div>
     </div>
-    <div id="mkt-upload-result" style="display:none;padding:10px 18px;font-size:13px;font-weight:700"></div>
   </div>
 
   <!-- Market prices table -->
@@ -583,8 +620,158 @@ function exportProducts(){
   if(!rows.length) return;
   download(toCSV(rows,Object.keys(rows[0])),'reverto-products.csv');
 }
-// ── Market price upload ───────────────────────────────────────
+// ── Market price scan + edit ──────────────────────────────────
 let _mktRows = [];
+let _mktEditRows = []; // rows in the editor
+
+// ── OCR scan ─────────────────────────────────────────────────
+async function scanPriceList(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('mkt-scan-loading').style.display = 'block';
+  document.getElementById('mkt-edit-section').style.display = 'none';
+
+  try {
+    const base64 = await fileToBase64(file);
+    const res = await fetch('/.netlify/functions/parse-market-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + JWT },
+      body: JSON.stringify({ base64, mimeType: file.type })
+    });
+    const data = await res.json();
+    if (!res.ok) { alert('שגיאה: ' + (data.error || 'לא ידוע')); return; }
+    loadToEditor(data.products || []);
+  } catch(e) {
+    alert('שגיאה: ' + e.message);
+  } finally {
+    document.getElementById('mkt-scan-loading').style.display = 'none';
+    input.value = '';
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('שגיאת קריאת קובץ'));
+    r.readAsDataURL(file);
+  });
+}
+
+// ── Editor ────────────────────────────────────────────────────
+const MKT_UNITS = ['ק"ג','גרם','ליטר','מ"ל','יחידה','צרור','קרטון'];
+
+function loadToEditor(products) {
+  _mktEditRows = products.map(p => ({ name: p.name, price: p.price, unit: p.unit || 'ק"ג' }));
+  renderMktEditor();
+  document.getElementById('mkt-edit-section').style.display = 'block';
+}
+
+function renderMktEditor() {
+  const tbody = document.getElementById('mkt-edit-tbody');
+  const countEl = document.getElementById('mkt-edit-count');
+  if (countEl) countEl.textContent = `${_mktEditRows.length} מוצרים — ערוך לפני שמירה`;
+
+  tbody.innerHTML = _mktEditRows.map((row, i) => `
+    <tr id="mkt-row-${i}" style="border-bottom:1px solid rgba(255,255,255,.04)">
+      <td style="padding:8px 12px">
+        <input value="${row.name}" onchange="_mktEditRows[${i}].name=this.value"
+          style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;width:200px;outline:none">
+      </td>
+      <td style="padding:8px 12px">
+        <input type="number" step="0.01" value="${row.price}" onchange="_mktEditRows[${i}].price=parseFloat(this.value)||0"
+          style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;width:90px;outline:none">
+      </td>
+      <td style="padding:8px 12px">
+        <select onchange="_mktEditRows[${i}].unit=this.value"
+          style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
+          ${MKT_UNITS.map(u => `<option value="${u}"${u===row.unit?' selected':''}>${u}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:8px 12px">
+        <button onclick="deleteMktRow(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:18px;padding:0 4px">×</button>
+      </td>
+    </tr>`).join('');
+}
+
+function addMktRow() {
+  _mktEditRows.push({ name: '', price: 0, unit: 'ק"ג' });
+  renderMktEditor();
+  // Focus the new row's name input
+  const inputs = document.querySelectorAll('#mkt-edit-tbody input');
+  if (inputs.length) inputs[inputs.length - 3]?.focus();
+}
+
+function deleteMktRow(i) {
+  _mktEditRows.splice(i, 1);
+  renderMktEditor();
+}
+
+async function saveMktPrices() {
+  const valid = _mktEditRows.filter(r => r.name && r.price > 0);
+  if (!valid.length) { alert('אין מחירים תקינים לשמירה'); return; }
+
+  const btn = document.getElementById('mkt-save-btn');
+  btn.textContent = 'שומר...'; btn.disabled = true;
+
+  const res = await fetch('/.netlify/functions/upload-market-prices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + JWT },
+    body: JSON.stringify({ prices: valid })
+  });
+  const data = await res.json();
+
+  const result = document.getElementById('mkt-save-result');
+  result.style.display = 'block';
+  result.style.background = res.ok ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)';
+  result.style.color = res.ok ? '#4ade80' : '#f87171';
+  result.textContent = res.ok
+    ? `✓ ${data.uploaded} מחירים נשמרו — כל המשתמשים רואים את המחירון המעודכן`
+    : `שגיאה: ${data.error}`;
+
+  btn.textContent = '💾 שמור לכל המשתמשים'; btn.disabled = false;
+
+  if (res.ok) {
+    const d = await adminCall('full_data');
+    MARKET = d.market || [];
+    renderMarket();
+  }
+}
+
+// ── CSV manual upload ─────────────────────────────────────────
+function loadCsvToEditor() {
+  loadToEditor(_mktRows);
+  document.getElementById('mkt-preview').style.display = 'none';
+}
+
+function handleMktCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split('\n').map(l => l.trim()).filter(l => l);
+    _mktRows = [];
+    let skipped = 0;
+    lines.forEach(line => {
+      const parts = line.split(',').map(p => p.trim().replace(/^"|"$/g,''));
+      if (parts.length < 2) { skipped++; return; }
+      const name = parts[0], price = parseFloat(parts[1]), unit = parts[2] || 'ק"ג';
+      if (!name || isNaN(price) || price <= 0) { skipped++; return; }
+      _mktRows.push({ name, price, unit });
+    });
+    document.getElementById('mkt-preview-text').textContent =
+      `נמצאו ${_mktRows.length} מוצרים${skipped ? ` · ${skipped} דולגו` : ''}`;
+    document.getElementById('mkt-preview').style.display = _mktRows.length ? 'block' : 'none';
+  };
+  reader.readAsText(file, 'UTF-8');
+  input.value = '';
+}
+
+// Legacy direct upload (kept for compatibility)
+async function uploadMktPrices() {}
+
+// ── Market price upload ───────────────────────────────────────
+let _mktRows_unused = [];
 
 function handleMktCSV(input) {
   const file = input.files[0];
