@@ -252,6 +252,20 @@
         <div id="partner-codes-list" style="margin-bottom:10px"></div>
         <button onclick="generatePartnerCode()" class="btn-ghost" style="width:100%;font-size:13px">+ צור קוד שותף חדש</button>
       </div>
+      <div class="card card-pad mb-12">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">ייצוא נתונים</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <button onclick="exportData('invoices',this)" class="btn-ghost" style="font-size:12px">📄 חשבוניות</button>
+          <button onclick="exportData('items',this)" class="btn-ghost" style="font-size:12px">📦 פריטי חשבוניות</button>
+          <button onclick="exportData('suppliers',this)" class="btn-ghost" style="font-size:12px">🏢 ספקים</button>
+          <button onclick="exportData('revenues',this)" class="btn-ghost" style="font-size:12px">💰 מחזורים</button>
+          <button onclick="exportData('products',this)" class="btn-ghost" style="font-size:12px">🗂️ קטלוג מוצרים</button>
+          <button onclick="exportData('recipes',this)" class="btn-ghost" style="font-size:12px">🍽️ מתכונים</button>
+        </div>
+        <button onclick="exportData('all',this)" class="btn-primary" style="width:100%;font-size:13px">⬇ ייצא הכל</button>
+        <div style="font-size:10px;color:var(--on-surface-3);margin-top:8px;text-align:center">CSV · פתח ב-Excel · גרור ל-Google Drive → פתח עם Google Sheets</div>
+      </div>
+
       <div class="card card-pad mb-12" id="admin-link-wrap" style="display:none">
         <button class="btn-ghost" onclick="location.href='/rv-48744670.html'" style="color:var(--primary);border-color:var(--primary)">
           ⚙️ פאנל ניהול

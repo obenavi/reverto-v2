@@ -301,6 +301,78 @@ async function deleteLocation(id) {
 
 function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// ── Data Export ───────────────────────────────────────────────
+
+function csvEscape(v) {
+  const s = (v === null || v === undefined) ? '' : String(v);
+  return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;
+}
+
+function downloadCSV(headers, rows, filename) {
+  const csv = '﻿' + [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function exportData(type, btn) {
+  const orig = btn?.textContent;
+  if (btn) { btn.textContent = 'מייצא...'; btn.disabled = true; }
+  try {
+    if (type === 'all') {
+      await exportData('invoices'); await exportData('items');
+      await exportData('suppliers'); await exportData('revenues');
+      await exportData('products'); await exportData('recipes');
+      return;
+    }
+    if (type === 'invoices') {
+      const d = await DB.get('invoices', '?select=*&order=date.desc') || [];
+      downloadCSV(['תאריך','ספק','מספר חשבונית','סה"כ (₪)','זיכוי'],
+        d.map(r => [r.date, r.supplier_name, r.invoice_number, r.total_amount||r.total, r.is_credit_note?'כן':'לא']),
+        'reverto-invoices.csv');
+    }
+    if (type === 'items') {
+      const d = await DB.get('invoice_items', '?select=*&order=date.desc') || [];
+      downloadCSV(['תאריך','ספק','מוצר','כמות','יחידה','מחיר יחידה','סה"כ'],
+        d.map(r => [r.date, r.supplier_name, r.product_name, r.quantity, r.unit, r.unit_price, r.total_price]),
+        'reverto-invoice-items.csv');
+    }
+    if (type === 'suppliers') {
+      const d = await DB.get('suppliers', '?select=*&order=name.asc') || [];
+      downloadCSV(['שם ספק','טלפון','מייל','כתובת','עוסק מורשה','סה"כ רכש','חשבוניות','ספקה אחרונה'],
+        d.map(r => [r.name, r.phone, r.email, r.address, r.tax_id, r.total_amount, r.invoice_count, r.last_invoice_date]),
+        'reverto-suppliers.csv');
+    }
+    if (type === 'revenues') {
+      const d = await DB.get('daily_revenues', '?select=*&order=date.desc') || [];
+      downloadCSV(['תאריך','מחזור (₪)'],
+        d.map(r => [r.date, r.amount]),
+        'reverto-revenues.csv');
+    }
+    if (type === 'products') {
+      const d = await DB.get('product_catalog', '?select=*&order=name.asc') || [];
+      downloadCSV(['מוצר','יחידה','מחיר (₪)','פחת %','קטגוריה','עדכון אחרון'],
+        d.map(r => [r.name, r.unit, r.price_per_unit, r.waste_pct, r.category, r.price_updated_at?.slice(0,10)]),
+        'reverto-products.csv');
+    }
+    if (type === 'recipes') {
+      const recipes = await DB.get('recipes', '?select=*&order=name.asc') || [];
+      const ings = await DB.get('recipe_ingredients', '?select=*') || [];
+      const rows = [];
+      recipes.forEach(r => {
+        const ri = ings.filter(i => i.recipe_id === r.id);
+        if (!ri.length) { rows.push([r.name, r.category, r.menu_price, r.target_fc_pct, '', '', '']); }
+        else ri.forEach(i => rows.push([r.name, r.category, r.menu_price, r.target_fc_pct, i.product_name, i.quantity, i.unit]));
+      });
+      downloadCSV(['מנה','קטגוריה','מחיר תפריט','FC% יעד','רכיב','כמות','יחידה'], rows, 'reverto-recipes.csv');
+    }
+    showToast('הקובץ הורד ✓');
+  } catch { showToast('שגיאה בייצוא'); }
+  finally { if (btn) { btn.textContent = orig; btn.disabled = false; } }
+}
+
 function initProfile() {
   const profile = Auth.profile;
   const nameEl = document.getElementById('prof-biz-name');
