@@ -73,26 +73,32 @@ exports.handler = async (event) => {
   const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' };
 
   try {
-    // Check for existing user with same email — prevent duplicate accounts
+    // Check for existing user with same email (case-insensitive) — prevent duplicates
     if (profile.email) {
       const existingCheck = await fetch(
-        `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(profile.email.toLowerCase())}&select=id,personal_code,business_name`,
+        `${SUPABASE_URL}/rest/v1/users?email=ilike.${encodeURIComponent(profile.email)}&select=id,personal_code,business_name,plan,pro_until,is_active`,
         { headers: H }
       );
       const existing = await existingCheck.json();
       if (existing?.length) {
         const ex = existing[0];
-        // User already exists — resend their code by email and return error
         if (ex.personal_code) {
           sendCodeEmail(profile.email, ex.business_name || profile.business_name, ex.personal_code).catch(() => {});
         }
+        // Return JWT so the client can auto-login the existing user
+        const autoJwt = signJWT(
+          { user_id: ex.id, plan: ex.plan || 'free' },
+          process.env.JWT_SECRET
+        );
         return {
           statusCode: 409,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             error: 'email_exists',
-            message: 'חשבון עם מייל זה כבר קיים. הקוד האישי שלך נשלח למייל.',
-            personal_code: ex.personal_code
+            message: 'חשבון עם מייל זה כבר קיים.',
+            personal_code: ex.personal_code,
+            user: ex,
+            jwt: autoJwt
           })
         };
       }

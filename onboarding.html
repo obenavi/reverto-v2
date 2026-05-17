@@ -66,7 +66,11 @@
         <label class="field-label" for="ob-company-name">שם חברה / ח.פ / ע.מ</label>
         <input class="input mb-12" id="ob-company-name" type="text" placeholder="הים התיכון בע״מ (לא חובה)" maxlength="80">
         <label class="field-label" for="ob-phone">טלפון *</label>
-        <input class="input" id="ob-phone" type="tel" placeholder="050-0000000">
+        <input class="input mb-12" id="ob-phone" type="tel" placeholder="050-0000000">
+        <label class="field-label" for="ob-email-early">כתובת מייל *</label>
+        <input class="input" id="ob-email-early" type="email" placeholder="email@example.com"
+          onblur="checkEmailExists(this.value)">
+        <div id="ob-email-warn" style="display:none;background:var(--error-bg);border:1px solid var(--error);border-radius:var(--radius-md);padding:10px 14px;margin-top:8px;font-size:13px;color:var(--error);font-weight:600"></div>
       </div>
 
       <div class="ob-step" id="ob-step-2">
@@ -208,10 +212,12 @@
         const lastName = document.getElementById('ob-last-name').value.trim();
         const bizName = document.getElementById('ob-biz-name').value.trim();
         const phone = document.getElementById('ob-phone').value.trim();
+        const emailEarly = document.getElementById('ob-email-early').value.trim();
         if (!firstName) { document.getElementById('ob-first-name').focus(); return; }
         if (!lastName) { document.getElementById('ob-last-name').focus(); return; }
         if (!bizName) { document.getElementById('ob-biz-name').focus(); return; }
         if (!phone) { document.getElementById('ob-phone').focus(); return; }
+        if (!emailEarly || !emailEarly.includes('@')) { document.getElementById('ob-email-early').focus(); return; }
       }
       if (currentStep === 2 && !selectedCategory) { alert('בחר סוג עסק'); return; }
       if (currentStep === 3) {
@@ -251,6 +257,27 @@
       }
     }
 
+    async function checkEmailExists(email) {
+      if (!email || !email.includes('@')) return;
+      try {
+        const res = await fetch('/.netlify/functions/check-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        const warn = document.getElementById('ob-email-warn');
+        if (data.exists && warn) {
+          warn.style.display = 'block';
+          warn.innerHTML = `⚠️ כבר יש לך חשבון עם מייל זה!<br>
+            <span style="font-weight:400">הקוד האישי שלך נשלח למייל — השתמש בו לכניסה במקום להירשם שוב.</span><br>
+            <button onclick="window.location.href='/'" style="margin-top:8px;background:var(--error);color:white;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">לדף הכניסה</button>`;
+        } else if (warn) {
+          warn.style.display = 'none';
+        }
+      } catch {}
+    }
+
     function selectCategory(btn, cat) {
       document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
@@ -273,7 +300,7 @@
         category: selectedCategory,
         address: document.getElementById('ob-address').value.trim(),
         city: document.getElementById('ob-city').value.trim(),
-        email: document.getElementById('ob-email').value.trim(),
+        email: document.getElementById('ob-email-early').value.trim() || document.getElementById('ob-email').value.trim(),
         marketing_consent: document.getElementById('marketing-agree').checked
       };
 
@@ -286,9 +313,20 @@
           });
           const data = await res.json();
           if (res.status === 409) {
-            // Email already exists — show message and redirect to login
-            alert('חשבון עם מייל זה כבר קיים.\n\nהקוד האישי שלך נשלח למייל — השתמש בו לכניסה.');
-            window.location.href = '/';
+            // Email already exists — auto-login the existing account
+            if (data.jwt && data.user) {
+              const _s = (k,v) => { sessionStorage.setItem(k,v); localStorage.setItem(k,v); };
+              _s('rv_jwt', data.jwt);
+              _s('rv_token', data.personal_code || '');
+              _s('rv_user', JSON.stringify(data.user));
+              sessionStorage.removeItem('rv_signup');
+              localStorage.removeItem('rv_signup');
+              alert(`ברוך השב! 👋\n\nהחשבון שלך כבר קיים.\nהקוד האישי שלך: ${data.personal_code}\nשמור אותו לכניסות עתידיות.`);
+              window.location.href = '/app.html';
+            } else {
+              alert('חשבון עם מייל זה כבר קיים.\nהקוד האישי שלך נשלח למייל.');
+              window.location.href = '/';
+            }
             return;
           }
           if (!res.ok) throw new Error(data.error || 'שגיאה');
