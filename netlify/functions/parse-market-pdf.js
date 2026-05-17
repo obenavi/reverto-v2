@@ -13,14 +13,15 @@ function verifyJWT(token, secret) {
   return payload;
 }
 
-const PRICE_PROMPT = `אתה מחלץ רשימת מחירים מתקליט מחירים ישראלי.
-חלץ את כל המוצרים עם המחירים והיחידות.
-- שם המוצר: שם מלא בעברית
-- מחיר: מספר בלבד (ללא סימן ₪)
-- יחידה: ק"ג / ליטר / יחידה / צרור / קרטון
+const PRICE_PROMPT = `You are extracting a Hebrew produce/vegetable price list.
+Extract ALL products with their prices and units.
+Return ONLY a valid JSON array. No explanation, no markdown, no text before or after.
+Start your response with [ and end with ]
 
-החזר JSON בלבד ללא כל טקסט אחר:
-[{"name":"שם מוצר","price":8.50,"unit":"ק\\"ג"}]`;
+Format: [{"name":"product name in Hebrew","price":8.50,"unit":"ק\\"ג"}]
+
+Units to use: ק"ג, גרם, ליטר, מ"ל, יחידה, צרור, קרטון
+Only include items that have a clear price number greater than 0.`;
 
 async function parseWithClaude(content, mimeType, apiKey) {
   const isImage = mimeType && mimeType.startsWith('image/');
@@ -52,11 +53,19 @@ async function parseWithClaude(content, mimeType, apiKey) {
   }
 
   const data = await res.json();
-  const text = data.content?.[0]?.text || '[]';
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error('No JSON in Claude response');
+  const text = (data.content?.[0]?.text || '').trim();
 
-  return JSON.parse(jsonMatch[0]);
+  // Try to find JSON array in response
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (jsonMatch) {
+    try { return JSON.parse(jsonMatch[0]); } catch {}
+  }
+
+  // Fallback: try to parse the whole response as JSON
+  try { return JSON.parse(text); } catch {}
+
+  // Last resort: return raw text as debug info
+  throw new Error(`Claude returned non-JSON: ${text.slice(0, 300)}`);
 }
 
 async function getTextFromAzure(base64, azureEndpoint, azureKey) {
