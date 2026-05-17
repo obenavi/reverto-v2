@@ -51,10 +51,20 @@
         </div>
         <div class="ob-step-title">ברוך הבא!</div>
         <div class="ob-step-desc">בואו נגדיר את העסק שלך. זה ייקח רק דקה.</div>
-        <label class="field-label" for="ob-biz-name">שם העסק *</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div>
+            <label class="field-label">שם פרטי *</label>
+            <input class="input" id="ob-first-name" type="text" placeholder="ישראל" maxlength="30">
+          </div>
+          <div>
+            <label class="field-label">שם משפחה *</label>
+            <input class="input" id="ob-last-name" type="text" placeholder="ישראלי" maxlength="30">
+          </div>
+        </div>
+        <label class="field-label" for="ob-biz-name">שם המסעדה / העסק *</label>
         <input class="input mb-12" id="ob-biz-name" type="text" placeholder="מסעדת הים התיכון" maxlength="60">
-        <label class="field-label" for="ob-contact-name">שם איש קשר *</label>
-        <input class="input mb-12" id="ob-contact-name" type="text" placeholder="ישראל ישראלי" maxlength="40">
+        <label class="field-label" for="ob-company-name">שם חברה / ח.פ / ע.מ</label>
+        <input class="input mb-12" id="ob-company-name" type="text" placeholder="הים התיכון בע״מ (לא חובה)" maxlength="80">
         <label class="field-label" for="ob-phone">טלפון *</label>
         <input class="input" id="ob-phone" type="tel" placeholder="050-0000000">
       </div>
@@ -83,16 +93,16 @@
         <div class="ob-step-icon">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
         </div>
-        <div class="ob-step-title">פרטי יצירת קשר</div>
+        <div class="ob-step-title">כתובת ויצירת קשר</div>
         <div class="ob-step-desc">נשתמש בפרטים אלה לחשבונך ולתמיכה</div>
+        <label class="field-label" for="ob-address">רחוב ומספר *</label>
+        <input class="input mb-12" id="ob-address" type="text" placeholder="רחוב הרצל 1">
         <label class="field-label" for="ob-city">עיר / ישוב *</label>
         <input class="input mb-12" id="ob-city" type="text" placeholder="תל אביב">
-        <label class="field-label" for="ob-address">כתובת מלאה</label>
-        <input class="input mb-12" id="ob-address" type="text" placeholder="רחוב הרצל 1">
-        <label class="field-label" for="ob-email">כתובת מייל</label>
+        <label class="field-label" for="ob-email">כתובת מייל *</label>
         <input class="input mb-12" id="ob-email" type="email" placeholder="email@example.com">
         <div style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px 14px;font-size:12px;color:var(--on-surface-3);line-height:1.6">
-          המייל ישמש לעדכונים ולשחזור גישה לחשבון. לא נשלח ספאם.
+          המייל חובה — משמש לשחזור קוד גישה ולעדכונים חשובים.
         </div>
       </div>
 
@@ -194,15 +204,23 @@
 
     function obNext() {
       if (currentStep === 1) {
-        const name = document.getElementById('ob-biz-name').value.trim();
+        const firstName = document.getElementById('ob-first-name').value.trim();
+        const lastName = document.getElementById('ob-last-name').value.trim();
+        const bizName = document.getElementById('ob-biz-name').value.trim();
         const phone = document.getElementById('ob-phone').value.trim();
-        if (!name) { document.getElementById('ob-biz-name').focus(); return; }
+        if (!firstName) { document.getElementById('ob-first-name').focus(); return; }
+        if (!lastName) { document.getElementById('ob-last-name').focus(); return; }
+        if (!bizName) { document.getElementById('ob-biz-name').focus(); return; }
         if (!phone) { document.getElementById('ob-phone').focus(); return; }
       }
       if (currentStep === 2 && !selectedCategory) { alert('בחר סוג עסק'); return; }
       if (currentStep === 3) {
+        const address = document.getElementById('ob-address').value.trim();
         const city = document.getElementById('ob-city').value.trim();
+        const email = document.getElementById('ob-email').value.trim();
+        if (!address) { document.getElementById('ob-address').focus(); return; }
         if (!city) { document.getElementById('ob-city').focus(); return; }
+        if (!email || !email.includes('@')) { document.getElementById('ob-email').focus(); return; }
       }
       if (currentStep === 4) {
         if (!document.getElementById('terms-agree').checked) return;
@@ -243,13 +261,18 @@
       const nextBtn = document.getElementById('ob-next-btn');
       nextBtn.textContent = 'שומר...';
       nextBtn.disabled = true;
+      const firstName = document.getElementById('ob-first-name').value.trim();
+      const lastName = document.getElementById('ob-last-name').value.trim();
       const profile = {
+        first_name: firstName,
+        last_name: lastName,
+        contact_name: `${firstName} ${lastName}`.trim(),
         business_name: document.getElementById('ob-biz-name').value.trim(),
-        contact_name: document.getElementById('ob-contact-name').value.trim(),
+        company_name: document.getElementById('ob-company-name').value.trim() || null,
         phone: document.getElementById('ob-phone').value.trim(),
         category: selectedCategory,
-        city: document.getElementById('ob-city').value.trim(),
         address: document.getElementById('ob-address').value.trim(),
+        city: document.getElementById('ob-city').value.trim(),
         email: document.getElementById('ob-email').value.trim(),
         marketing_consent: document.getElementById('marketing-agree').checked
       };
