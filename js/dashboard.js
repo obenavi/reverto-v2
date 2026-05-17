@@ -227,15 +227,20 @@ function renderCombinedChart(period) {
     }
   }
 
-  // Aggregate data per bucket
-  const purchases = buckets.map(b =>
-    dashData.invoices.filter(inv => inv.date && inv.date.startsWith(b))
-      .reduce((s, inv) => s + (parseFloat(inv.total_amount) || 0), 0)
-  );
-  const revenues = buckets.map(b =>
-    dashData.revenues.filter(r => r.date && r.date.startsWith(b))
-      .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
-  );
+  // Aggregate data per bucket using date RANGES so all days are captured
+  const FAR = '9999-99-99';
+  const purchases = buckets.map((b, idx) => {
+    const next = buckets[idx + 1] || FAR;
+    return dashData.invoices
+      .filter(inv => inv.date && inv.date >= b && inv.date < next)
+      .reduce((s, inv) => s + (parseFloat(inv.total_amount || inv.total) || 0), 0);
+  });
+  const revenues = buckets.map((b, idx) => {
+    const next = buckets[idx + 1] || FAR;
+    return dashData.revenues
+      .filter(r => r.date && r.date >= b && r.date < next)
+      .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  });
   const foodCost = revenues.map((rev, i) => rev > 0 ? (purchases[i] / rev * 100) : 0);
 
   const maxMoney = Math.max(...purchases, ...revenues, 1);
