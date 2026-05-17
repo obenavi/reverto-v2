@@ -194,12 +194,12 @@ function showVision() {
 }
 
 function shareInvite() {
-  const text = 'גילית אפליקציה שמנהלת את הרכש של המסעדה שלי — Reverto. שווה לנסות!';
+  const url = 'https://reverto.cloud';
+  const text = `גילית אפליקציה שמנהלת את הרכש של המסעדה שלי — Reverto. שווה לנסות!\n${url}\n\n📱 פתח בדפדפן והוסף לדף הבית`;
   if (navigator.share) {
-    navigator.share({ title: 'Reverto', text, url: window.location.origin }).catch(() => {});
+    navigator.share({ title: 'Reverto', text, url }).catch(() => {});
   } else {
-    const msg = encodeURIComponent(text + ' ' + window.location.origin);
-    window.open('https://wa.me/?text=' + msg, '_blank');
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   }
 }
 
