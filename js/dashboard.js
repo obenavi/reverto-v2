@@ -85,13 +85,18 @@ function renderStats() {
 
   const fcEl = document.getElementById('dash-foodcost');
   const fcSubEl = document.getElementById('dash-foodcost-sub');
-  if (monthlyRevenue > 0) {
+  if (monthlyRevenue > 0 && monthlyPurchases > 0) {
     const fc = (monthlyPurchases / monthlyRevenue * 100).toFixed(1);
     fcEl.textContent = fc + '%';
-    fcEl.style.color = parseFloat(fc) > 35 ? 'var(--error)' : parseFloat(fc) > 28 ? 'var(--warning, #F59E0B)' : 'var(--success)';
+    fcEl.style.color = parseFloat(fc) > 35 ? 'var(--error)' : parseFloat(fc) > 28 ? '#F59E0B' : 'var(--success)';
     fcSubEl.textContent = 'מחזור ₪' + monthlyRevenue.toLocaleString('he-IL', {maximumFractionDigits: 0});
+  } else if (monthlyRevenue > 0 && monthlyPurchases === 0) {
+    fcEl.textContent = '--%';
+    fcEl.style.color = 'var(--on-surface-3)';
+    fcSubEl.textContent = 'אין רכש החודש';
   } else {
     fcEl.textContent = '--%';
+    fcEl.style.color = 'var(--on-surface-3)';
     fcSubEl.textContent = 'הכנס מחזור יומי';
   }
 }
