@@ -68,8 +68,15 @@ function renderStats() {
     .filter(r => r.date >= monthStart)
     .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
 
-  document.getElementById('dash-monthly').textContent = '₪' + monthlyPurchases.toLocaleString('he-IL', {maximumFractionDigits: 0});
-  document.getElementById('dash-monthly-sub').textContent = monthlyInvoices.length + ' חשבוניות';
+  // Show total of all invoices if current month is empty
+  const allPurchases = dashData.invoices.reduce((s, i) => s + (parseFloat(i.total_amount || i.total) || 0), 0);
+  const displayPurchases = monthlyPurchases > 0 ? monthlyPurchases : allPurchases;
+  const displayLabel = monthlyPurchases > 0
+    ? monthlyInvoices.length + ' חשבוניות החודש'
+    : dashData.invoices.length + ' חשבוניות סה"כ';
+
+  document.getElementById('dash-monthly').textContent = '₪' + displayPurchases.toLocaleString('he-IL', {maximumFractionDigits: 0});
+  document.getElementById('dash-monthly-sub').textContent = displayLabel;
 
   document.getElementById('dash-saving').textContent = '₪0';
 
@@ -432,11 +439,12 @@ function buildInsightData(topic) {
     if (latest > prev * 1.05) alerts.push({ product: name, prev_price: prev.toFixed(2), current_price: latest.toFixed(2), pct: ((latest - prev) / prev * 100).toFixed(0) + '%' });
   });
 
+  const usedPurchases = monthlyPurchases > 0 ? monthlyPurchases : allPurchases;
   const base = {
     category: profile.category || 'עסק מזון',
     city: profile.city || '',
-    monthly_purchases: Math.round(monthlyPurchases),
-    invoice_count: monthlyInvoices.length,
+    monthly_purchases: Math.round(usedPurchases),
+    invoice_count: monthlyPurchases > 0 ? monthlyInvoices.length : dashData.invoices.length,
     change_vs_last_month: lastMonthPurchases > 0 ? (((monthlyPurchases - lastMonthPurchases) / lastMonthPurchases) * 100).toFixed(0) + '%' : 'אין נתון קודם'
   };
 
