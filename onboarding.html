@@ -184,7 +184,7 @@
     let selectedCategory = '';
     const signupData = JSON.parse(sessionStorage.getItem('rv_signup') || 'null');
     const isNewUser = !!(signupData?.new_user_signup);
-    if (!sessionStorage.getItem('rv_jwt') && !isNewUser) window.location.href = '/';
+    if (!sessionStorage.getItem('rv_jwt') && !localStorage.getItem('rv_jwt') && !isNewUser) window.location.href = '/';
 
     function checkTerms() {
       const agreed = document.getElementById('terms-agree').checked;

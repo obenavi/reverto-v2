@@ -40,7 +40,7 @@ async function appInit() {
   // Load profile
   const profile = await Auth.loadProfile();
   if (!profile) {
-    window.location.href = '/';
+    Auth.logout(); // clears both sessionStorage and localStorage — breaks redirect loop
     return;
   }
 
