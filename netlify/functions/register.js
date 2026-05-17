@@ -73,6 +73,31 @@ exports.handler = async (event) => {
   const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' };
 
   try {
+    // Check for existing user with same email — prevent duplicate accounts
+    if (profile.email) {
+      const existingCheck = await fetch(
+        `${SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(profile.email.toLowerCase())}&select=id,personal_code,business_name`,
+        { headers: H }
+      );
+      const existing = await existingCheck.json();
+      if (existing?.length) {
+        const ex = existing[0];
+        // User already exists — resend their code by email and return error
+        if (ex.personal_code) {
+          sendCodeEmail(profile.email, ex.business_name || profile.business_name, ex.personal_code).catch(() => {});
+        }
+        return {
+          statusCode: 409,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: 'email_exists',
+            message: 'חשבון עם מייל זה כבר קיים. הקוד האישי שלך נשלח למייל.',
+            personal_code: ex.personal_code
+          })
+        };
+      }
+    }
+
     // Validate signup code is active
     const cr = await fetch(
       `${SUPABASE_URL}/rest/v1/access_codes?code=eq.${encodeURIComponent(codeUpper)}&type=eq.generic&is_active=eq.true&select=duration_months`,

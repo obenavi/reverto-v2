@@ -262,6 +262,12 @@
             body: JSON.stringify({ signup_code: signupData.signup_code, profile })
           });
           const data = await res.json();
+          if (res.status === 409) {
+            // Email already exists — show message and redirect to login
+            alert('חשבון עם מייל זה כבר קיים.\n\nהקוד האישי שלך נשלח למייל — השתמש בו לכניסה.');
+            window.location.href = '/';
+            return;
+          }
           if (!res.ok) throw new Error(data.error || 'שגיאה');
           const _s = (k,v) => { sessionStorage.setItem(k,v); localStorage.setItem(k,v); };
           _s('rv_jwt', data.jwt);
