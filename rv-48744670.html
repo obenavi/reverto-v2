@@ -173,6 +173,28 @@ tr:hover td{background:rgba(139,92,246,.04)}
 
 <!-- MARKET -->
 <div class="page" id="pg-market">
+
+  <!-- Upload market prices -->
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:15px;font-weight:800;color:var(--text)">העלאת מחירון תקליט</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">CSV: שם מוצר, מחיר, יחידה — שורה לכל מוצר</div>
+      </div>
+      <input type="file" id="mkt-csv-file" accept=".csv,.txt" style="display:none" onchange="handleMktCSV(this)">
+      <button class="btn" onclick="document.getElementById('mkt-csv-file').click()">📂 בחר קובץ</button>
+    </div>
+    <div id="mkt-preview" style="display:none;padding:14px 18px">
+      <div id="mkt-preview-text" style="font-size:13px;color:var(--muted);margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="uploadMktPrices()" id="mkt-upload-btn">⬆ העלה לכל המשתמשים</button>
+        <button class="btn-o" onclick="document.getElementById('mkt-preview').style.display='none'">ביטול</button>
+      </div>
+    </div>
+    <div id="mkt-upload-result" style="display:none;padding:10px 18px;font-size:13px;font-weight:700"></div>
+  </div>
+
+  <!-- Market prices table -->
   <div class="controls">
     <input class="inp" id="mkt-q" placeholder="חיפוש מוצר..." oninput="renderMarket()" style="flex:1">
     <button class="btn-o" onclick="exportMarket()">⬇ Excel</button>
@@ -561,6 +583,60 @@ function exportProducts(){
   if(!rows.length) return;
   download(toCSV(rows,Object.keys(rows[0])),'reverto-products.csv');
 }
+// ── Market price upload ───────────────────────────────────────
+let _mktRows = [];
+
+function handleMktCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split('\n').map(l => l.trim()).filter(l => l);
+    _mktRows = [];
+    let skipped = 0;
+    lines.forEach(line => {
+      const parts = line.split(',').map(p => p.trim().replace(/^"|"$/g,''));
+      if (parts.length < 2) { skipped++; return; }
+      const name = parts[0], price = parseFloat(parts[1]), unit = parts[2] || 'ק"ג';
+      if (!name || isNaN(price) || price <= 0) { skipped++; return; }
+      _mktRows.push({ name, price, unit });
+    });
+    const preview = document.getElementById('mkt-preview');
+    const previewText = document.getElementById('mkt-preview-text');
+    previewText.textContent = `נמצאו ${_mktRows.length} מוצרים${skipped ? ` · ${skipped} שורות דולגו` : ''}`;
+    preview.style.display = _mktRows.length ? 'block' : 'none';
+    document.getElementById('mkt-upload-result').style.display = 'none';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+async function uploadMktPrices() {
+  if (!_mktRows.length) return;
+  const btn = document.getElementById('mkt-upload-btn');
+  btn.textContent = 'מעלה...'; btn.disabled = true;
+
+  const res = await fetch('/.netlify/functions/upload-market-prices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + JWT },
+    body: JSON.stringify({ prices: _mktRows })
+  });
+  const data = await res.json();
+
+  const result = document.getElementById('mkt-upload-result');
+  result.style.display = 'block';
+  result.style.color = res.ok ? '#4ade80' : '#f87171';
+  result.textContent = res.ok ? `✓ הועלו ${data.uploaded} מחירים בהצלחה — כל המשתמשים רואים את המחירון המעודכן` : `שגיאה: ${data.error}`;
+  btn.textContent = '⬆ העלה לכל המשתמשים'; btn.disabled = false;
+  document.getElementById('mkt-preview').style.display = 'none';
+  _mktRows = [];
+
+  if (res.ok) {
+    const d = await adminCall('full_data');
+    MARKET = d.market || [];
+    renderMarket();
+  }
+}
+
 function exportMarket(){
   const rows=MARKET.filter(m=>m.name&&m.price&&!isNaN(parseFloat(m.price))).map(m=>({'מוצר':m.name,'מחיר_שוק':parseFloat(m.price).toFixed(2),'יחידה':m.unit||'','עדכון':m.updated_at?new Date(m.updated_at).toLocaleDateString('he-IL'):''}));
   if(!rows.length) return;
