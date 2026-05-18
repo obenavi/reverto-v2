@@ -11,59 +11,104 @@ function verifyJWT(token, secret) {
   return payload;
 }
 
+// Industry FC% benchmarks by category
+function fcBenchmark(category) {
+  const c = (category || '').toLowerCase();
+  if (c.includes('בר') || c.includes('bar')) return { low: 18, high: 24, name: 'בר' };
+  if (c.includes('קפה') || c.includes('cafe') || c.includes('בייקרי') || c.includes('סנדוויץ')) return { low: 28, high: 35, name: 'בית קפה/בייקרי' };
+  if (c.includes('יפנית') || c.includes('סושי') || c.includes('japanese')) return { low: 28, high: 36, name: 'מסעדה יפנית' };
+  if (c.includes('מלון') || c.includes('hotel')) return { low: 26, high: 33, name: 'מלון' };
+  if (c.includes('קייטרינג') || c.includes('catering')) return { low: 30, high: 40, name: 'קייטרינג' };
+  if (c.includes('פיצה') || c.includes('pizza')) return { low: 25, high: 32, name: 'פיצה' };
+  return { low: 28, high: 35, name: 'מסעדה' }; // default
+}
+
+const SYSTEM_PROMPT = `You are Israel's leading restaurant business consultant, combining the expertise of a certified public accountant, a seasoned F&B operator, and a McKinsey-level strategist. You specialize in Israeli restaurant economics, supplier markets, and food cost management.
+
+Your analysis methodology:
+- Always base insights on actual numbers provided — never guess or generalize
+- Reference real industry benchmarks (Israeli and global) appropriate to the specific business type
+- Identify anomalies that suggest data gaps (e.g., suspiciously low FC% = likely incomplete invoice scanning)
+- Provide specific, actionable recommendations with exact NIS amounts
+- Write like you are presenting to the business owner in a face-to-face consulting session
+- NEVER use markdown formatting: no asterisks (*), no hashtags (#), no bold markers, no bullet points with dashes
+- Write in fluent, professional Hebrew, 4-5 sentences maximum
+- Each insight must be grounded in data — no generic advice`;
+
 const PROMPTS = {
-  spending: (data) => `אתה יועץ עסקי לעסקי מזון בישראל. דבר ישירות לבעל העסק בגוף שני, בעברית שוטפת, 3-4 משפטים.
 
-נתוני רכש חודשי:
-- עסק: ${data.category}${data.city ? ' ב' + data.city : ''}
-- רכש החודש: ₪${data.monthly_purchases?.toLocaleString()}
-- מספר חשבוניות: ${data.invoice_count}
-- לעומת חודש שעבר: ${data.change_vs_last_month}
-- ספק מוביל: ${data.top_supplier ? data.top_supplier.name + ' — ₪' + data.top_supplier.amount?.toLocaleString() : 'לא ידוע'}
+  spending: (data) => `נתוני הרכש של ${data.category || 'העסק'}${data.city ? ' ב' + data.city : ''} לחודש הנוכחי:
+רכש כולל: ₪${(data.monthly_purchases || 0).toLocaleString('he-IL')} | חשבוניות: ${data.invoice_count} | שינוי לעומת חודש קודם: ${data.change_vs_last_month} | ספק מוביל: ${data.top_supplier ? data.top_supplier.name + ' — ₪' + data.top_supplier.amount?.toLocaleString('he-IL') : 'לא זוהה'}
 
-נתח: מה המגמה, מה מדאיג, והמלצה אחת ספציפית בשקלים.`,
+נתח את הנתונים: (1) האם קצב הרכש ביחס לחודש קודם הגיוני לעונה? (2) ריכוז יתר אצל ספק אחד — מהו אחוז הספק המוביל מסך הרכש ומה הסיכון? (3) מה ₪-המלצה אחת ספציפית לחיסכון מיידי השבוע?`,
 
-  foodcost: (data) => `אתה יועץ עסקי לעסקי מזון בישראל. דבר ישירות לבעל העסק בגוף שני, בעברית שוטפת, 3-4 משפטים.
+  foodcost: (data) => {
+    const bench = fcBenchmark(data.category);
+    const fc = parseFloat(data.food_cost_pct);
+    const hasRevenue = data.monthly_revenue > 0;
+    const hasPurchases = data.monthly_purchases > 0;
 
-נתוני Food Cost:
-- עסק: ${data.category}${data.city ? ' ב' + data.city : ''}
-- רכש החודש: ₪${data.monthly_purchases?.toLocaleString()}
-- מחזור החודש: ${data.monthly_revenue > 0 ? '₪' + data.monthly_revenue?.toLocaleString() : 'לא הוזן'}
-- Food Cost: ${data.food_cost_pct ? data.food_cost_pct + '%' : 'לא ניתן לחשב — אין מחזור'}
-- יעד ענפי: 28–32%
+    let dataContext = '';
+    if (!hasRevenue) {
+      dataContext = 'מחזור החודש: לא הוזן עדיין.';
+    } else if (!hasPurchases) {
+      dataContext = `מחזור: ₪${data.monthly_revenue?.toLocaleString('he-IL')} | רכש: לא נסרקו חשבוניות החודש — FC לא ניתן לחישוב.`;
+    } else {
+      dataContext = `מחזור: ₪${data.monthly_revenue?.toLocaleString('he-IL')} | רכש: ₪${data.monthly_purchases?.toLocaleString('he-IL')} | Food Cost מחושב: ${fc.toFixed(1)}% | בנצ'מארק תקני ל${bench.name}: ${bench.low}%–${bench.high}%`;
+    }
 
-${data.food_cost_pct ? 'נתח: האם ה-Food Cost תקין, מה הסיכון, ומה לעשות.' : 'הסבר למה חשוב להזין מחזור יומי וכיצד הדבר יעזור לניהול העסק.'}`,
+    return `${dataContext}
 
-  alerts: (data) => `אתה יועץ עסקי לעסקי מזון בישראל. דבר ישירות לבעל העסק בגוף שני, בעברית שוטפת, 3-4 משפטים.
+הנחיות לניתוח — שים לב לכללים הבאים:
+1. FC של ${bench.low}%–${bench.high}% הוא תקין ל${bench.name}.
+2. FC מתחת ל-15% בכל קטגוריה = כמעט בוודאות חוסר בחשבוניות סרוקות, לא ביצועים מדהימים — זה המסר הראשון שיש לתת.
+3. FC גבוה מ-${bench.high}% = בעיה אמיתית הדורשת פעולה מיידית עם חישוב ₪ ספציפי.
+4. FC בטווח התקין = כיוונים לשיפור.
 
-התייקרויות מחירים שזוהו:
-${data.price_increases?.length
-  ? data.price_increases.map(a => `- ${a.product}: עלה מ-₪${a.prev_price} ל-₪${a.current_price} (+${a.pct})`).join('\n')
-  : '- לא זוהו התייקרויות משמעותיות'}
-- עסק: ${data.category}${data.city ? ' ב' + data.city : ''}
+ספק ניתוח מדויק ומבוסס מחקר ל${data.category || 'העסק'}, עם המלצה אחת פרקטית ומספרים.`;
+  },
 
-נתח: מה ההשפעה הכלכלית, אילו מוצרים לעקוב, והמלצה.`,
+  alerts: (data) => {
+    const bench = fcBenchmark(data.category);
+    const items = data.price_increases || [];
+    return `עסק: ${data.category || ''}${data.city ? ' ב' + data.city : ''} | רכש חודשי: ₪${(data.monthly_purchases || 0).toLocaleString('he-IL')}
+מוצרים שהתייקרו החודש: ${items.length > 0 ? items.map(a => `${a.product} עלה ${a.pct}% (₪${a.prev?.toFixed(2)} → ₪${a.current_price?.toFixed(2) || a.latest?.toFixed(2)})`).join(' | ') : 'לא זוהו התייקרויות משמעותיות'}
 
-  savings: (data) => `אתה יועץ עסקי לעסקי מזון בישראל. דבר ישירות לבעל העסק בגוף שני, בעברית שוטפת, 3-4 משפטים.
+בנצ'מארק FC ל${bench.name}: ${bench.low}%–${bench.high}%.
 
-ספקים מובילים החודש:
-${data.top_suppliers?.map(s => `- ${s.name}: ₪${s.amount?.toLocaleString()}`).join('\n') || 'אין נתונים'}
-- עסק: ${data.category}${data.city ? ' ב' + data.city : ''}
-- רכש כולל: ₪${data.monthly_purchases?.toLocaleString()}
+נתח: (1) מה ההשפעה הכלכלית של ההתייקרויות בשקלים על בסיס כמויות ממוצעות? (2) אילו מוצרים ניתן להחליף/לנהל משא ומתן עליהם? (3) איזה שינוי בתפריט או במתכון יאפשר לספוג את ההתייקרות מבלי לפגוע ב-FC?`;
+  },
 
-נתח: האם הפיזור בין ספקים בריא, איפה יש פוטנציאל למשא ומתן, והמלצה ספציפית.`,
+  savings: (data) => {
+    const bench = fcBenchmark(data.category);
+    const suppliers = data.top_suppliers || [];
+    return `עסק: ${data.category || ''}${data.city ? ' ב' + data.city : ''} | רכש חודשי כולל: ₪${(data.monthly_purchases || 0).toLocaleString('he-IL')}
+ספקים מובילים: ${suppliers.map(s => `${s.name} — ₪${s.amount?.toLocaleString('he-IL')}`).join(' | ') || 'לא זוהו'}
+בנצ'מארק FC ל${bench.name}: ${bench.low}%–${bench.high}%
 
-  overview: (data) => `אתה יועץ עסקי בכיר לעסקי מזון בישראל. דבר ישירות לבעל העסק בגוף שני, בעברית שוטפת, 5-6 משפטים.
+נתח: (1) האם פיזור הרכש בין הספקים בריא — מה אחוז הריכוז? (2) מה פוטנציאל החיסכון בשקלים מניהול משא ומתן עם הספק הגדול ביותר (חשב הפחתה של 5% ו-10%)? (3) האם יש סיכן שרשרת אספקה שמצריך ספק גיבוי?`;
+  },
 
-ניתוח עסקי כולל — ${data.category}${data.city ? ' ב' + data.city : ''}:
-- רכש החודש: ₪${data.monthly_purchases?.toLocaleString()} (${data.invoice_count} חשבוניות, ${data.change_vs_last_month} לעומת חודש קודם)
-- מחזור החודש: ${data.monthly_revenue > 0 ? '₪' + data.monthly_revenue?.toLocaleString() : 'לא הוזן'}
-- Food Cost: ${data.food_cost_pct ? data.food_cost_pct + '%' : 'לא ניתן לחשב'} (יעד ענפי: 28–32%)
-- ספק מוביל: ${data.top_supplier ? data.top_supplier.name + ' — ₪' + data.top_supplier.amount?.toLocaleString() : 'לא זוהה'}
-- מוצרים שהתייקרו: ${data.alerts_count}
-- שינוי לעומת חודש קודם: ${data.change_vs_last_month}
+  overview: (data) => {
+    const bench = fcBenchmark(data.category);
+    const fc = parseFloat(data.food_cost_pct);
+    const fcStatus = !fc ? 'לא ניתן לחישוב (חסרות חשבוניות או מחזור)' :
+      fc < 15 ? `${fc.toFixed(1)}% — נמוך חריג, ככל הנראה חשבוניות לא סרוקות במלואן` :
+      fc < bench.low ? `${fc.toFixed(1)}% — מתחת לבנצ'מארק, ביצועים טובים` :
+      fc <= bench.high ? `${fc.toFixed(1)}% — בטווח התקין` :
+      `${fc.toFixed(1)}% — גבוה מהבנצ'מארק, דורש טיפול`;
 
-ספק ניתוח אסטרטגי מקיף: (1) הערכת מצב בריאות עסקי כוללת, (2) הבעיה או ההזדמנות הגדולה ביותר שזיהית, (3) 2 המלצות אסטרטגיות ספציפיות עם מספרים בשקלים, (4) פוטנציאל חיסכון חודשי אם תבצע את ההמלצות. היה ספציפי וממוקד — לא כללי.`
+    return `סיכום ביצועי ${data.category || 'העסק'}${data.city ? ' ב' + data.city : ''}:
+רכש החודש: ₪${(data.monthly_purchases || 0).toLocaleString('he-IL')} (${data.invoice_count} חשבוניות) | מחזור: ${data.monthly_revenue > 0 ? '₪' + data.monthly_revenue.toLocaleString('he-IL') : 'לא הוזן'}
+Food Cost: ${fcStatus} | בנצ'מארק ל${bench.name}: ${bench.low}%–${bench.high}%
+שינוי לעומת חודש קודם: ${data.change_vs_last_month} | ספק מוביל: ${data.top_supplier ? data.top_supplier.name + ' — ₪' + data.top_supplier.amount?.toLocaleString('he-IL') : 'לא זוהה'} | התייקרויות: ${data.alerts_count} מוצרים
+
+ספק ניתוח אסטרטגי מלא בסגנון יועץ מחזיק McKinsey + ניסיון 20 שנה בתחום המסעדנות:
+(1) הערכת בריאות עסקית כוללת — מה המספרים אומרים באמת?
+(2) הממצא הקריטי ביותר שדורש פעולה מיידית — עם ₪ ספציפיים
+(3) שתי המלצות אסטרטגיות מבוססות מחקר עם ROI משוער
+(4) אם FC חריג נמוך — חייב לציין שזה כנראה מצביע על חוסר בסריקת חשבוניות ולא על ביצועים מושלמים`;
+  }
 };
 
 exports.handler = async (event) => {
@@ -71,11 +116,8 @@ exports.handler = async (event) => {
 
   const authHeader = (event.headers['authorization'] || '').replace('Bearer ', '');
   let jwt;
-  try {
-    jwt = verifyJWT(authHeader, process.env.JWT_SECRET);
-  } catch {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
-  }
+  try { jwt = verifyJWT(authHeader, process.env.JWT_SECRET); }
+  catch { return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) }; }
 
   if (jwt.plan !== 'pro') {
     return { statusCode: 403, body: JSON.stringify({ error: 'PRO required' }) };
@@ -101,7 +143,8 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 350,
+        max_tokens: 450,
+        system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: promptFn(data) }]
       })
     });
@@ -113,7 +156,13 @@ exports.handler = async (event) => {
     }
 
     const result = await res.json();
-    const insight = result.content?.[0]?.text || '';
+    let insight = result.content?.[0]?.text || '';
+
+    // Strip any markdown that slipped through
+    insight = insight
+      .replace(/\*\*/g, '').replace(/\*/g, '')
+      .replace(/^#+\s*/gm, '').replace(/^-\s+/gm, '• ')
+      .trim();
 
     return {
       statusCode: 200,
