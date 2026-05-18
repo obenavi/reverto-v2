@@ -14,6 +14,13 @@ exports.handler = async (event) => {
   const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
 
   const now = new Date();
+
+  // Never send on Shabbat (Saturday UTC = day 6) or Friday afternoon (day 5 after 12:00 UTC = 15:00 Israel)
+  const dayUTC = now.getUTCDay();
+  const hourUTC = now.getUTCHours();
+  if (dayUTC === 6) return { statusCode: 200, body: JSON.stringify({ skipped: 'Shabbat' }) };
+  if (dayUTC === 5 && hourUTC >= 12) return { statusCode: 200, body: JSON.stringify({ skipped: 'Friday afternoon' }) };
+
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
   const monthName = now.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
 

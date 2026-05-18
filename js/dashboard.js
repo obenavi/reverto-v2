@@ -207,29 +207,36 @@ function renderCombinedChart(period) {
   const now = new Date();
   let labels = [], buckets = [];
 
+  const localStr = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const shortDate = d => d.getDate() + '/' + (d.getMonth()+1);
+
   if (period === 'week') {
+    const startD = new Date(now); startD.setDate(now.getDate() - 6);
+    const rangeLabel = shortDate(startD) + ' — ' + shortDate(now);
+    const chartTitle = document.getElementById('chart-range-label');
+    if (chartTitle) chartTitle.textContent = rangeLabel;
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now); d.setDate(d.getDate() - i);
       labels.push(d.toLocaleDateString('he-IL', {weekday:'short'}));
-      buckets.push(d.toISOString().slice(0,10));
+      buckets.push(localStr(d));
     }
   } else if (period === 'month') {
     for (let i = 29; i >= 0; i -= 5) {
       const d = new Date(now); d.setDate(d.getDate() - i);
       labels.push(d.getDate() + '/' + (d.getMonth()+1));
-      buckets.push(d.toISOString().slice(0,10));
+      buckets.push(localStr(d));
     }
   } else if (period === 'quarter') {
     for (let i = 2; i >= 0; i--) {
       const d = new Date(now); d.setMonth(d.getMonth() - i);
       labels.push(d.toLocaleDateString('he-IL', {month:'short'}));
-      buckets.push(d.toISOString().slice(0,7));
+      buckets.push(localStr(d).slice(0,7));
     }
   } else {
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now); d.setMonth(d.getMonth() - i);
       labels.push(d.toLocaleDateString('he-IL', {month:'short'}));
-      buckets.push(d.toISOString().slice(0,7));
+      buckets.push(localStr(d).slice(0,7));
     }
   }
 
