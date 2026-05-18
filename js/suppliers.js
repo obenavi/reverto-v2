@@ -425,41 +425,20 @@ function sendOrder(method) {
 }
 
 // ── Payment terms ─────────────────────────────────────────────
-
-const PAYMENT_TERMS_LABELS = {
-  cash_delivery: 'מזומן בקבלת סחורה',
-  cash_eom: 'מזומן סוף חודש',
-  net30: 'שוטף+30',
-  net60: 'שוטף+60',
-  net90: 'שוטף+90'
-};
+// PAYMENT_TERMS_LABELS and calcDueDate defined in db.js (loaded first)
 
 function paymentDueDateLabel(terms) {
   const now = new Date();
   const eom = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+  const addDays = (n) => { const r = new Date(eom); r.setDate(r.getDate() + n); return r; };
   const fmt = d => d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long' });
   switch (terms) {
     case 'cash_delivery': return 'בקבלת הסחורה';
     case 'cash_eom': return fmt(eom);
-    case 'net30': return fmt(addDays(eom, 30));
-    case 'net60': return fmt(addDays(eom, 60));
-    case 'net90': return fmt(addDays(eom, 90));
-    default: return fmt(addDays(eom, 30));
-  }
-}
-
-function calcDueDate(invoiceDate, terms) {
-  const d = new Date(invoiceDate + 'T00:00:00');
-  const eom = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  const add = (base, n) => { const r = new Date(base); r.setDate(r.getDate() + n); return r; };
-  switch (terms) {
-    case 'cash_delivery': return d;
-    case 'cash_eom': return eom;
-    case 'net30': return add(eom, 30);
-    case 'net60': return add(eom, 60);
-    case 'net90': return add(eom, 90);
-    default: return add(eom, 30);
+    case 'net30': return fmt(addDays(30));
+    case 'net60': return fmt(addDays(60));
+    case 'net90': return fmt(addDays(90));
+    default: return fmt(addDays(30));
   }
 }
 

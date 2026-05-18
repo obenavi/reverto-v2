@@ -181,7 +181,7 @@ function renderRecentInvoices(invoices) {
         <div style="font-size:14px;font-weight:700">${inv.supplier_name || 'ספק לא ידוע'}</div>
         <div style="font-size:12px;color:var(--on-surface-3)">${formatDate(inv.date)}</div>
       </div>
-      <div style="font-size:15px;font-weight:800;color:var(--primary)">₪${parseFloat(inv.total_amount||0).toLocaleString('he-IL',{maximumFractionDigits:0})}</div>
+      <div style="font-size:15px;font-weight:800;color:var(--primary)">₪${parseFloat(inv.total_amount||inv.total||0).toLocaleString('he-IL',{maximumFractionDigits:0})}</div>
     </div>
   `).join('');
 }
@@ -564,7 +564,7 @@ async function renderPaymentForecast() {
   if (!el) return;
 
   // Load suppliers with payment terms
-  const suppliers = await DB.get('suppliers', '?select=name,payment_terms&is_active=neq.false') || [];
+  const suppliers = await DB.get('suppliers', '?select=name,payment_terms') || [];
   const termMap = Object.fromEntries(suppliers.map(s => [s.name, s.payment_terms || 'net30']));
 
   if (!dashData.invoices.length || suppliers.length === 0) {
