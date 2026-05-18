@@ -135,16 +135,32 @@ async function viewSupplier(id) {
             ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>`
             : '';
           const pctChange = prev ? (((latest - prev) / prev) * 100).toFixed(0) : null;
-          return `<div style="padding:10px 14px;border-bottom:1px solid var(--border)">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-              <div style="font-size:13px;font-weight:700;flex:1">${name}</div>
-              <div style="text-align:left;flex-shrink:0">
-                <div style="display:flex;align-items:center;gap:4px">
+          const safeId = name.replace(/[^a-zA-Z0-9]/g, '_');
+          return `
+          <div id="prod-row-${safeId}" style="border-bottom:1px solid var(--border)">
+            <!-- View mode -->
+            <div id="prod-view-${safeId}" style="display:grid;grid-template-columns:1fr 100px 36px;gap:6px;align-items:center;padding:10px 14px">
+              <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
+              <div style="text-align:left">
+                <div style="display:flex;align-items:center;gap:4px;justify-content:flex-start">
                   ${trendIcon}
-                  <span style="font-size:14px;font-weight:800">₪${parseFloat(latest).toFixed(2)}</span>
-                  ${pctChange && pctChange !== '0' ? `<span style="font-size:10px;color:${trend==='up'?'var(--error)':'var(--success)'}">${trend==='up'?'+':''}${pctChange}%</span>` : ''}
+                  <span style="font-size:14px;font-weight:800;white-space:nowrap">₪${parseFloat(latest).toFixed(2)}</span>
+                  ${pctChange && pctChange !== '0' ? `<span style="font-size:10px;color:${trend==='up'?'var(--error)':'var(--success)'};">${trend==='up'?'+':''}${pctChange}%</span>` : ''}
                 </div>
-                <div style="font-size:10px;color:var(--on-surface-3);text-align:left">${latestDate}${prev ? ` | קודם ₪${parseFloat(prev).toFixed(2)} (${prevDate})` : ''}</div>
+                <div style="font-size:10px;color:var(--on-surface-3)">${latestDate}${prev ? ` | ₪${parseFloat(prev).toFixed(2)} (${prevDate})` : ''}</div>
+              </div>
+              <button onclick="startEditProduct('${safeId}','${name.replace(/'/g,'\\\'') }',${parseFloat(latest).toFixed(2)})"
+                style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-2)">✏️</button>
+            </div>
+            <!-- Edit mode (hidden) -->
+            <div id="prod-edit-${safeId}" style="display:none;padding:10px 14px;background:var(--surface-low)">
+              <div style="display:flex;gap:6px;margin-bottom:8px">
+                <input class="input" id="prod-name-${safeId}" type="text" value="${name}" style="flex:2;font-size:13px;padding:6px 10px">
+                <input class="input" id="prod-price-${safeId}" type="number" step="0.01" value="${parseFloat(latest).toFixed(2)}" style="flex:1;font-size:13px;padding:6px 10px">
+              </div>
+              <div style="display:flex;gap:6px">
+                <button onclick="saveEditProduct('${safeId}','${name.replace(/'/g,'\\\'')}')" class="btn-primary" style="flex:1;font-size:12px;padding:7px">שמור</button>
+                <button onclick="cancelEditProduct('${safeId}')" class="btn-ghost" style="flex:1;font-size:12px;padding:7px">ביטול</button>
               </div>
             </div>
           </div>`;
@@ -384,6 +400,46 @@ function sendOrder(method) {
     window.location.href = `sms:${num}?body=${encodeURIComponent(msg)}`;
   }
   document.querySelector('[data-order-modal]')?.remove();
+}
+
+// ── Product price inline edit ─────────────────────────────────
+
+function startEditProduct(id, name, price) {
+  document.getElementById('prod-view-' + id).style.display = 'none';
+  document.getElementById('prod-edit-' + id).style.display = 'block';
+}
+
+function cancelEditProduct(id) {
+  document.getElementById('prod-view-' + id).style.display = 'grid';
+  document.getElementById('prod-edit-' + id).style.display = 'none';
+}
+
+async function saveEditProduct(id, oldName) {
+  const newName = document.getElementById('prod-name-' + id)?.value.trim();
+  const newPrice = parseFloat(document.getElementById('prod-price-' + id)?.value) || 0;
+  if (!newName) return;
+
+  const supName = currentSupplier?.name;
+  const btn = document.querySelector(`#prod-edit-${id} .btn-primary`);
+  if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
+
+  // Update all invoice_items for this supplier + product
+  if (newName !== oldName) {
+    await DB.update('invoice_items',
+      `?supplier_name=eq.${encodeURIComponent(supName)}&product_name=eq.${encodeURIComponent(oldName)}`,
+      { product_name: newName }
+    );
+  }
+  if (newPrice > 0) {
+    await DB.update('invoice_items',
+      `?supplier_name=eq.${encodeURIComponent(supName)}&product_name=eq.${encodeURIComponent(newName)}&order=date.desc&limit=1`,
+      { unit_price: newPrice }
+    );
+  }
+
+  showToast('מוצר עודכן');
+  // Reload supplier detail to reflect changes
+  await viewSupplier(currentSupplier.id);
 }
 
 function toggleInvDetail(i) {
