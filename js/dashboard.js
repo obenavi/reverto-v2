@@ -39,6 +39,9 @@ async function renderDashboard() {
   // Benchmark
   renderBenchmark();
 
+  // Payment forecast
+  renderPaymentForecast();
+
   // Recent invoices
   renderRecentInvoices(dashData.invoices.slice(0, 5));
 }
@@ -552,6 +555,143 @@ function showProModal() {
   modal.classList.add('pro-modal-wrap');
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
+}
+
+// ── Payment Forecast ──────────────────────────────────────────
+
+async function renderPaymentForecast() {
+  const el = document.getElementById('dash-payment-forecast');
+  if (!el) return;
+
+  // Load suppliers with payment terms
+  const suppliers = await DB.get('suppliers', '?select=name,payment_terms&is_active=neq.false') || [];
+  const termMap = Object.fromEntries(suppliers.map(s => [s.name, s.payment_terms || 'net30']));
+
+  if (!dashData.invoices.length || suppliers.length === 0) {
+    el.style.display = 'none'; return;
+  }
+  el.style.display = 'block';
+
+  const now = new Date();
+  const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const nextMonthEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+
+  // Calculate due dates for all invoices
+  const dueSoon = []; // due this month or overdue
+  const dueNext = []; // due next month
+
+  dashData.invoices.forEach(inv => {
+    if (!inv.date) return;
+    const terms = termMap[inv.supplier_name] || 'net30';
+    const amount = parseFloat(inv.total_amount || inv.total || 0);
+    if (!amount) return;
+    const dueDate = calcDueDate(inv.date, terms);
+    const entry = { supplier: inv.supplier_name, amount, dueDate, terms, invoice_number: inv.invoice_number };
+    if (dueDate <= thisMonthEnd) dueSoon.push(entry);
+    else if (dueDate <= nextMonthEnd) dueNext.push(entry);
+  });
+
+  const totalSoon = dueSoon.reduce((s, i) => s + i.amount, 0);
+  const totalNext = dueNext.reduce((s, i) => s + i.amount, 0);
+
+  // Group by supplier
+  const bySupSoon = {};
+  dueSoon.forEach(e => { bySupSoon[e.supplier] = (bySupSoon[e.supplier] || 0) + e.amount; });
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="section-title">תשלומים צפויים לספקים</div>
+      <button onclick="openPaymentDetail()" style="font-size:12px;color:var(--primary);background:none;border:none;cursor:pointer;font-weight:700;font-family:inherit">פירוט</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${Object.keys(bySupSoon).length ? '10px' : '0'}">
+      <div style="background:${totalSoon > 0 ? 'rgba(220,38,38,0.06)' : 'var(--surface-low)'};border-radius:var(--radius-md);padding:12px;border:1px solid ${totalSoon > 0 ? 'rgba(220,38,38,0.2)' : 'var(--border)'}">
+        <div style="font-size:11px;color:var(--on-surface-3);margin-bottom:4px">עד סוף החודש</div>
+        <div style="font-size:18px;font-weight:800;color:${totalSoon > 0 ? 'var(--error)' : 'var(--on-surface-3)'}">₪${Math.round(totalSoon).toLocaleString('he-IL')}</div>
+        <div style="font-size:10px;color:var(--on-surface-3)">${dueSoon.length} חשבוניות</div>
+      </div>
+      <div style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--on-surface-3);margin-bottom:4px">חודש הבא</div>
+        <div style="font-size:18px;font-weight:800;color:var(--on-surface)">₪${Math.round(totalNext).toLocaleString('he-IL')}</div>
+        <div style="font-size:10px;color:var(--on-surface-3)">${dueNext.length} חשבוניות</div>
+      </div>
+    </div>
+    ${Object.keys(bySupSoon).length ? `
+      <div style="font-size:11px;color:var(--on-surface-3);margin-bottom:4px;font-weight:700">לתשלום החודש לפי ספק:</div>
+      ${Object.entries(bySupSoon).sort((a,b) => b[1]-a[1]).slice(0,3).map(([name, amt]) => `
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <span style="color:var(--on-surface-2)">${name}</span>
+          <span style="font-weight:700;color:var(--error)">₪${Math.round(amt).toLocaleString('he-IL')}</span>
+        </div>`).join('')}
+    ` : ''}
+  `;
+}
+
+let _paymentData = { dueSoon: [], dueNext: [] };
+
+function openPaymentDetail() {
+  // Rebuild data
+  // Simple modal showing all upcoming payments
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.setAttribute('data-pay-modal', '');
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column">
+      <div style="padding:20px 20px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div style="font-size:18px;font-weight:800">תשלומים לספקים</div>
+        <button onclick="this.closest('[data-pay-modal]').remove()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--on-surface-3);padding:0;line-height:1">×</button>
+      </div>
+      <div id="pay-detail-content" style="overflow-y:auto;flex:1;padding:0 20px 24px">
+        <div style="text-align:center;padding:20px;color:var(--on-surface-3)">טוען...</div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  loadPaymentDetail();
+}
+
+async function loadPaymentDetail() {
+  const el = document.getElementById('pay-detail-content');
+  if (!el) return;
+  const suppliers = await DB.get('suppliers', '?select=name,payment_terms') || [];
+  const termMap = Object.fromEntries(suppliers.map(s => [s.name, s.payment_terms || 'net30']));
+  const now = new Date();
+  const periods = [
+    { label: 'פיגורים וחודש נוכחי', end: new Date(now.getFullYear(), now.getMonth() + 1, 0), color: 'var(--error)' },
+    { label: 'חודש הבא', end: new Date(now.getFullYear(), now.getMonth() + 2, 0), color: '#D97706' },
+    { label: 'חודש שלישי', end: new Date(now.getFullYear(), now.getMonth() + 3, 0), color: 'var(--on-surface-2)' }
+  ];
+  const buckets = periods.map(() => []);
+  dashData.invoices.forEach(inv => {
+    if (!inv.date) return;
+    const terms = termMap[inv.supplier_name] || 'net30';
+    const amount = parseFloat(inv.total_amount || inv.total || 0);
+    if (!amount) return;
+    const due = calcDueDate(inv.date, terms);
+    for (let i = 0; i < periods.length; i++) {
+      const prevEnd = i === 0 ? new Date(0) : periods[i-1].end;
+      if (due > prevEnd && due <= periods[i].end) { buckets[i].push({ ...inv, due, terms, amount }); break; }
+    }
+  });
+  el.innerHTML = periods.map((p, i) => {
+    const items = buckets[i];
+    if (!items.length) return '';
+    const total = items.reduce((s, x) => s + x.amount, 0);
+    return `
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:800;color:${p.color}">${p.label}</div>
+          <div style="font-size:14px;font-weight:800;color:${p.color}">₪${Math.round(total).toLocaleString('he-IL')}</div>
+        </div>
+        ${items.map(inv => `
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700">${inv.supplier_name}</div>
+              <div style="font-size:11px;color:var(--on-surface-3)">${PAYMENT_TERMS_LABELS[inv.terms] || inv.terms} · פירעון ${inv.due.toLocaleDateString('he-IL', {day:'numeric',month:'short'})}</div>
+            </div>
+            <div style="font-size:14px;font-weight:800;color:${p.color}">₪${Math.round(inv.amount).toLocaleString('he-IL')}</div>
+          </div>`).join('')}
+      </div>`;
+  }).join('') || '<div style="text-align:center;padding:20px;color:var(--on-surface-3)">אין תשלומים ידועים</div>';
 }
 
 // ── Invoice List Modal ────────────────────────────────────────

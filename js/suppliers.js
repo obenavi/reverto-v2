@@ -193,6 +193,28 @@ async function viewSupplier(id) {
         }).join('') || '<div class="empty-state"><div class="empty-state-title">אין חשבוניות</div></div>'}
       </div>
 
+      <!-- Payment Terms -->
+      <div class="section-title mb-8">הסדר תשלומים</div>
+      <div class="card card-pad mb-12">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="payment-terms-btns">
+          ${[
+            ['cash_delivery','מזומן בקבלת סחורה','#059669'],
+            ['cash_eom','מזומן סוף חודש','#0891B2'],
+            ['net30','שוטף+30','#7C3AED'],
+            ['net60','שוטף+60','#D97706'],
+            ['net90','שוטף+90','#DC2626']
+          ].map(([val, label, color]) => {
+            const isActive = (sup.payment_terms || 'net30') === val;
+            return `<button onclick="setPaymentTerms('${sup.id}','${val}')"
+              style="padding:6px 12px;border-radius:20px;border:2px solid ${color};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:${isActive ? color : 'transparent'};color:${isActive ? 'white' : color};transition:all 0.15s"
+              id="pt-${val}">${label}</button>`;
+          }).join('')}
+        </div>
+        ${sup.payment_terms ? `<div style="font-size:12px;color:var(--on-surface-3)">
+          תשלום על חשבוניות החודש: <strong>${paymentDueDateLabel(sup.payment_terms)}</strong>
+        </div>` : ''}
+      </div>
+
       <!-- Phone / Contact -->
       <div class="section-title mb-8">פרטי קשר</div>
       <div class="card card-pad mb-12">
@@ -400,6 +422,62 @@ function sendOrder(method) {
     window.location.href = `sms:${num}?body=${encodeURIComponent(msg)}`;
   }
   document.querySelector('[data-order-modal]')?.remove();
+}
+
+// ── Payment terms ─────────────────────────────────────────────
+
+const PAYMENT_TERMS_LABELS = {
+  cash_delivery: 'מזומן בקבלת סחורה',
+  cash_eom: 'מזומן סוף חודש',
+  net30: 'שוטף+30',
+  net60: 'שוטף+60',
+  net90: 'שוטף+90'
+};
+
+function paymentDueDateLabel(terms) {
+  const now = new Date();
+  const eom = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+  const fmt = d => d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long' });
+  switch (terms) {
+    case 'cash_delivery': return 'בקבלת הסחורה';
+    case 'cash_eom': return fmt(eom);
+    case 'net30': return fmt(addDays(eom, 30));
+    case 'net60': return fmt(addDays(eom, 60));
+    case 'net90': return fmt(addDays(eom, 90));
+    default: return fmt(addDays(eom, 30));
+  }
+}
+
+function calcDueDate(invoiceDate, terms) {
+  const d = new Date(invoiceDate + 'T00:00:00');
+  const eom = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  const add = (base, n) => { const r = new Date(base); r.setDate(r.getDate() + n); return r; };
+  switch (terms) {
+    case 'cash_delivery': return d;
+    case 'cash_eom': return eom;
+    case 'net30': return add(eom, 30);
+    case 'net60': return add(eom, 60);
+    case 'net90': return add(eom, 90);
+    default: return add(eom, 30);
+  }
+}
+
+async function setPaymentTerms(supId, terms) {
+  await DB.update('suppliers', `?id=eq.${supId}`, { payment_terms: terms });
+  // Update UI buttons
+  ['cash_delivery','cash_eom','net30','net60','net90'].forEach(v => {
+    const btn = document.getElementById('pt-' + v);
+    if (!btn) return;
+    const colors = { cash_delivery:'#059669', cash_eom:'#0891B2', net30:'#7C3AED', net60:'#D97706', net90:'#DC2626' };
+    const c = colors[v];
+    btn.style.background = v === terms ? c : 'transparent';
+    btn.style.color = v === terms ? 'white' : c;
+  });
+  if (currentSupplier) currentSupplier.payment_terms = terms;
+  const sup = allSuppliers.find(s => s.id === supId);
+  if (sup) sup.payment_terms = terms;
+  showToast('הסדר תשלומים עודכן');
 }
 
 // ── Product price inline edit ─────────────────────────────────

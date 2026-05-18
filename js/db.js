@@ -90,6 +90,28 @@ const Auth = {
   }
 };
 
+// ── Payment terms ─────────────────────────────────────────────
+const PAYMENT_TERMS_LABELS = {
+  cash_delivery: 'מזומן בקבלת סחורה',
+  cash_eom: 'מזומן סוף חודש',
+  net30: 'שוטף+30', net60: 'שוטף+60', net90: 'שוטף+90'
+};
+
+function calcDueDate(invoiceDate, terms) {
+  const d = new Date((invoiceDate || '').slice(0,10) + 'T00:00:00');
+  if (isNaN(d)) return new Date();
+  const eom = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  const add = (n) => { const r = new Date(eom); r.setDate(r.getDate() + n); return r; };
+  switch (terms) {
+    case 'cash_delivery': return d;
+    case 'cash_eom': return eom;
+    case 'net30': return add(30);
+    case 'net60': return add(60);
+    case 'net90': return add(90);
+    default: return add(30);
+  }
+}
+
 // ── WhatsApp ──────────────────────────────────────────────────
 function formatWANumber(phone) {
   const digits = (phone || '').replace(/\D/g, '');

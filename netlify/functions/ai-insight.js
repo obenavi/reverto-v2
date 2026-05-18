@@ -111,6 +111,27 @@ ${saving5 ? 'פוטנציאל חיסכון אם מנהל משא ומתן עם ' 
 (1) הערך את סיכון הריכוז בספק ${top?.name || 'המוביל'} ומה יקרה לעסק אם הספק יעלה מחיר ב-15%? (2) האם קיימים ספקים אלטרנטיביים בישראל לאותן קטגוריות — ומה טווח החיסכון? (3) תן טקטיקת משא ומתן אחת ספציפית שעובדת טוב עם ספקי ${d.category?.includes('בר') ? 'אלכוהול ומשקאות' : 'מזון'} בישראל.`;
   },
 
+  payment_strategy: (d) => {
+    const bench = fcBenchmark(d.category);
+    const fc = parseFloat(d.food_cost_pct) || 0;
+    const rev = d.monthly_revenue || 0;
+    const pur = d.monthly_purchases || 0;
+    const revTrend = d.change_vs_last_month;
+    const dueSoon = d.payment_due_soon || 0;
+    const supplierTerms = d.supplier_terms || [];
+
+    return `עסק: ${d.category || ''}${d.city ? ' ב' + d.city : ''}
+מחזור: ₪${fmt(rev)} | רכש: ₪${fmt(pur)} | FC: ${fc > 0 ? fc.toFixed(1) + '%' : 'לא ידוע'} | מגמת מחזור: ${revTrend}
+תשלומים צפויים החודש: ₪${fmt(dueSoon)}
+הסדרי תשלומים נוכחיים: ${supplierTerms.map(s => s.name + ': ' + (s.terms || 'שוטף+30')).join(' | ') || 'לא הוזנו'}
+
+אתה יועץ פיננסי בכיר. נתח את תזרים המזומנים ותמחור האשראי הספק:
+(1) לפי מגמת המחזור (${revTrend}) ו-FC (${fc > 0 ? fc.toFixed(1) + '%' : 'לא ידוע'}), האם מצב הנזילות של העסק הולך ומשתפר או מחמיר? הסבר עם מספרים.
+(2) לכל ספק בעל הסדר גרוע ביחס לביצועים: המלץ לשנות — ולמה זה שווה ₪ בפועל (הנחת מזומן 2-3% × רכש שנתי).
+(3) אם המצב קשה: אילו ספקים כדאי לבקש מהם שוטף+90 ומה הטקטיקה? אם המצב טוב: מי כדאי לשלם מוקדם בתמורה להנחה?
+(4) חשב: מעבר ספק אחד ל-90 יום מוסיף ₪X לתזרים — כמה זה שווה בריבית בנק שנתית?`;
+  },
+
   overview: (d) => {
     const bench = fcBenchmark(d.category);
     const fc = parseFloat(d.food_cost_pct) || 0;
