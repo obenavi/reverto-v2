@@ -106,25 +106,49 @@
     <div class="logo-sub">ניהול רכש חכם למסעדות</div>
 
     <div class="login-card">
-      <div class="login-title">כניסה למערכת</div>
-      <div class="login-desc">הכנס את קוד הגישה שקיבלת מ-Reverto</div>
+      <!-- Tabs -->
+      <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--border)">
+        <button id="tab-password" onclick="switchTab('password')"
+          style="flex:1;background:none;border:none;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--primary);border-bottom:2px solid var(--primary);margin-bottom:-2px">
+          מייל + סיסמה
+        </button>
+        <button id="tab-code" onclick="switchTab('code')"
+          style="flex:1;background:none;border:none;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-3);border-bottom:2px solid transparent;margin-bottom:-2px">
+          קוד גישה
+        </button>
+      </div>
 
-      <label class="input-label">קוד גישה</label>
-      <div class="input-wrap">
-        <input class="input" id="access-code" type="text" placeholder="XXXXXX"
-          style="letter-spacing:2px;font-weight:700;text-transform:uppercase"
+      <!-- Email + Password tab -->
+      <div id="panel-password">
+        <label class="input-label">כתובת מייל</label>
+        <input class="input mb-12" id="login-email" type="email" placeholder="email@example.com"
+          onkeydown="if(event.key==='Enter')tryLoginPassword()">
+        <label class="input-label">סיסמה</label>
+        <input class="input" id="login-password" type="password" placeholder="הסיסמה שבחרת"
+          onkeydown="if(event.key==='Enter')tryLoginPassword()">
+        <button class="btn-primary mt-12" onclick="tryLoginPassword()" id="login-pwd-btn">כניסה</button>
+        <div class="error-msg" id="error-pwd-msg">מייל או סיסמה שגויים</div>
+        <div style="text-align:center;margin-top:12px">
+          <span onclick="showForgotPassword()" style="font-size:12px;color:var(--on-surface-3);cursor:pointer;text-decoration:underline">שכחתי סיסמה</span>
+        </div>
+      </div>
+
+      <!-- Code tab (PILOT + RV- legacy) -->
+      <div id="panel-code" style="display:none">
+        <label class="input-label">קוד גישה</label>
+        <input class="input" id="access-code" type="text" placeholder="PILOT-001 / RV-XXXXXX / REVERTO03"
+          style="letter-spacing:1px;font-weight:700;text-transform:uppercase"
           oninput="this.value=this.value.toUpperCase()"
           onkeydown="if(event.key==='Enter')tryLogin()">
+        <button class="btn-primary mt-12" onclick="tryLogin()" id="login-btn">כניסה</button>
+        <div class="error-msg" id="error-msg">קוד גישה שגוי. נסה שוב.</div>
+        <div style="text-align:center;margin-top:12px">
+          <span onclick="showForgotCode()" style="font-size:12px;color:var(--on-surface-3);cursor:pointer;text-decoration:underline">שכחתי את הקוד האישי שלי</span>
+        </div>
       </div>
 
-      <button class="btn-primary mt-12" onclick="tryLogin()" id="login-btn">כניסה</button>
-      <div class="error-msg" id="error-msg">קוד גישה שגוי. נסה שוב.</div>
-
-      <div class="divider">— אין לך קוד עדיין? —</div>
+      <div class="divider">— אין לך חשבון עדיין? —</div>
       <div class="waitlist-link" onclick="showWaitlist()">הצטרף לרשימת המתנה</div>
-      <div style="text-align:center;margin-top:12px">
-        <span onclick="showForgotCode()" style="font-size:12px;color:var(--on-surface-3);cursor:pointer;text-decoration:underline">שכחתי את הקוד האישי שלי</span>
-      </div>
     </div>
   </div>
 
@@ -198,6 +222,55 @@
         btn.textContent = 'כניסה';
         btn.disabled = false;
       }
+    }
+
+    function switchTab(tab) {
+      document.getElementById('panel-password').style.display = tab === 'password' ? 'block' : 'none';
+      document.getElementById('panel-code').style.display = tab === 'code' ? 'block' : 'none';
+      document.getElementById('tab-password').style.color = tab === 'password' ? 'var(--primary)' : 'var(--on-surface-3)';
+      document.getElementById('tab-password').style.borderBottomColor = tab === 'password' ? 'var(--primary)' : 'transparent';
+      document.getElementById('tab-code').style.color = tab === 'code' ? 'var(--primary)' : 'var(--on-surface-3)';
+      document.getElementById('tab-code').style.borderBottomColor = tab === 'code' ? 'var(--primary)' : 'transparent';
+    }
+
+    async function tryLoginPassword() {
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      if (!email || !password) return;
+      const btn = document.getElementById('login-pwd-btn');
+      const err = document.getElementById('error-pwd-msg');
+      btn.textContent = '...נכנס'; btn.disabled = true; err.style.display = 'none';
+      try {
+        const res = await fetch('/.netlify/functions/login-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const _s = (k,v) => { sessionStorage.setItem(k,v); localStorage.setItem(k,v); };
+          _s('rv_token', email);
+          _s('rv_jwt', data.jwt);
+          _s('rv_user', JSON.stringify(data.user));
+          window.location.href = '/app.html';
+        } else {
+          if (data.error === 'use_code') {
+            err.textContent = 'משתמש זה נכנס עם קוד — עבור ל"קוד גישה"';
+          } else {
+            err.textContent = 'מייל או סיסמה שגויים';
+          }
+          err.style.display = 'block';
+          btn.textContent = 'כניסה'; btn.disabled = false;
+        }
+      } catch(e) {
+        err.textContent = 'שגיאת חיבור'; err.style.display = 'block';
+        btn.textContent = 'כניסה'; btn.disabled = false;
+      }
+    }
+
+    function showForgotPassword() {
+      document.getElementById('forgot-modal').style.display = 'flex';
+      document.getElementById('forgot-modal').querySelector('div:first-child div').textContent = 'שכחתי סיסמה';
     }
 
     function showForgotCode() {

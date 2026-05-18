@@ -1,5 +1,15 @@
 const crypto = require('crypto');
 
+function hashPassword(password) {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    crypto.scrypt(password, salt, 64, (err, hash) => {
+      if (err) reject(err);
+      else resolve(`${salt}:${hash.toString('hex')}`);
+    });
+  });
+}
+
 function codeEmailHtml(businessName, personalCode, siteUrl) {
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px">
@@ -62,7 +72,7 @@ exports.handler = async (event) => {
   try { parsed = JSON.parse(event.body || '{}'); }
   catch { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
 
-  const { signup_code, profile } = parsed;
+  const { signup_code, profile, password } = parsed;
   if (!signup_code || !profile) return { statusCode: 400, body: JSON.stringify({ error: 'Missing data' }) };
 
   const codeUpper = signup_code.trim().toUpperCase();
@@ -129,6 +139,14 @@ exports.handler = async (event) => {
     const proUntil = new Date();
     proUntil.setMonth(proUntil.getMonth() + duration_months);
 
+    // Hash password if provided
+    let passwordHash = null;
+    let authType = 'code';
+    if (password && password.length >= 10) {
+      passwordHash = await hashPassword(password);
+      authType = 'password';
+    }
+
     // Create user
     const ur = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
       method: 'POST',
@@ -136,6 +154,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         ...profile,
         personal_code,
+        password_hash: passwordHash,
+        auth_type: authType,
         plan: 'pro',
         pro_until: proUntil.toISOString(),
         onboarding_done: true,
