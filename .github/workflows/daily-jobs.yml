@@ -31,3 +31,21 @@ jobs:
             -H "Content-Type: application/json" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             "${{ secrets.NETLIFY_URL }}/.netlify/functions/aggregate-community"
+
+  monthly-summary-email:
+    name: Monthly Summary Email (last day of month)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if last day of month
+        id: check
+        run: |
+          today=$(date +%d)
+          last=$(cal $(date +%m) $(date +%Y) | awk 'NF{f=$NF} END{print f}')
+          if [ "$today" = "$last" ]; then echo "is_last=true" >> $GITHUB_OUTPUT; fi
+      - name: Trigger monthly summary
+        if: steps.check.outputs.is_last == 'true'
+        run: |
+          curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.NETLIFY_URL }}/.netlify/functions/monthly-summary"

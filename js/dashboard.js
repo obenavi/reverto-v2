@@ -39,6 +39,9 @@ async function renderDashboard() {
   // Benchmark
   renderBenchmark();
 
+  // Pending deliveries notification
+  renderPendingDeliveries();
+
   // Payment forecast
   renderPaymentForecast();
 
@@ -557,6 +560,347 @@ function showProModal() {
   document.body.appendChild(modal);
 }
 
+// ── Pending Deliveries ────────────────────────────────────────
+
+function renderPendingDeliveries() {
+  const el = document.getElementById('dash-pending-deliveries');
+  if (!el) return;
+  const pending = (dashData.invoices || []).filter(i => i.delivery_status === 'pending');
+  if (!pending.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="openPendingModal()">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;background:rgba(217,119,6,0.12);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📦</div>
+        <div>
+          <div style="font-size:14px;font-weight:800">${pending.length} חשבוניות ממתינות לאישור קבלה</div>
+          <div style="font-size:12px;color:var(--on-surface-3)">בדוק כמויות שהגיעו ורשום זיכויים</div>
+        </div>
+      </div>
+      <div style="background:#D97706;color:white;border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;flex-shrink:0">סגור עכשיו</div>
+    </div>`;
+}
+
+function openPendingModal() {
+  const pending = (dashData.invoices || []).filter(i => i.delivery_status === 'pending')
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.setAttribute('data-pending-modal', '');
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column">
+      <div style="padding:20px 20px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div>
+          <div style="font-size:18px;font-weight:800">📦 קבלת סחורה</div>
+          <div style="font-size:12px;color:var(--on-surface-3)">בחר חשבונית לאישור</div>
+        </div>
+        <button onclick="this.closest('[data-pending-modal]').remove()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--on-surface-3);padding:0;line-height:1">×</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;padding:0 20px 24px">
+        ${pending.map(inv => `
+          <div onclick="openDeliveryClose('${inv.id}')" class="card-tap" style="cursor:pointer;padding:12px 14px;border-radius:var(--radius-md);border:1px solid var(--border);margin-bottom:8px;background:var(--surface-card)">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-size:14px;font-weight:700">${inv.supplier_name || '—'}</div>
+                <div style="font-size:11px;color:var(--on-surface-3)">${inv.date ? new Date(inv.date+'T00:00:00').toLocaleDateString('he-IL',{day:'numeric',month:'short'}) : '—'} · ${inv.invoice_number || ''}</div>
+              </div>
+              <div style="text-align:left">
+                <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${parseFloat(inv.total_amount||inv.total||0).toLocaleString('he-IL',{maximumFractionDigits:0})}</div>
+                <div style="font-size:10px;font-weight:700;color:#D97706">ממתינה ←</div>
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function openDeliveryClose(invoiceId) {
+  document.querySelector('[data-pending-modal]')?.remove();
+  const inv = (dashData.invoices || []).find(i => i.id === invoiceId);
+  if (!inv) return;
+
+  let items = [];
+  try { items = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []); } catch {}
+
+  // Load existing adjustments if any
+  const existingAdj = inv.adjustments || [];
+  const adjMap = Object.fromEntries(existingAdj.map(a => [a.product_name, a]));
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:white;z-index:9999;overflow-y:auto;display:flex;flex-direction:column';
+  modal.setAttribute('data-delivery-modal', '');
+  modal.innerHTML = `
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;position:sticky;top:0;background:white;z-index:1">
+      <button onclick="this.closest('[data-delivery-modal]').remove()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--on-surface-3);padding:0;line-height:1">←</button>
+      <div>
+        <div style="font-size:16px;font-weight:800">אישור קבלת סחורה</div>
+        <div style="font-size:12px;color:var(--on-surface-3)">${inv.supplier_name} · ₪${parseFloat(inv.total_amount||inv.total||0).toLocaleString('he-IL',{maximumFractionDigits:0})}</div>
+      </div>
+    </div>
+    <div style="padding:16px 20px;flex:1">
+      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:12px">ערוך כמויות שהתקבלו בפועל. כמות שלא הגיעה תחושב כזיכוי.</div>
+
+      <div style="display:grid;grid-template-columns:2fr 60px 60px 70px;gap:4px;padding:6px 10px;background:var(--surface-low);border-radius:var(--radius-md) var(--radius-md) 0 0;font-size:10px;font-weight:700;color:var(--on-surface-3)">
+        <div>מוצר</div><div style="text-align:center">הוזמן</div><div style="text-align:center">התקבל</div><div style="text-align:center">זוכה ₪</div>
+      </div>
+      <div class="card" style="border-radius:0 0 var(--radius-md) var(--radius-md);margin-bottom:16px">
+        ${items.length ? items.map((item, i) => {
+          const adj = adjMap[item.product_name] || {};
+          const received = adj.received_qty !== undefined ? adj.received_qty : (item.quantity || 1);
+          const credit = adj.credit_amount || 0;
+          return `<div style="display:grid;grid-template-columns:2fr 60px 60px 70px;gap:4px;padding:8px 10px;border-bottom:1px solid var(--border);align-items:center">
+            <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.product_name}</div>
+            <div style="text-align:center;font-size:12px;color:var(--on-surface-3)">${item.quantity||1}</div>
+            <input type="number" step="0.1" min="0" id="recv-${i}" value="${received}"
+              style="border:1px solid var(--border);border-radius:6px;padding:4px;font-size:12px;text-align:center;width:100%"
+              oninput="calcDeliveryCredit(${i},${item.quantity||1},${parseFloat(item.unit_price||0)})">
+            <div id="credit-${i}" style="text-align:center;font-size:11px;font-weight:700;color:${credit > 0 ? 'var(--success)' : 'var(--on-surface-3)'}">
+              ${credit > 0 ? '₪' + credit.toFixed(2) : '—'}
+            </div>
+          </div>`;
+        }).join('') : '<div style="padding:16px;text-align:center;color:var(--on-surface-3);font-size:13px">אין פריטים מפורטים</div>'}
+      </div>
+
+      <div id="delivery-total" style="font-size:14px;font-weight:700;text-align:center;margin-bottom:16px;color:var(--on-surface-3)">זיכוי כולל: ₪0</div>
+
+      <label class="field-label">הערות (אופציונלי)</label>
+      <textarea class="input mb-16" id="delivery-notes" rows="2" style="resize:none" placeholder="מוצרים חסרים, בעיות איכות...">${existingAdj[0]?.notes || ''}</textarea>
+
+      <button onclick="saveDeliveryClose('${invoiceId}')" class="btn-primary mb-8">✅ סגור קבלת סחורה</button>
+      <button onclick="this.closest('[data-delivery-modal]').remove()" class="btn-ghost">המשך מאוחר יותר</button>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+
+  // Store items for calculation
+  modal._items = items;
+  modal._inv = inv;
+  recalcAllDeliveryCredits(items);
+}
+
+function calcDeliveryCredit(i, orderedQty, unitPrice) {
+  const received = parseFloat(document.getElementById('recv-' + i)?.value) || 0;
+  const shortage = Math.max(0, orderedQty - received);
+  const credit = shortage * unitPrice;
+  const el = document.getElementById('credit-' + i);
+  if (el) {
+    el.textContent = credit > 0 ? '₪' + credit.toFixed(2) : '—';
+    el.style.color = credit > 0 ? 'var(--success)' : 'var(--on-surface-3)';
+  }
+  recalcDeliveryTotal();
+}
+
+function recalcAllDeliveryCredits(items) {
+  let total = 0;
+  items.forEach((item, i) => {
+    const received = parseFloat(document.getElementById('recv-' + i)?.value) || 0;
+    const shortage = Math.max(0, (item.quantity || 1) - received);
+    const credit = shortage * parseFloat(item.unit_price || 0);
+    total += credit;
+  });
+  const el = document.getElementById('delivery-total');
+  if (el) el.textContent = `זיכוי כולל: ₪${total.toFixed(2)}`;
+  return total;
+}
+
+function recalcDeliveryTotal() {
+  const modal = document.querySelector('[data-delivery-modal]');
+  if (!modal?._items) return;
+  recalcAllDeliveryCredits(modal._items);
+}
+
+async function saveDeliveryClose(invoiceId) {
+  const modal = document.querySelector('[data-delivery-modal]');
+  const inv = (dashData.invoices || []).find(i => i.id === invoiceId);
+  if (!inv) return;
+
+  let items = [];
+  try { items = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []); } catch {}
+
+  const notes = document.getElementById('delivery-notes')?.value || '';
+  const adjustments = items.map((item, i) => {
+    const received = parseFloat(document.getElementById('recv-' + i)?.value) || item.quantity || 1;
+    const shortage = Math.max(0, (item.quantity || 1) - received);
+    const credit = shortage * parseFloat(item.unit_price || 0);
+    return {
+      product_name: item.product_name,
+      ordered_qty: item.quantity || 1,
+      received_qty: received,
+      shortage_qty: shortage,
+      credit_amount: parseFloat(credit.toFixed(2)),
+      unit_price: item.unit_price || 0
+    };
+  });
+
+  if (notes) adjustments[0] = { ...adjustments[0], notes };
+
+  const totalCredit = adjustments.reduce((s, a) => s + a.credit_amount, 0);
+
+  await DB.update('invoices', `?id=eq.${invoiceId}`, {
+    delivery_status: 'closed',
+    delivery_closed_at: new Date().toISOString(),
+    adjustments: JSON.stringify(adjustments)
+  });
+
+  // Update local data
+  const localInv = dashData.invoices.find(i => i.id === invoiceId);
+  if (localInv) { localInv.delivery_status = 'closed'; localInv.adjustments = adjustments; }
+
+  modal?.remove();
+  showToast(totalCredit > 0 ? `קבלה נסגרה · זיכוי צפוי: ₪${totalCredit.toFixed(2)}` : 'קבלה נסגרה ✓');
+  renderPendingDeliveries();
+}
+
+// ── Month-End Summary ─────────────────────────────────────────
+
+async function openMonthSummary() {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.setAttribute('data-month-modal', '');
+  const now = new Date();
+  const monthName = now.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:90vh;display:flex;flex-direction:column">
+      <div style="padding:20px 20px 10px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div>
+          <div style="font-size:18px;font-weight:800">דוח חודשי — ${monthName}</div>
+          <div style="font-size:12px;color:var(--on-surface-3)">חשבוניות · זיכויים · שינויי מחירים</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button onclick="exportMonthlySummary()" class="btn-ghost" style="font-size:12px;padding:6px 12px">⬇ Excel</button>
+          <button onclick="this.closest('[data-month-modal]').remove()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--on-surface-3);padding:0;line-height:1">×</button>
+        </div>
+      </div>
+      <div id="month-summary-content" style="overflow-y:auto;flex:1;padding:0 20px 24px">
+        <div style="text-align:center;padding:24px;color:var(--on-surface-3)">בונה דוח...</div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  buildMonthlySummary();
+}
+
+async function buildMonthlySummary() {
+  const el = document.getElementById('month-summary-content');
+  if (!el) return;
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+  const invoices = (dashData.invoices || []).filter(i => i.date >= monthStart);
+
+  if (!invoices.length) {
+    el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--on-surface-3)">אין חשבוניות החודש</div>';
+    return;
+  }
+
+  // Per supplier summary
+  const supMap = {};
+  invoices.forEach(inv => {
+    const name = inv.supplier_name || '—';
+    if (!supMap[name]) supMap[name] = { invoices: 0, total: 0, credit: 0, open: 0 };
+    supMap[name].invoices++;
+    supMap[name].total += parseFloat(inv.total_amount || inv.total || 0);
+    if (inv.delivery_status === 'pending') supMap[name].open++;
+    const adj = inv.adjustments ? (typeof inv.adjustments === 'string' ? JSON.parse(inv.adjustments) : inv.adjustments) : [];
+    supMap[name].credit += adj.reduce((s, a) => s + (a.credit_amount || 0), 0);
+  });
+
+  // Price changes
+  const priceChanges = [];
+  const prodPrices = {};
+  invoices.forEach(inv => {
+    let items = [];
+    try { items = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []); } catch {}
+    items.forEach(item => {
+      if (!item.product_name || !item.unit_price) return;
+      if (!prodPrices[item.product_name]) prodPrices[item.product_name] = [];
+      prodPrices[item.product_name].push({ price: parseFloat(item.unit_price), date: inv.date, supplier: inv.supplier_name });
+    });
+  });
+  Object.entries(prodPrices).forEach(([name, entries]) => {
+    if (entries.length < 2) return;
+    entries.sort((a,b) => a.date.localeCompare(b.date));
+    const first = entries[0].price, last = entries[entries.length-1].price;
+    const pct = ((last - first) / first * 100);
+    if (Math.abs(pct) >= 5) priceChanges.push({ name, first, last, pct: pct.toFixed(0), supplier: entries[entries.length-1].supplier });
+  });
+  priceChanges.sort((a,b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+  const totalInvoiced = Object.values(supMap).reduce((s,v) => s + v.total, 0);
+  const totalCredit = Object.values(supMap).reduce((s,v) => s + v.credit, 0);
+
+  el.innerHTML = `
+    <!-- Totals -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      <div style="background:var(--surface-low);border-radius:var(--radius-md);padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--on-surface-3)">סה"כ חשבוניות</div>
+        <div style="font-size:16px;font-weight:800">₪${Math.round(totalInvoiced).toLocaleString('he-IL')}</div>
+      </div>
+      <div style="background:rgba(34,197,94,0.08);border-radius:var(--radius-md);padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--on-surface-3)">זיכויים צפויים</div>
+        <div style="font-size:16px;font-weight:800;color:var(--success)">₪${totalCredit.toFixed(0)}</div>
+      </div>
+      <div style="background:var(--surface-low);border-radius:var(--radius-md);padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--on-surface-3)">נטו לתשלום</div>
+        <div style="font-size:16px;font-weight:800;color:var(--primary)">₪${Math.round(totalInvoiced - totalCredit).toLocaleString('he-IL')}</div>
+      </div>
+    </div>
+
+    <!-- Per supplier -->
+    <div style="font-size:13px;font-weight:800;margin-bottom:8px">לפי ספק</div>
+    <div class="card mb-12">
+      ${Object.entries(supMap).sort((a,b) => b[1].total - a[1].total).map(([name, s]) => `
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <div style="font-size:13px;font-weight:700">${name}</div>
+            <div style="font-size:13px;font-weight:800">₪${Math.round(s.total).toLocaleString('he-IL')}</div>
+          </div>
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--on-surface-3)">
+            <span>${s.invoices} חשבוניות</span>
+            ${s.credit > 0 ? `<span style="color:var(--success)">זיכוי: ₪${s.credit.toFixed(0)}</span>` : ''}
+            ${s.open > 0 ? `<span style="color:#D97706">⚠️ ${s.open} פתוחות</span>` : ''}
+            <span style="font-weight:700">נטו: ₪${Math.round(s.total - s.credit).toLocaleString('he-IL')}</span>
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Price changes -->
+    ${priceChanges.length ? `
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px">שינויי מחירים משמעותיים החודש</div>
+      <div class="card mb-12">
+        ${priceChanges.slice(0,10).map(p => `
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-size:12px;font-weight:700">${p.name}</div>
+              <div style="font-size:10px;color:var(--on-surface-3)">${p.supplier}</div>
+            </div>
+            <div style="font-size:11px;color:var(--on-surface-3)">₪${p.first.toFixed(2)} → ₪${p.last.toFixed(2)}</div>
+            <div style="font-size:12px;font-weight:800;color:${parseFloat(p.pct) > 0 ? 'var(--error)' : 'var(--success)'}">${parseFloat(p.pct) > 0 ? '+' : ''}${p.pct}%</div>
+          </div>`).join('')}
+      </div>` : ''}
+  `;
+}
+
+function exportMonthlySummary() {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+  const invoices = (dashData.invoices || []).filter(i => i.date >= monthStart);
+  const rows = invoices.map(inv => {
+    const adj = inv.adjustments ? (typeof inv.adjustments === 'string' ? JSON.parse(inv.adjustments) : inv.adjustments) : [];
+    const credit = adj.reduce((s,a) => s + (a.credit_amount||0), 0);
+    return [inv.date, inv.supplier_name, inv.invoice_number, parseFloat(inv.total_amount||inv.total||0).toFixed(2), credit.toFixed(2), (parseFloat(inv.total_amount||inv.total||0) - credit).toFixed(2), inv.delivery_status === 'closed' ? 'סגור' : 'פתוח'];
+  });
+  const headers = ['תאריך','ספק','מספר חשבונית','סכום','זיכוי','נטו','סטטוס'];
+  const csv = '﻿' + [headers, ...rows].map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `reverto-דוח-${now.toISOString().slice(0,7)}.csv`;
+  a.click();
+}
+
 // ── Payment Forecast ──────────────────────────────────────────
 
 async function renderPaymentForecast() {
@@ -709,6 +1053,9 @@ function openInvoiceList() {
         <div>
           <div style="font-size:18px;font-weight:800">רכש</div>
           <div style="font-size:13px;color:var(--on-surface-3)">${all.length} חשבוניות · ₪${Math.round(total).toLocaleString('he-IL')} סה"כ</div>
+        </div>
+        <button onclick="openMonthSummary()" style="background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-md);padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--primary);flex-shrink:0">📋 דוח חודשי</button>
+        <div style="display:none">
         </div>
         <button onclick="this.closest('[data-inv-list]').remove()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--on-surface-3);padding:0;line-height:1">×</button>
       </div>
