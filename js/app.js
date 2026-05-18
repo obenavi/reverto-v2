@@ -376,10 +376,48 @@ async function exportData(type, btn) {
   finally { if (btn) { btn.textContent = orig; btn.disabled = false; } }
 }
 
+let _profileKosher = false;
+let _profileWorkDays = new Set(['א','ב','ג','ד','ה']);
+
+function toggleWorkDay(d) {
+  if (_profileWorkDays.has(d)) _profileWorkDays.delete(d);
+  else _profileWorkDays.add(d);
+  renderWorkDays();
+}
+function renderWorkDays() {
+  ['א','ב','ג','ד','ה','ו','ש'].forEach(d => {
+    const btn = document.getElementById('wd-' + d);
+    if (!btn) return;
+    const on = _profileWorkDays.has(d);
+    btn.style.background = on ? 'var(--primary)' : 'transparent';
+    btn.style.color = on ? 'white' : 'var(--on-surface-2)';
+    btn.style.borderColor = on ? 'var(--primary)' : 'var(--border)';
+  });
+}
+function setKosher(val) {
+  _profileKosher = val;
+  const yes = document.getElementById('kosher-yes');
+  const no = document.getElementById('kosher-no');
+  if (yes) { yes.style.background = val ? 'var(--primary)' : 'transparent'; yes.style.color = val ? 'white' : 'var(--on-surface-2)'; yes.style.borderColor = val ? 'var(--primary)' : 'var(--border)'; }
+  if (no) { no.style.background = !val ? '#6B7280' : 'transparent'; no.style.color = !val ? 'white' : 'var(--on-surface-2)'; no.style.borderColor = !val ? '#6B7280' : 'var(--border)'; }
+}
+
 function initProfile() {
   const profile = Auth.profile;
-  const nameEl = document.getElementById('prof-biz-name');
-  if (nameEl) nameEl.value = profile.business_name || '';
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('prof-biz-name', profile.business_name);
+  set('prof-first-name', profile.first_name);
+  set('prof-last-name', profile.last_name);
+  set('prof-phone', profile.phone);
+  set('prof-email', profile.email);
+  set('prof-address', profile.address);
+  set('prof-city', profile.city);
+  // Working days
+  const days = profile.working_days ? profile.working_days.split(',') : ['א','ב','ג','ד','ה'];
+  _profileWorkDays = new Set(days);
+  renderWorkDays();
+  // Kosher
+  setKosher(!!profile.is_kosher);
   loadLocations();
   loadPartnerCodes();
 }
@@ -418,17 +456,34 @@ async function generatePartnerCode() {
 }
 
 async function saveProfile() {
-  const name = document.getElementById('prof-biz-name').value.trim();
-  if (!name) return;
+  const name = document.getElementById('prof-biz-name')?.value.trim();
+  if (!name) { showToast('שם עסק הוא שדה חובה'); return; }
   const btn = document.querySelector('#page-profile .btn-primary');
-  btn.textContent = 'שומר...';
-  btn.disabled = true;
-  await DB.update('users', '', { business_name: name });
+  if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
+
+  const updates = {
+    business_name: name,
+    first_name: document.getElementById('prof-first-name')?.value.trim() || null,
+    last_name: document.getElementById('prof-last-name')?.value.trim() || null,
+    phone: document.getElementById('prof-phone')?.value.trim() || null,
+    email: document.getElementById('prof-email')?.value.trim() || null,
+    address: document.getElementById('prof-address')?.value.trim() || null,
+    city: document.getElementById('prof-city')?.value.trim() || null,
+    working_days: [..._profileWorkDays].join(','),
+    is_kosher: _profileKosher
+  };
+
+  await DB.update('users', '', updates);
+
+  // Update local cache
+  const profile = Auth.profile;
+  Object.assign(profile, updates);
+  _store.set('rv_profile', JSON.stringify(profile));
+
   document.getElementById('top-biz-name').textContent = name;
   document.getElementById('dash-greeting').textContent = 'שלום, ' + name + '!';
-  showToast('הפרופיל עודכן');
-  btn.textContent = 'שמור שינויים';
-  btn.disabled = false;
+  showToast('הפרופיל עודכן ✓');
+  if (btn) { btn.textContent = 'שמור שינויים'; btn.disabled = false; }
 }
 
 // Start

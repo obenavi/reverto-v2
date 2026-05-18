@@ -194,7 +194,10 @@ async function viewSupplier(id) {
       </div>
 
       <!-- Payment Terms -->
-      <div class="section-title mb-8">הסדר תשלומים</div>
+      <div class="section-title mb-4">הסדר תשלומים</div>
+      <div style="font-size:11px;color:var(--on-surface-3);margin-bottom:8px;background:rgba(107,53,184,0.05);border-radius:8px;padding:8px 10px;line-height:1.5">
+        💡 בעזרת נתון זה נוכל לעדכן אותך בסוף כל חודש על העלויות הצפויות לרדת לפי הסדרי התשלום שלך עם כל ספק.
+      </div>
       <div class="card card-pad mb-12">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="payment-terms-btns">
           ${[

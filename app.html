@@ -237,11 +237,58 @@
   <!-- PROFILE -->
   <div class="page" id="page-profile">
     <div class="page-content">
-      <div style="font-size:22px;font-weight:800;margin-bottom:20px">פרופיל</div>
+      <div style="font-size:22px;font-weight:800;margin-bottom:20px">פרופיל העסק</div>
+
       <div class="card card-pad mb-12">
-        <label class="field-label">שם העסק</label>
-        <input class="input mb-12" id="prof-biz-name" type="text">
-        <button class="btn-primary" onclick="saveProfile()">שמור שינויים</button>
+        <div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:12px">פרטי העסק</div>
+        <label class="field-label">שם המסעדה / העסק</label>
+        <input class="input mb-10" id="prof-biz-name" type="text">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <label class="field-label">שם פרטי</label>
+            <input class="input" id="prof-first-name" type="text">
+          </div>
+          <div>
+            <label class="field-label">שם משפחה</label>
+            <input class="input" id="prof-last-name" type="text">
+          </div>
+        </div>
+        <label class="field-label">טלפון</label>
+        <input class="input mb-10" id="prof-phone" type="tel">
+        <label class="field-label">מייל</label>
+        <input class="input mb-10" id="prof-email" type="email">
+        <label class="field-label">רחוב ומספר</label>
+        <input class="input mb-10" id="prof-address" type="text">
+        <label class="field-label">עיר</label>
+        <input class="input mb-10" id="prof-city" type="text">
+      </div>
+
+      <div class="card card-pad mb-12">
+        <div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:12px">פרטי תפעול</div>
+        <label class="field-label" style="margin-bottom:8px">ימי עבודה</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+          ${['א','ב','ג','ד','ה','ו','ש'].map(d => `
+            <button id="wd-${d}" onclick="toggleWorkDay('${d}')"
+              style="width:38px;height:38px;border-radius:50%;border:2px solid var(--border);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--on-surface-2);transition:all 0.15s">
+              ${d}
+            </button>`).join('')}
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <label class="field-label" style="margin-bottom:2px">כשרות</label>
+            <div style="font-size:11px;color:var(--on-surface-3)">משפיע על בנצ'מארק עם עסקים דומים</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button id="kosher-no" onclick="setKosher(false)"
+              style="padding:6px 14px;border-radius:20px;border:2px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--on-surface-2)">לא כשר</button>
+            <button id="kosher-yes" onclick="setKosher(true)"
+              style="padding:6px 14px;border-radius:20px;border:2px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--on-surface-2)">כשר ✡</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-pad mb-12">
+        <button class="btn-primary" onclick="saveProfile()" style="width:100%">שמור שינויים</button>
       </div>
       <div class="card card-pad mb-12">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
