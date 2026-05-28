@@ -93,6 +93,7 @@ exports.handler = async (event) => {
 
       const jwtPayload = { user_id: user.id, plan: user.plan, exp: Math.floor(Date.now() / 1000) + 86400 * 90 };
       if (codeType === 'manager') jwtPayload.role = 'manager';
+      if (codeType === 'partner') jwtPayload.role = 'partner';
       const jwt = signJWT(jwtPayload, JWT_SECRET);
       return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, jwt }) };
     }

@@ -93,8 +93,12 @@ async function appInit() {
   // Load dashboard
   renderDashboard();
 
-  // Welcome tour — first visit only
-  if (!localStorage.getItem('rv_welcome_done')) setTimeout(showWelcomeTour, 700);
+  // Onboarding — role-specific for partner/manager, full tour for owner
+  if (isManager() || isPartner()) {
+    if (!localStorage.getItem('rv_role_welcome_done')) setTimeout(() => showRoleWelcome(), 700);
+  } else {
+    if (!localStorage.getItem('rv_welcome_done')) setTimeout(showWelcomeTour, 700);
+  }
 }
 
 function showWelcomeTour() {
@@ -171,6 +175,94 @@ function showWelcomeTour() {
             style="padding:14px 18px;border:1.5px solid #e5e0ef;border-radius:14px;background:white;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;color:#888">←</button>` : ''}
           <button onclick="document.getElementById('welcome-tour')._next()"
             style="flex:1;padding:14px;border:none;border-radius:14px;background:linear-gradient(135deg,#4A1F85,#9B6DD6);color:white;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:0.3px">
+            ${isLast ? 'יאללה, מתחילים! 🚀' : 'הבא ←'}
+          </button>
+        </div>
+      </div>`;
+
+    overlay._next = () => { if (current < steps.length - 1) { current++; render(); } else done(); };
+    overlay._prev = () => { if (current > 0) { current--; render(); } };
+    overlay._done = done;
+  };
+
+  render();
+  document.body.appendChild(overlay);
+}
+
+function showRoleWelcome() {
+  const manager = isManager();
+  const bizName = Auth.profile.business_name || '';
+
+  const steps = manager ? [
+    {
+      icon: '👋',
+      title: `ברוכ/ה הבא/ה כמנהל${bizName ? ' של ' + bizName : ''}!`,
+      body: 'נכנסת למערכת Reverto עם הרשאות מנהל.\nבוא נעבור על מה שפתוח לך.',
+      color: '#4A1F85'
+    },
+    {
+      icon: '✅',
+      title: 'מה פתוח לך',
+      body: '📄 סריקת חשבוניות\n🛒 ספקים ומחירים\n🏪 השוק\n🌳 עץ מוצר\n📊 הוספת Z יומי וצפייה בפודקוסט',
+      color: '#059669'
+    },
+    {
+      icon: '🔒',
+      title: 'מה שמור לבעלים',
+      body: 'היסטוריית מחזור כוללת ותשלומים לספקים נגישים לבעל/ת העסק בלבד.',
+      color: '#D97706'
+    }
+  ] : [
+    {
+      icon: '🤝',
+      title: `ברוכ/ה הבא/ה כשותף${bizName ? ' של ' + bizName : ''}!`,
+      body: 'נכנסת למערכת Reverto עם גישה מלאה לחשבון.\nבוא נעבור על הדברים בקצרה.',
+      color: '#4A1F85'
+    },
+    {
+      icon: '📄',
+      title: 'הכל מתחיל בסריקה',
+      body: 'סרוק חשבוניות כדי לקבל נתונים חכמים על עלויות ומגמות.\nהנתונים תורמים גם לשוק הקהילתי שעוזר לכולם.',
+      color: '#6B35B8'
+    },
+    {
+      icon: '📊',
+      title: 'גישה מלאה',
+      body: 'דאשבורד · ספקים · שוק · עץ מוצר · סריקה · פרופיל.\nכל מה שיש לבעל/ת העסק — פתוח גם לך.',
+      color: '#0891B2'
+    }
+  ];
+
+  let current = 0;
+  const overlay = document.createElement('div');
+  overlay.id = 'role-welcome';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(30,10,60,0.82);z-index:99999;display:flex;align-items:flex-end;justify-content:center';
+
+  const done = () => { overlay.remove(); localStorage.setItem('rv_role_welcome_done', '1'); };
+
+  const render = () => {
+    const s = steps[current];
+    const isLast = current === steps.length - 1;
+    const dots = steps.map((_, i) =>
+      `<div style="width:${i === current ? '22px' : '8px'};height:8px;border-radius:4px;background:${i === current ? s.color : '#e0d7f5'};transition:all 0.3s"></div>`
+    ).join('');
+
+    overlay.innerHTML = `
+      <div style="background:white;border-radius:28px 28px 0 0;width:100%;max-width:480px;padding:32px 28px 52px;position:relative">
+        <button onclick="document.getElementById('role-welcome')._done()"
+          style="position:absolute;top:18px;left:20px;background:none;border:none;font-size:13px;color:#bbb;cursor:pointer;font-family:inherit;padding:4px 8px">דלג</button>
+        <div style="font-size:11px;color:#bbb;position:absolute;top:22px;right:24px">${current + 1} / ${steps.length}</div>
+        <div style="display:flex;justify-content:center;gap:5px;margin-bottom:28px">${dots}</div>
+        <div style="text-align:center">
+          <div style="font-size:58px;margin-bottom:14px;line-height:1">${s.icon}</div>
+          <div style="font-size:21px;font-weight:800;color:${s.color};margin-bottom:14px;line-height:1.3">${s.title}</div>
+          <div style="font-size:15px;color:#444;line-height:1.85;white-space:pre-line">${s.body}</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:32px">
+          ${current > 0 ? `<button onclick="document.getElementById('role-welcome')._prev()"
+            style="padding:14px 18px;border:1.5px solid #e5e0ef;border-radius:14px;background:white;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;color:#888">←</button>` : ''}
+          <button onclick="document.getElementById('role-welcome')._next()"
+            style="flex:1;padding:14px;border:none;border-radius:14px;background:linear-gradient(135deg,#4A1F85,#9B6DD6);color:white;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit">
             ${isLast ? 'יאללה, מתחילים! 🚀' : 'הבא ←'}
           </button>
         </div>

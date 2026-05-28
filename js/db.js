@@ -99,6 +99,15 @@ function isManager() {
   } catch { return false; }
 }
 
+function isPartner() {
+  try {
+    const jwt = _store.get('rv_jwt');
+    if (!jwt) return false;
+    const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.role === 'partner';
+  } catch { return false; }
+}
+
 // ── Payment terms ─────────────────────────────────────────────
 const PAYMENT_TERMS_LABELS = {
   cash_delivery: 'מזומן בקבלת סחורה',
