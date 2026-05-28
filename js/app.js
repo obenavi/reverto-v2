@@ -656,40 +656,39 @@ async function loadPartnerCodes() {
   if (mel) mel.innerHTML = managerCodes?.length ? _renderCodeRows(managerCodes) : `<div style="font-size:12px;color:var(--on-surface-3)">אין קודי מנהל עדיין</div>`;
 }
 
-async function generatePartnerCode() {
+async function _generateCode(role) {
+  const label = role === 'manager' ? 'קוד מנהל' : 'קוד שותף';
+  const btnText = role === 'manager' ? 'קוד מנהל חדש' : 'קוד שותף חדש';
+  const btnReset = role === 'manager' ? '+ צור קוד מנהל חדש' : '+ צור קוד שותף חדש';
+
   const btns = document.querySelectorAll('#page-profile button');
-  const genBtn = Array.from(btns).find(b => b.textContent.includes('קוד שותף חדש'));
+  const genBtn = Array.from(btns).find(b => b.textContent.includes(btnText));
   if (genBtn) { genBtn.textContent = 'יוצר...'; genBtn.disabled = true; }
 
-  const res = await fetch('/.netlify/functions/add-partner', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt }
-  });
-  const data = await res.json();
-  if (genBtn) { genBtn.textContent = '+ צור קוד שותף חדש'; genBtn.disabled = false; }
-  if (data.code) {
-    showToast('קוד שותף נוצר: ' + data.code);
-    loadPartnerCodes();
+  if (!Auth.jwt) { showToast('שגיאה: לא מחובר'); if (genBtn) { genBtn.textContent = btnReset; genBtn.disabled = false; } return; }
+
+  try {
+    const res = await fetch('/.netlify/functions/add-partner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt },
+      body: JSON.stringify({ role })
+    });
+    const data = await res.json();
+    if (genBtn) { genBtn.textContent = btnReset; genBtn.disabled = false; }
+    if (data.code) {
+      showToast(label + ' נוצר: ' + data.code);
+      loadPartnerCodes();
+    } else {
+      showToast('שגיאה: ' + (data.error || 'נסה שנית'), 4000);
+    }
+  } catch (e) {
+    if (genBtn) { genBtn.textContent = btnReset; genBtn.disabled = false; }
+    showToast('שגיאת תקשורת — נסה שנית');
   }
 }
 
-async function generateManagerCode() {
-  const btns = document.querySelectorAll('#page-profile button');
-  const genBtn = Array.from(btns).find(b => b.textContent.includes('קוד מנהל חדש'));
-  if (genBtn) { genBtn.textContent = 'יוצר...'; genBtn.disabled = true; }
-
-  const res = await fetch('/.netlify/functions/add-partner', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt },
-    body: JSON.stringify({ role: 'manager' })
-  });
-  const data = await res.json();
-  if (genBtn) { genBtn.textContent = '+ צור קוד מנהל חדש'; genBtn.disabled = false; }
-  if (data.code) {
-    showToast('קוד מנהל נוצר: ' + data.code);
-    loadPartnerCodes();
-  }
-}
+async function generatePartnerCode() { await _generateCode('partner'); }
+async function generateManagerCode() { await _generateCode('manager'); }
 
 async function saveBizDetails() {
   const body = document.getElementById('body-biz');
