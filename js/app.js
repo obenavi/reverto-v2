@@ -30,6 +30,23 @@ function logout() {
   if (confirm('לצאת מהמערכת?')) Auth.logout();
 }
 
+function applyManagerRestrictions() {
+  // Revenue card → "הוסף Z יומי" (no history, no totals)
+  const rc = document.getElementById('dash-revenue-card');
+  if (rc) {
+    rc.setAttribute('onclick', 'openRevenueModal()');
+    const lbl = rc.querySelector('.stat-label');
+    if (lbl) lbl.textContent = 'הוסף Z יומי';
+  }
+  // Hide payments card and forecast
+  const pc = document.getElementById('dash-payments-card');
+  if (pc) pc.style.display = 'none';
+  // openRevenueHistory → goes straight to add modal
+  window.openRevenueHistory = () => openRevenueModal();
+  // Block payment forecast
+  window.showPaymentForecast = () => {};
+}
+
 async function appInit() {
   // Check auth
   if (!Auth.token) {
@@ -59,11 +76,13 @@ async function appInit() {
     if (wrap) wrap.style.display = 'block';
   }
 
+  // Apply manager restrictions before first render
+  if (isManager()) applyManagerRestrictions();
+
   // Set greeting
   const name = profile.business_name || '';
   document.getElementById('dash-greeting').textContent = 'שלום, ' + name + '!';
   document.getElementById('top-biz-name').textContent = name;
-  document.getElementById('prof-biz-name').value = name;
 
   // Set date
   const now = new Date();
@@ -73,6 +92,97 @@ async function appInit() {
 
   // Load dashboard
   renderDashboard();
+
+  // Welcome tour — first visit only
+  if (!localStorage.getItem('rv_welcome_done')) setTimeout(showWelcomeTour, 700);
+}
+
+function showWelcomeTour() {
+  const steps = [
+    {
+      icon: '🎉',
+      title: 'ברוכ/ה הבא/ה ל-Reverto!',
+      body: 'ביחד אנחנו בונים קהילה של אנשי מזון שעוזרים אחד לשני לקנות חכם ולנהל חכם את העסק.',
+      color: '#4A1F85'
+    },
+    {
+      icon: '📄',
+      title: 'הכל מתחיל בסריקה',
+      body: 'ככל שתסרוק יותר חשבוניות — תקבל נתונים חכמים יותר על עלויות ומגמות.\nבנוסף, אתה תורם באופן אנונימי לשוק הקהילתי שעוזר לכולם לדעת מה מחיר הוגן.',
+      color: '#6B35B8'
+    },
+    {
+      icon: '📊',
+      title: 'הדאשבורד שלך',
+      body: 'כאן תראה את מחזור ה-Z החודשי, אחוז הפודקוסט, תשלומים צפויים וחשבוניות שממתינות לאישור קבלה.',
+      color: '#0891B2'
+    },
+    {
+      icon: '🛒',
+      title: 'ספקים ומחירים',
+      body: 'רשימת כל הספקים שלך עם ההיסטוריה המלאה.\nמכאן תוכל/י גם לשלוח הזמנה ישירות לספק בוואטסאפ.',
+      color: '#059669'
+    },
+    {
+      icon: '🏪',
+      title: 'השוק',
+      body: 'מחירון קהילתי שמצרף נתונים אנונימיים מכל המשתמשים.\nבנוסף — מחירי ירקות ופירות אוטומטיים מהשוק הסיטונאי, כדי שתדע אם הספק שלך בהסכם.',
+      color: '#D97706'
+    },
+    {
+      icon: '👤',
+      title: 'פרופיל וReverto',
+      body: 'בפרופיל — פרטי עסק, סניפים, קוד לשותף, גישה מוגבלת למנהל ויצוא נתונים לרו"ח.\nבכפתור Reverto — צור קשר, הזמן חבר ושדרג לPRO.',
+      color: '#4A1F85'
+    }
+  ];
+
+  let current = 0;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'welcome-tour';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(30,10,60,0.82);z-index:99999;display:flex;align-items:flex-end;justify-content:center';
+
+  const done = () => { overlay.remove(); localStorage.setItem('rv_welcome_done', '1'); };
+
+  const render = () => {
+    const s = steps[current];
+    const isLast = current === steps.length - 1;
+    const dots = steps.map((_, i) =>
+      `<div style="width:${i === current ? '22px' : '8px'};height:8px;border-radius:4px;background:${i === current ? s.color : '#e0d7f5'};transition:all 0.3s"></div>`
+    ).join('');
+
+    overlay.innerHTML = `
+      <div style="background:white;border-radius:28px 28px 0 0;width:100%;max-width:480px;padding:32px 28px 52px;position:relative">
+        <button onclick="document.getElementById('welcome-tour')._done()"
+          style="position:absolute;top:18px;left:20px;background:none;border:none;font-size:13px;color:#bbb;cursor:pointer;font-family:inherit;padding:4px 8px">דלג</button>
+        <div style="font-size:11px;color:#bbb;position:absolute;top:22px;right:24px">${current + 1} / ${steps.length}</div>
+
+        <div style="display:flex;justify-content:center;gap:5px;margin-bottom:28px">${dots}</div>
+
+        <div style="text-align:center">
+          <div style="font-size:58px;margin-bottom:14px;line-height:1">${s.icon}</div>
+          <div style="font-size:21px;font-weight:800;color:${s.color};margin-bottom:14px;line-height:1.3">${s.title}</div>
+          <div style="font-size:15px;color:#444;line-height:1.75;white-space:pre-line">${s.body}</div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:32px">
+          ${current > 0 ? `<button onclick="document.getElementById('welcome-tour')._prev()"
+            style="padding:14px 18px;border:1.5px solid #e5e0ef;border-radius:14px;background:white;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;color:#888">←</button>` : ''}
+          <button onclick="document.getElementById('welcome-tour')._next()"
+            style="flex:1;padding:14px;border:none;border-radius:14px;background:linear-gradient(135deg,#4A1F85,#9B6DD6);color:white;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:0.3px">
+            ${isLast ? 'יאללה, מתחילים! 🚀' : 'הבא ←'}
+          </button>
+        </div>
+      </div>`;
+
+    overlay._next = () => { if (current < steps.length - 1) { current++; render(); } else done(); };
+    overlay._prev = () => { if (current > 0) { current--; render(); } };
+    overlay._done = done;
+  };
+
+  render();
+  document.body.appendChild(overlay);
 }
 
 function showInfoPanel() {
@@ -402,35 +512,131 @@ function setKosher(val) {
   if (no) { no.style.background = !val ? '#6B7280' : 'transparent'; no.style.color = !val ? 'white' : 'var(--on-surface-2)'; no.style.borderColor = !val ? '#6B7280' : 'var(--border)'; }
 }
 
-function initProfile() {
-  const profile = Auth.profile;
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-  set('prof-biz-name', profile.business_name);
-  set('prof-first-name', profile.first_name);
-  set('prof-last-name', profile.last_name);
-  set('prof-phone', profile.phone);
-  set('prof-email', profile.email);
-  set('prof-address', profile.address);
-  set('prof-city', profile.city);
-  // Working days
-  const days = profile.working_days ? profile.working_days.split(',') : ['א','ב','ג','ד','ה'];
-  _profileWorkDays = new Set(days);
-  renderWorkDays();
-  // Kosher
-  setKosher(!!profile.is_kosher);
-  loadLocations();
-  loadPartnerCodes();
+function toggleSection(id) {
+  const body = document.getElementById('body-' + id);
+  const arrow = document.getElementById('arrow-' + id);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  arrow.style.transform = isOpen ? '' : 'rotate(90deg)';
 }
 
-async function loadPartnerCodes() {
-  const el = document.getElementById('partner-codes-list');
-  if (!el) return;
-  const codes = await DB.get('access_codes', '?type=eq.partner&select=code,is_active,created_at&order=created_at.desc');
-  if (!codes?.length) {
-    el.innerHTML = `<div style="font-size:12px;color:var(--on-surface-3)">אין קודי שותף עדיין</div>`;
-    return;
+function _openSection(id) {
+  const body = document.getElementById('body-' + id);
+  const arrow = document.getElementById('arrow-' + id);
+  if (!body) return;
+  body.style.display = 'block';
+  arrow.style.transform = 'rotate(90deg)';
+}
+
+function _closeSection(id) {
+  const body = document.getElementById('body-' + id);
+  const arrow = document.getElementById('arrow-' + id);
+  if (!body) return;
+  body.style.display = 'none';
+  arrow.style.transform = '';
+}
+
+function initProfile() {
+  const profile = Auth.profile;
+  const bizLocked = !!localStorage.getItem('rv_biz_locked');
+  const opsLocked = !!localStorage.getItem('rv_ops_locked');
+
+  // ── פרטי עסק ──
+  const bizBody = document.getElementById('body-biz');
+  if (bizLocked) {
+    const addr = [profile.address, profile.city].filter(Boolean).join(', ');
+    bizBody.innerHTML = `
+      <div style="font-size:13px;color:var(--on-surface-2);line-height:2">
+        <div id="_bn" style="font-size:14px;font-weight:700"></div>
+        <div id="_nm"></div>
+        <div id="_ph"></div>
+        <div id="_em"></div>
+        <div id="_ad"></div>
+      </div>`;
+    bizBody.querySelector('#_bn').textContent = profile.business_name || '';
+    bizBody.querySelector('#_nm').textContent = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
+    bizBody.querySelector('#_ph').textContent = profile.phone || '';
+    bizBody.querySelector('#_em').textContent = profile.email || '';
+    bizBody.querySelector('#_ad').textContent = addr;
+  } else {
+    bizBody.innerHTML = `
+      <label class="field-label">שם המסעדה / העסק</label>
+      <input class="input mb-10" id="prof-biz-name" type="text">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div><label class="field-label">שם פרטי</label><input class="input" id="prof-first-name" type="text"></div>
+        <div><label class="field-label">שם משפחה</label><input class="input" id="prof-last-name" type="text"></div>
+      </div>
+      <label class="field-label">טלפון</label>
+      <input class="input mb-10" id="prof-phone" type="tel">
+      <label class="field-label">מייל</label>
+      <input class="input mb-10" id="prof-email" type="email">
+      <label class="field-label">רחוב ומספר</label>
+      <input class="input mb-10" id="prof-address" type="text">
+      <label class="field-label">עיר</label>
+      <input class="input mb-10" id="prof-city" type="text">
+      <button class="btn-primary mt-8" onclick="saveBizDetails()" style="width:100%">שמור פרטי עסק</button>`;
+    const g = id => bizBody.querySelector('#' + id);
+    g('prof-biz-name').value = profile.business_name || '';
+    g('prof-first-name').value = profile.first_name || '';
+    g('prof-last-name').value = profile.last_name || '';
+    g('prof-phone').value = profile.phone || '';
+    g('prof-email').value = profile.email || '';
+    g('prof-address').value = profile.address || '';
+    g('prof-city').value = profile.city || '';
+    if (!profile.business_name) _openSection('biz');
   }
-  el.innerHTML = codes.map(c => `
+
+  // ── פרטי תפעול ──
+  const days = profile.working_days ? profile.working_days.split(',') : ['א','ב','ג','ד','ה'];
+  _profileWorkDays = new Set(days);
+  _profileKosher = !!profile.is_kosher;
+  const opsBody = document.getElementById('body-ops');
+  if (opsLocked) {
+    opsBody.innerHTML = `
+      <div style="font-size:13px;color:var(--on-surface-2);line-height:2">
+        <div>ימי עבודה: <b>${[..._profileWorkDays].join(', ')}</b></div>
+        <div>כשרות: <b>${_profileKosher ? 'כשר' : 'לא כשר'}</b></div>
+      </div>`;
+  } else {
+    opsBody.innerHTML = `
+      <label class="field-label" style="margin-bottom:8px">ימי עבודה</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        ${['א','ב','ג','ד','ה','ו','ש'].map(d =>
+          `<button id="wd-${d}" onclick="toggleWorkDay('${d}')"
+            style="width:38px;height:38px;border-radius:50%;border:2px solid var(--border);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--on-surface-2);transition:all 0.15s">${d}</button>`
+        ).join('')}
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div>
+          <label class="field-label" style="margin-bottom:2px">כשרות</label>
+          <div style="font-size:11px;color:var(--on-surface-3)">משפיע על בנצ'מארק עם עסקים דומים</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button id="kosher-no" onclick="setKosher(false)"
+            style="padding:6px 14px;border-radius:20px;border:2px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--on-surface-2)">לא כשר</button>
+          <button id="kosher-yes" onclick="setKosher(true)"
+            style="padding:6px 14px;border-radius:20px;border:2px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--on-surface-2)">כשר</button>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="saveOpsDetails()" style="width:100%">שמור פרטי תפעול</button>`;
+    renderWorkDays();
+    setKosher(_profileKosher);
+    if (!profile.working_days) _openSection('ops');
+  }
+
+  loadLocations();
+  loadPartnerCodes();
+
+  // Hide owner-only sections from managers
+  if (isManager()) {
+    document.getElementById('partner-card')?.style.setProperty('display', 'none');
+    document.getElementById('manager-card')?.style.setProperty('display', 'none');
+  }
+}
+
+function _renderCodeRows(codes) {
+  return codes.map(c => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
       <div style="flex:1;font-size:14px;font-weight:800;letter-spacing:2px;color:var(--primary)">${c.code}</div>
       <button onclick="navigator.clipboard.writeText('${c.code}').then(()=>showToast('הועתק!'))" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">העתק</button>
@@ -438,9 +644,21 @@ async function loadPartnerCodes() {
   `).join('');
 }
 
+async function loadPartnerCodes() {
+  if (isManager()) return;
+  const [partnerCodes, managerCodes] = await Promise.all([
+    DB.get('access_codes', '?type=eq.partner&select=code,is_active,created_at&order=created_at.desc'),
+    DB.get('access_codes', '?type=eq.manager&select=code,is_active,created_at&order=created_at.desc')
+  ]);
+  const el = document.getElementById('partner-codes-list');
+  if (el) el.innerHTML = partnerCodes?.length ? _renderCodeRows(partnerCodes) : `<div style="font-size:12px;color:var(--on-surface-3)">אין קודי שותף עדיין</div>`;
+  const mel = document.getElementById('manager-codes-list');
+  if (mel) mel.innerHTML = managerCodes?.length ? _renderCodeRows(managerCodes) : `<div style="font-size:12px;color:var(--on-surface-3)">אין קודי מנהל עדיין</div>`;
+}
+
 async function generatePartnerCode() {
   const btns = document.querySelectorAll('#page-profile button');
-  const genBtn = Array.from(btns).find(b => b.textContent.includes('קוד שותף'));
+  const genBtn = Array.from(btns).find(b => b.textContent.includes('קוד שותף חדש'));
   if (genBtn) { genBtn.textContent = 'יוצר...'; genBtn.disabled = true; }
 
   const res = await fetch('/.netlify/functions/add-partner', {
@@ -455,35 +673,77 @@ async function generatePartnerCode() {
   }
 }
 
-async function saveProfile() {
-  const name = document.getElementById('prof-biz-name')?.value.trim();
-  if (!name) { showToast('שם עסק הוא שדה חובה'); return; }
-  const btn = document.querySelector('#page-profile .btn-primary');
-  if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
+async function generateManagerCode() {
+  const btns = document.querySelectorAll('#page-profile button');
+  const genBtn = Array.from(btns).find(b => b.textContent.includes('קוד מנהל חדש'));
+  if (genBtn) { genBtn.textContent = 'יוצר...'; genBtn.disabled = true; }
 
+  const res = await fetch('/.netlify/functions/add-partner', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt },
+    body: JSON.stringify({ role: 'manager' })
+  });
+  const data = await res.json();
+  if (genBtn) { genBtn.textContent = '+ צור קוד מנהל חדש'; genBtn.disabled = false; }
+  if (data.code) {
+    showToast('קוד מנהל נוצר: ' + data.code);
+    loadPartnerCodes();
+  }
+}
+
+async function saveBizDetails() {
+  const body = document.getElementById('body-biz');
+  const name = body.querySelector('#prof-biz-name')?.value.trim();
+  if (!name) { showToast('שם עסק הוא שדה חובה'); return; }
+  const btn = body.querySelector('.btn-primary');
+  if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
   const updates = {
     business_name: name,
-    first_name: document.getElementById('prof-first-name')?.value.trim() || null,
-    last_name: document.getElementById('prof-last-name')?.value.trim() || null,
-    phone: document.getElementById('prof-phone')?.value.trim() || null,
-    email: document.getElementById('prof-email')?.value.trim() || null,
-    address: document.getElementById('prof-address')?.value.trim() || null,
-    city: document.getElementById('prof-city')?.value.trim() || null,
+    first_name: body.querySelector('#prof-first-name')?.value.trim() || null,
+    last_name: body.querySelector('#prof-last-name')?.value.trim() || null,
+    phone: body.querySelector('#prof-phone')?.value.trim() || null,
+    email: body.querySelector('#prof-email')?.value.trim() || null,
+    address: body.querySelector('#prof-address')?.value.trim() || null,
+    city: body.querySelector('#prof-city')?.value.trim() || null,
+  };
+  const ok = await DB.update('users', '', updates);
+  if (ok) {
+    const profile = Auth.profile;
+    Object.assign(profile, updates);
+    _store.set('rv_profile', JSON.stringify(profile));
+    localStorage.setItem('rv_biz_locked', '1');
+    document.getElementById('top-biz-name').textContent = name;
+    document.getElementById('dash-greeting').textContent = 'שלום, ' + name + '!';
+    showToast('פרטי עסק נשמרו ✓');
+    initProfile();
+    _closeSection('biz');
+  } else {
+    showToast('שגיאה בשמירה');
+    if (btn) { btn.textContent = 'שמור פרטי עסק'; btn.disabled = false; }
+  }
+}
+
+async function saveOpsDetails() {
+  const body = document.getElementById('body-ops');
+  const btn = body.querySelector('.btn-primary');
+  if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
+  const updates = {
     working_days: [..._profileWorkDays].join(','),
     is_kosher: _profileKosher
   };
-
-  await DB.update('users', '', updates);
-
-  // Update local cache
-  const profile = Auth.profile;
-  Object.assign(profile, updates);
-  _store.set('rv_profile', JSON.stringify(profile));
-
-  document.getElementById('top-biz-name').textContent = name;
-  document.getElementById('dash-greeting').textContent = 'שלום, ' + name + '!';
-  showToast('הפרופיל עודכן ✓');
-  if (btn) { btn.textContent = 'שמור שינויים'; btn.disabled = false; }
+  const ok = await DB.update('users', '', updates);
+  if (ok) {
+    const profile = Auth.profile;
+    Object.assign(profile, updates);
+    _store.set('rv_profile', JSON.stringify(profile));
+    localStorage.setItem('rv_ops_locked', '1');
+    showToast('פרטי תפעול נשמרו ✓');
+    initProfile();
+    _closeSection('ops');
+  } else {
+    showToast('שגיאה בשמירה');
+    if (btn) { btn.textContent = 'שמור פרטי תפעול'; btn.disabled = false; }
+  }
 }
 
 // Start
