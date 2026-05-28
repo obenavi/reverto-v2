@@ -2,6 +2,7 @@
 
 let allSuppliers = [];
 let currentSupplier = null;
+let _newSupTerm = null;
 
 async function renderSuppliersList() {
   const userId = Auth.userId;
@@ -11,7 +12,13 @@ async function renderSuppliersList() {
   const page = document.getElementById('page-suppliers');
   if (!document.getElementById('suppliers-list')) {
     page.innerHTML = `<div class="page-content">
-      <div style="font-size:22px;font-weight:800;margin-bottom:16px">ספקים</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:22px;font-weight:800">ספקים</div>
+        <button onclick="showPaymentForecast()" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--primary-dark),var(--primary-light));color:white;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">
+          <span class="mi" style="font-size:16px;color:white">payments</span>
+          תשלומים
+        </button>
+      </div>
       <div style="position:relative;margin-bottom:12px">
         <input class="input" id="supplier-search" type="text" placeholder="חיפוש ספק..." oninput="filterSuppliers(this.value)" style="padding-right:40px">
         <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--on-surface-3)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -72,16 +79,30 @@ async function viewSupplier(id) {
   if (!sup) return;
   currentSupplier = sup;
 
-  const userId = Auth.userId;
-  const invoices = await DB.get('invoices', `?supplier_name=eq.${encodeURIComponent(sup.name)}&select=*&order=date.desc`);
-  const items = await DB.get('invoice_items', `?supplier_name=eq.${encodeURIComponent(sup.name)}&select=*&order=date.desc`);
+  const [invoices, items] = await Promise.all([
+    DB.get('invoices', `?supplier_name=eq.${encodeURIComponent(sup.name)}&select=*&order=date.desc`),
+    DB.get('invoice_items', `?supplier_name=eq.${encodeURIComponent(sup.name)}&select=*&order=date.desc`)
+  ]);
 
-  // Price history per product
-  const productHistory = {};
-  (items||[]).forEach(item => {
-    if (!productHistory[item.product_name]) productHistory[item.product_name] = [];
-    productHistory[item.product_name].push({ price: item.unit_price, date: item.date });
+  // Store globally for use in modals / filter
+  window._supInvoices = invoices || [];
+  window._supProductHistory = {};
+  (items || []).forEach(item => {
+    if (!item.product_name) return;
+    if (!window._supProductHistory[item.product_name]) window._supProductHistory[item.product_name] = [];
+    window._supProductHistory[item.product_name].push({ price: parseFloat(item.unit_price || 0), date: item.date });
   });
+
+  // Calculate stats
+  const now = new Date();
+  const yr = now.getFullYear(), mo = now.getMonth();
+  const annualInvs  = (invoices || []).filter(i => new Date(i.date + 'T00:00:00').getFullYear() === yr);
+  const monthlyInvs = annualInvs.filter(i => new Date(i.date + 'T00:00:00').getMonth() === mo);
+  const annualTotal  = annualInvs.reduce((s, i) => s + parseFloat(i.total_amount || i.total || 0), 0);
+  const monthlyTotal = monthlyInvs.reduce((s, i) => s + parseFloat(i.total_amount || i.total || 0), 0);
+  const allTotal     = (invoices || []).reduce((s, i) => s + parseFloat(i.total_amount || i.total || 0), 0);
+  const avgInvoice   = (invoices || []).length ? allTotal / invoices.length : 0;
+  const monthName    = now.toLocaleDateString('he-IL', { month: 'long' });
 
   const el = document.getElementById('page-suppliers');
   el.innerHTML = `
@@ -91,147 +112,287 @@ async function viewSupplier(id) {
         חזרה לספקים
       </button>
 
-      <div style="font-size:22px;font-weight:800;margin-bottom:4px">${sup.name}</div>
-      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:2px">${sup.invoice_count||0} חשבוניות</div>
-      ${sup.address ? `<div style="font-size:12px;color:var(--on-surface-3);margin-bottom:2px">📍 ${sup.address}</div>` : ''}
-      ${sup.email ? `<div style="font-size:12px;color:var(--on-surface-3);margin-bottom:2px">✉️ ${sup.email}</div>` : ''}
-      ${sup.tax_id ? `<div style="font-size:12px;color:var(--on-surface-3);margin-bottom:2px">עוסק: ${sup.tax_id}</div>` : ''}
-      <div style="margin-bottom:20px"></div>
+      <div style="font-size:22px;font-weight:800;margin-bottom:3px">${escHtml(sup.name)}</div>
+      <div style="font-size:12px;color:var(--on-surface-3);margin-bottom:18px">${sup.invoice_count || 0} חשבוניות · אחרונה ${formatDate(sup.last_invoice_date)}</div>
 
-      <!-- Stats -->
-      <div class="stat-grid mb-12">
-        <div class="stat-card">
-          <div class="stat-label">סה"כ רכש</div>
-          <div class="stat-value">₪${parseFloat(sup.total_amount||0).toLocaleString('he-IL',{maximumFractionDigits:0})}</div>
+      <!-- 3 Stat Boxes -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+        <div onclick="showAnnualBreakdown()" class="card-tap" style="background:var(--surface-card);border:1.5px solid var(--border);border-radius:14px;padding:12px 8px;text-align:center;cursor:pointer">
+          <div style="font-size:9px;font-weight:700;color:var(--on-surface-3);margin-bottom:4px;line-height:1.3">רכש שנתי</div>
+          <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${Math.round(annualTotal).toLocaleString('he-IL')}</div>
+          <div style="font-size:9px;color:var(--primary);margin-top:3px">${yr} ›</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">ממוצע לחשבונית</div>
-          <div class="stat-value">₪${sup.invoice_count ? Math.round(sup.total_amount/sup.invoice_count).toLocaleString('he-IL') : 0}</div>
+        <div onclick="showMonthlyInvoices()" class="card-tap" style="background:var(--surface-card);border:1.5px solid var(--border);border-radius:14px;padding:12px 8px;text-align:center;cursor:pointer">
+          <div style="font-size:9px;font-weight:700;color:var(--on-surface-3);margin-bottom:4px;line-height:1.3">רכש חודשי</div>
+          <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${Math.round(monthlyTotal).toLocaleString('he-IL')}</div>
+          <div style="font-size:9px;color:var(--primary);margin-top:3px">${monthName} ›</div>
+        </div>
+        <div style="background:var(--surface-card);border:1.5px solid var(--border);border-radius:14px;padding:12px 8px;text-align:center">
+          <div style="font-size:9px;font-weight:700;color:var(--on-surface-3);margin-bottom:4px;line-height:1.3">ממוצע חשבונית</div>
+          <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${Math.round(avgInvoice).toLocaleString('he-IL')}</div>
+          <div style="font-size:9px;color:var(--on-surface-3);margin-top:3px">${sup.invoice_count || 0} חשבוניות</div>
         </div>
       </div>
 
-      <!-- Order Button -->
-      <button onclick="openOrderForm()" class="btn-primary mb-12" style="width:100%;background:linear-gradient(135deg,#10B981,#059669);display:flex;align-items:center;justify-content:center;gap:8px">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-        הזמנת סחורה
-      </button>
+      <!-- Order Button (below stats, slightly inset) -->
+      <div style="margin:14px 10px 16px">
+        <button onclick="openOrderForm()" class="btn-primary" style="width:100%;background:linear-gradient(135deg,#10B981,#059669);font-size:15px;padding:13px;display:flex;align-items:center;justify-content:center;gap:8px">
+          <span class="mi" style="color:white;font-size:20px">shopping_cart</span>
+          הזמנת סחורה
+        </button>
+      </div>
 
-      <!-- Product Price History -->
+      <!-- Products -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="section-title">מחירי מוצרים</div>
+        <div class="section-title">מוצרים</div>
         <div style="font-size:10px;color:var(--on-surface-3);background:var(--surface-low);padding:3px 8px;border-radius:12px">לפני מע"מ 18%</div>
       </div>
-      <div class="card mb-12">
-        ${Object.entries(productHistory).slice(0,15).map(([name, history]) => {
-          history.sort((a,b) => new Date(b.date)-new Date(a.date));
-          const latest = history[0]?.price || 0;
-          const latestDate = history[0]?.date ? new Date(history[0].date + 'T00:00:00').toLocaleDateString('he-IL', {day:'numeric',month:'short'}) : '';
-          const prev = history[1]?.price;
-          const prevDate = history[1]?.date ? new Date(history[1].date + 'T00:00:00').toLocaleDateString('he-IL', {day:'numeric',month:'short'}) : '';
-          const trend = prev ? (latest > prev*1.03 ? 'up' : latest < prev*0.97 ? 'down' : 'stable') : 'stable';
-          const trendIcon = trend === 'up'
-            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>`
-            : trend === 'down'
-            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>`
-            : '';
-          const pctChange = prev ? (((latest - prev) / prev) * 100).toFixed(0) : null;
-          const safeId = name.replace(/[^a-zA-Z0-9]/g, '_');
-          return `
-          <div id="prod-row-${safeId}" style="border-bottom:1px solid var(--border)">
-            <!-- View mode -->
-            <div id="prod-view-${safeId}" style="display:grid;grid-template-columns:1fr 100px 36px;gap:6px;align-items:center;padding:10px 14px">
-              <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
-              <div style="text-align:left">
-                <div style="display:flex;align-items:center;gap:4px;justify-content:flex-start">
-                  ${trendIcon}
-                  <span style="font-size:14px;font-weight:800;white-space:nowrap">₪${parseFloat(latest).toFixed(2)}</span>
-                  ${pctChange && pctChange !== '0' ? `<span style="font-size:10px;color:${trend==='up'?'var(--error)':'var(--success)'};">${trend==='up'?'+':''}${pctChange}%</span>` : ''}
-                </div>
-                <div style="font-size:10px;color:var(--on-surface-3)">${latestDate}${prev ? ` | ₪${parseFloat(prev).toFixed(2)} (${prevDate})` : ''}</div>
-              </div>
-              <button onclick="startEditProduct('${safeId}','${name.replace(/'/g,'\\\'') }',${parseFloat(latest).toFixed(2)})"
-                style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-2)">✏️</button>
-            </div>
-            <!-- Edit mode (hidden) -->
-            <div id="prod-edit-${safeId}" style="display:none;padding:10px 14px;background:var(--surface-low)">
-              <div style="display:flex;gap:6px;margin-bottom:8px">
-                <input class="input" id="prod-name-${safeId}" type="text" value="${name}" style="flex:2;font-size:13px;padding:6px 10px">
-                <input class="input" id="prod-price-${safeId}" type="number" step="0.01" value="${parseFloat(latest).toFixed(2)}" style="flex:1;font-size:13px;padding:6px 10px">
-              </div>
-              <div style="display:flex;gap:6px">
-                <button onclick="saveEditProduct('${safeId}','${name.replace(/'/g,'\\\'')}')" class="btn-primary" style="flex:1;font-size:12px;padding:7px">שמור</button>
-                <button onclick="cancelEditProduct('${safeId}')" class="btn-ghost" style="flex:1;font-size:12px;padding:7px">ביטול</button>
-              </div>
-            </div>
-          </div>`;
-        }).join('')}
+      <div style="position:relative;margin-bottom:10px">
+        <input class="input" id="sup-product-search" type="text" placeholder="חיפוש מוצר..." oninput="filterSupProducts(this.value)" style="padding-right:36px;font-size:13px">
+        <svg style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-surface-3)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <div class="card mb-16" id="sup-products-list">
+        ${renderSupProductRows(window._supProductHistory)}
       </div>
 
-      <!-- Invoice History -->
-      <div class="section-title mb-8">היסטוריית חשבוניות</div>
-      <div class="card mb-12">
-        ${(invoices||[]).map((inv, ii) => {
-          const invItems = inv.items ? (typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items) : [];
-          return `
-          <div>
-            <div class="list-row" style="cursor:pointer" onclick="toggleInvDetail(${ii})">
-              <div style="flex:1">
-                <div style="font-size:13px;font-weight:700">${formatDate(inv.date)}</div>
-                <div style="font-size:11px;color:var(--on-surface-3)">${inv.invoice_number||'—'}</div>
-              </div>
-              <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${parseFloat(inv.total_amount||inv.total||0).toLocaleString('he-IL',{maximumFractionDigits:0})}</div>
-              <svg id="inv-arr-${ii}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-surface-3)" stroke-width="2" stroke-linecap="round" style="margin-right:4px;transition:transform 0.2s"><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
-            <div id="inv-detail-${ii}" style="display:none;padding:10px 14px;background:var(--surface-low);border-bottom:1px solid var(--border)">
-              ${invItems.length ? invItems.map(it => `
-                <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px">
-                  <span>${it.product_name||'—'}</span>
-                  <span style="color:var(--on-surface-3)">${it.quantity||''} × ₪${parseFloat(it.unit_price||0).toFixed(2)} = <strong>₪${parseFloat(it.total_price||0).toFixed(2)}</strong></span>
-                </div>`).join('') : '<div style="font-size:12px;color:var(--on-surface-3)">אין פרטי פריטים</div>'}
-            </div>
-          </div>`;
-        }).join('') || '<div class="empty-state"><div class="empty-state-title">אין חשבוניות</div></div>'}
-      </div>
+      <!-- Supplier Details -->
+      <div class="section-title mb-8">פרטי ספק</div>
+      <div class="card card-pad mb-24">
+        <label class="field-label">שם נציג / סוכן</label>
+        <input class="input mb-10" id="sup-agent-input" type="text" placeholder="שם הנציג או הסוכן" value="${escHtml(sup.agent_name || '')}">
 
-      <!-- Payment Terms -->
-      <div class="section-title mb-4">הסדר תשלומים</div>
-      <div style="font-size:11px;color:var(--on-surface-3);margin-bottom:8px;background:rgba(107,53,184,0.05);border-radius:8px;padding:8px 10px;line-height:1.5">
-        💡 בעזרת נתון זה נוכל לעדכן אותך בסוף כל חודש על העלויות הצפויות לרדת לפי הסדרי התשלום שלך עם כל ספק.
-      </div>
-      <div class="card card-pad mb-12">
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="payment-terms-btns">
-          ${[
-            ['cash_delivery','מזומן בקבלת סחורה','#059669'],
-            ['cash_eom','מזומן סוף חודש','#0891B2'],
-            ['net30','שוטף+30','#7C3AED'],
-            ['net60','שוטף+60','#D97706'],
-            ['net90','שוטף+90','#DC2626']
-          ].map(([val, label, color]) => {
-            const isActive = (sup.payment_terms || 'net30') === val;
+        <label class="field-label">טלפון *</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <input class="input" id="sup-phone-input" type="tel" placeholder="050-0000000" value="${escHtml(sup.phone || '')}" style="flex:1">
+          ${'contacts' in navigator && navigator.contacts ? `
+          <button onclick="supContactPicker()" title="ייבא מאנשי קשר"
+            style="flex-shrink:0;width:38px;height:38px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface-low);cursor:pointer;display:flex;align-items:center;justify-content:center">
+            <span class="mi" style="font-size:18px;color:var(--primary)">contact_phone</span>
+          </button>` : ''}
+        </div>
+
+        <label class="field-label">מייל</label>
+        <input class="input mb-10" id="sup-email-input" type="email" placeholder="email@supplier.com" value="${escHtml(sup.email || '')}">
+
+        <label class="field-label">הסדר תשלומים *</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+          ${PAYMENT_TERMS_LIST.map(({ val, label, color }) => {
+            const active = (sup.payment_terms || '') === val;
             return `<button onclick="setPaymentTerms('${sup.id}','${val}')"
-              style="padding:6px 12px;border-radius:20px;border:2px solid ${color};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:${isActive ? color : 'transparent'};color:${isActive ? 'white' : color};transition:all 0.15s"
+              style="padding:6px 12px;border-radius:20px;border:2px solid ${color};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;background:${active ? color : 'transparent'};color:${active ? 'white' : color};transition:all 0.15s"
               id="pt-${val}">${label}</button>`;
           }).join('')}
         </div>
-        ${sup.payment_terms ? `<div style="font-size:12px;color:var(--on-surface-3)">
-          תשלום על חשבוניות החודש: <strong>${paymentDueDateLabel(sup.payment_terms)}</strong>
-        </div>` : ''}
-      </div>
 
-      <!-- Phone / Contact -->
-      <div class="section-title mb-8">פרטי קשר</div>
-      <div class="card card-pad mb-12">
-        <input class="input mb-8" id="sup-phone-input" type="tel" placeholder="טלפון ספק" value="${escHtml(sup.phone || '')}">
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button onclick="saveSupplierPhone()" class="btn-primary" style="flex:1;min-width:80px">שמור</button>
-          ${'contacts' in navigator && navigator.contacts ? `<button onclick="supContactPicker()" class="btn-ghost" style="color:var(--primary);border-color:var(--primary)">מאנשי קשר</button>` : ''}
-          ${sup.phone ? `<a href="https://wa.me/${formatWANumber(sup.phone)}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:5px;background:#25D366;color:white;border-radius:var(--radius-md);padding:0 14px;font-size:13px;font-weight:700;text-decoration:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>WhatsApp</a>` : ''}
-        </div>
+        <label class="field-label">ימי אספקה</label>
+        <input class="input mb-14" id="sup-delivery-days" type="text" placeholder="לדוגמה: ראשון, שלישי" value="${escHtml(sup.delivery_days || '')}">
+
+        <button onclick="saveSupplierDetails()" class="btn-primary" style="width:100%">שמור פרטי ספק</button>
+        ${sup.phone ? `
+        <a href="https://wa.me/${formatWANumber(sup.phone)}" target="_blank" class="btn-ghost mt-8"
+          style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;background:#25D366;color:white;border-color:#25D366">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          WhatsApp
+        </a>` : ''}
       </div>
     </div>
   `;
+}
 
-  renderServiceAreas(sup.service_areas || []);
+// ── Product rows renderer ─────────────────────────────────────
+
+function renderSupProductRows(productHistory, filter = '') {
+  const entries = Object.entries(productHistory || {})
+    .filter(([name]) => !filter || name.includes(filter));
+
+  if (!entries.length) {
+    return `<div style="padding:20px;text-align:center;color:var(--on-surface-3);font-size:13px">${filter ? 'לא נמצאו מוצרים' : 'אין מוצרים'}</div>`;
+  }
+
+  return entries.map(([name, history]) => {
+    history.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const latest = history[0]?.price || 0;
+    const prev   = history[1]?.price;
+    const trend  = prev ? (latest > prev * 1.03 ? 'up' : latest < prev * 0.97 ? 'down' : 'stable') : 'stable';
+    const pct    = prev ? Math.abs(((latest - prev) / prev) * 100).toFixed(0) : null;
+    const safeId = name.replace(/[^a-zA-Z0-9]/g, '_');
+
+    const dot = trend === 'up'
+      ? `<div style="width:9px;height:9px;border-radius:50%;background:#EF4444;flex-shrink:0;margin-top:2px"></div>`
+      : trend === 'down'
+      ? `<div style="width:9px;height:9px;border-radius:50%;background:#10B981;flex-shrink:0;margin-top:2px"></div>`
+      : `<div style="width:9px;height:9px;border-radius:50%;background:var(--border);flex-shrink:0;margin-top:2px"></div>`;
+
+    return `
+      <div onclick="showProductHistory('${safeId}')"
+        style="display:grid;grid-template-columns:14px 1fr auto auto;gap:8px;align-items:start;padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer">
+        ${dot}
+        <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(name)}</div>
+        <div style="text-align:left;min-width:64px">
+          <div style="font-size:14px;font-weight:800">₪${parseFloat(latest).toFixed(2)}</div>
+          ${pct && pct !== '0' ? `<div style="font-size:10px;font-weight:700;color:${trend === 'up' ? '#EF4444' : '#10B981'}">${trend === 'up' ? '↑' : '↓'}${pct}%</div>` : ''}
+        </div>
+        <div style="text-align:left;min-width:52px">
+          <div style="font-size:9px;color:var(--on-surface-3);font-weight:600;margin-bottom:1px">מחיר שוק</div>
+          <div style="font-size:11px;color:var(--on-surface-3)">—</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function filterSupProducts(q) {
+  const el = document.getElementById('sup-products-list');
+  if (el) el.innerHTML = renderSupProductRows(window._supProductHistory || {}, q);
+}
+
+function showProductHistory(safeId) {
+  const ph = window._supProductHistory || {};
+  const name = Object.keys(ph).find(k => k.replace(/[^a-zA-Z0-9]/g, '_') === safeId);
+  if (!name) return;
+  const history = (ph[name] || []).slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:75vh;overflow-y:auto">
+      <div style="padding:20px 20px 8px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:16px;font-weight:800">${escHtml(name)}</div>
+        <button onclick="this.closest('[data-ph-modal]').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--on-surface-3)">×</button>
+      </div>
+      <div style="padding:0 20px 32px">
+        ${history.map((h, i) => {
+          const prev = history[i + 1]?.price;
+          const trend = prev ? (h.price > prev * 1.03 ? 'up' : h.price < prev * 0.97 ? 'down' : 'stable') : 'stable';
+          const color = trend === 'up' ? '#EF4444' : trend === 'down' ? '#10B981' : 'var(--on-surface-3)';
+          const arrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '';
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+              <div style="font-size:13px;color:var(--on-surface-2)">${formatDate(h.date)}</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                ${arrow ? `<span style="font-size:12px;color:${color};font-weight:700">${arrow}</span>` : ''}
+                <span style="font-size:15px;font-weight:800">₪${parseFloat(h.price).toFixed(2)}</span>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  modal.setAttribute('data-ph-modal', '');
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+// ── Annual / Monthly invoice modals ──────────────────────────
+
+function showMonthlyInvoices() {
+  const now = new Date();
+  const invs = (window._supInvoices || []).filter(i => {
+    const d = new Date(i.date + 'T00:00:00');
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  });
+  const title = now.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+  _showInvoiceListModal(title, invs);
+}
+
+function showAnnualBreakdown() {
+  const now = new Date();
+  const yr = now.getFullYear();
+  const invs = (window._supInvoices || []).filter(i =>
+    new Date(i.date + 'T00:00:00').getFullYear() === yr
+  );
+
+  // Group by month
+  const byMonth = {};
+  invs.forEach(i => {
+    const d = new Date(i.date + 'T00:00:00');
+    const key = d.getMonth();
+    if (!byMonth[key]) byMonth[key] = { label: d.toLocaleDateString('he-IL', { month: 'long' }), invoices: [], total: 0 };
+    byMonth[key].invoices.push(i);
+    byMonth[key].total += parseFloat(i.total_amount || i.total || 0);
+  });
+
+  const annualTotal = invs.reduce((s, i) => s + parseFloat(i.total_amount || i.total || 0), 0);
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:82vh;overflow-y:auto">
+      <div style="padding:20px 20px 8px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:16px;font-weight:800">רכש שנתי ${yr}</div>
+          <div style="font-size:13px;color:var(--primary);font-weight:700">סה"כ: ₪${Math.round(annualTotal).toLocaleString('he-IL')}</div>
+        </div>
+        <button onclick="this.closest('[data-annual-modal]').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--on-surface-3)">×</button>
+      </div>
+      <div style="padding:0 20px 32px">
+        ${Object.entries(byMonth).sort((a, b) => b[0] - a[0]).map(([, m]) => `
+          <div onclick="_showInvoiceListModal('${m.label}', ${JSON.stringify(m.invoices).replace(/'/g, "\\'")})" class="card-tap"
+            style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer">
+            <div style="font-size:14px;font-weight:700">${m.label}</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-size:12px;color:var(--on-surface-3)">${m.invoices.length} חשבוניות</div>
+              <div style="font-size:15px;font-weight:800;color:var(--primary)">₪${Math.round(m.total).toLocaleString('he-IL')}</div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-surface-3)" stroke-width="2" stroke-linecap="round"><path d="M9 18l-6-6 6-6"/></svg>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  modal.setAttribute('data-annual-modal', '');
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+function _showInvoiceListModal(title, invoices) {
+  document.querySelector('[data-invlist-modal]')?.remove();
+  const total = (invoices || []).reduce((s, i) => s + parseFloat(i.total_amount || i.total || 0), 0);
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:78vh;overflow-y:auto">
+      <div style="padding:18px 20px 8px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:15px;font-weight:800">${title}</div>
+          <div style="font-size:12px;color:var(--primary);font-weight:700">סה"כ: ₪${Math.round(total).toLocaleString('he-IL')}</div>
+        </div>
+        <button onclick="this.closest('[data-invlist-modal]').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--on-surface-3)">×</button>
+      </div>
+      <div style="padding:0 20px 32px">
+        ${(invoices || []).length ? (invoices || []).map(inv => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-size:13px;font-weight:700">${formatDate(inv.date)}</div>
+              <div style="font-size:11px;color:var(--on-surface-3)">${inv.invoice_number || '—'}</div>
+            </div>
+            <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${parseFloat(inv.total_amount || inv.total || 0).toLocaleString('he-IL', { maximumFractionDigits: 0 })}</div>
+          </div>`).join('') :
+          '<div style="padding:20px;text-align:center;color:var(--on-surface-3)">אין חשבוניות</div>'}
+      </div>
+    </div>`;
+  modal.setAttribute('data-invlist-modal', '');
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+// ── Save supplier details ─────────────────────────────────────
+
+async function saveSupplierDetails() {
+  if (!currentSupplier) return;
+  const phone    = document.getElementById('sup-phone-input')?.value.trim();
+  const email    = document.getElementById('sup-email-input')?.value.trim();
+  const delivery = document.getElementById('sup-delivery-days')?.value.trim();
+  const agent    = document.getElementById('sup-agent-input')?.value.trim();
+  if (!phone) { showToast('טלפון הוא שדה חובה'); return; }
+  const btn = document.querySelector('#page-suppliers .card-pad .btn-primary');
+  if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
+  const updates = { phone, email: email || null, delivery_days: delivery || null, agent_name: agent || null };
+  const ok = await DB.update('suppliers', `?id=eq.${currentSupplier.id}`, updates);
+  if (ok) {
+    Object.assign(currentSupplier, updates);
+    const sup = allSuppliers.find(s => s.id === currentSupplier.id);
+    if (sup) Object.assign(sup, updates);
+    showToast('פרטי ספק עודכנו ✓');
+  } else {
+    showToast('שגיאה בשמירה');
+  }
+  if (btn) { btn.textContent = 'שמור פרטי ספק'; btn.disabled = false; }
 }
 
 function renderServiceAreas(areas) {
@@ -521,35 +682,51 @@ async function supContactPicker() {
   } catch { showToast('לא ניתן לגשת לאנשי הקשר'); }
 }
 
-async function saveSupplierPhone() {
-  if (!currentSupplier) return;
-  const phone = document.getElementById('sup-phone-input')?.value.trim();
-  await DB.update('suppliers', `?id=eq.${currentSupplier.id}`, { phone: phone || null });
-  currentSupplier.phone = phone;
-  const sup = allSuppliers.find(s => s.id === currentSupplier.id);
-  if (sup) sup.phone = phone;
-  showToast('טלפון עודכן');
-}
 
 function showAddSupplier() {
+  _newSupTerm = null;
   const el = document.getElementById('suppliers-list');
   const hasContacts = 'contacts' in navigator && navigator.contacts;
   el.innerHTML = `
     <div class="card-pad">
-      <div style="font-size:16px;font-weight:800;margin-bottom:16px">ספק חדש</div>
+      <div style="font-size:16px;font-weight:800;margin-bottom:4px">ספק חדש</div>
+      <div style="font-size:12px;color:var(--on-surface-3);margin-bottom:16px">* שדות חובה</div>
+
       ${hasContacts ? `
         <button onclick="addSupplierFromContacts()" class="btn-ghost mb-12" style="width:100%;border-color:var(--primary);color:var(--primary);display:flex;align-items:center;justify-content:center;gap:8px">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-          הוסף מאנשי הקשר
+          ייבא מאנשי הקשר
         </button>` : ''}
-      <label class="field-label">שם ספק</label>
-      <input class="input mb-12" id="new-sup-name" type="text" placeholder="שם הספק">
-      <label class="field-label">טלפון (אופציונלי)</label>
-      <input class="input mb-16" id="new-sup-phone" type="tel" placeholder="050-0000000">
+
+      <label class="field-label">שם ספק *</label>
+      <input class="input mb-10" id="new-sup-name" type="text" placeholder="שם הספק">
+
+      <label class="field-label">טלפון *</label>
+      <input class="input mb-14" id="new-sup-phone" type="tel" placeholder="050-0000000">
+
+      <label class="field-label">הסדר תשלומים *</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+        ${PAYMENT_TERMS_LIST.map(({ val, label, color }) => `
+          <button type="button" onclick="selectNewSupTerm('${val}')" id="nst-${val}"
+            style="padding:7px 13px;border-radius:20px;border:2px solid ${color};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:${color};transition:all 0.15s">
+            ${label}
+          </button>`).join('')}
+      </div>
+
       <button class="btn-primary mb-8" onclick="saveNewSupplier()">הוסף ספק</button>
       <button class="btn-ghost" onclick="renderSuppliersList()">ביטול</button>
     </div>
   `;
+}
+
+function selectNewSupTerm(val) {
+  _newSupTerm = val;
+  PAYMENT_TERMS_LIST.forEach(({ val: v, color }) => {
+    const btn = document.getElementById('nst-' + v);
+    if (!btn) return;
+    btn.style.background = v === val ? color : 'transparent';
+    btn.style.color = v === val ? 'white' : color;
+  });
 }
 
 async function addSupplierFromContacts() {
@@ -570,17 +747,21 @@ async function addSupplierFromContacts() {
 async function saveNewSupplier() {
   const name = document.getElementById('new-sup-name')?.value.trim();
   const phone = document.getElementById('new-sup-phone')?.value.trim();
-  if (!name) return;
+  if (!name)       { showToast('שם ספק הוא שדה חובה'); return; }
+  if (!phone)      { showToast('טלפון הוא שדה חובה'); return; }
+  if (!_newSupTerm){ showToast('יש לבחור הסדר תשלומים'); return; }
 
   await DB.insert('suppliers', {
     user_id: Auth.userId,
     name,
-    phone: phone || null,
+    phone,
+    payment_terms: _newSupTerm,
     total_amount: 0,
     invoice_count: 0,
     created_at: new Date().toISOString()
   });
 
+  _newSupTerm = null;
   showToast('הספק נוסף בהצלחה');
   renderSuppliersList();
 }
@@ -588,4 +769,134 @@ async function saveNewSupplier() {
 function formatDate(d) {
   if (!d) return '';
   return new Date(d).toLocaleDateString('he-IL', {day:'numeric', month:'short'});
+}
+
+// ── Payment Forecast (120 days) ───────────────────────────────
+
+function calcPaymentDueDate(invoiceDateStr, terms) {
+  const inv = new Date(invoiceDateStr + 'T00:00:00');
+  // end of the invoice's month
+  const eom = new Date(inv.getFullYear(), inv.getMonth() + 1, 0);
+  const addDays = n => { const d = new Date(eom); d.setDate(d.getDate() + n); return d; };
+  switch (terms) {
+    case 'cash_delivery': return null; // already paid on delivery
+    case 'order_time':    return null; // already paid at order time
+    case 'cash_eom':      return eom;
+    case 'net30':         return addDays(30);
+    case 'net60':         return addDays(60);
+    case 'net90':         return addDays(90);
+    default:              return addDays(30);
+  }
+}
+
+async function showPaymentForecast() {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+  modal.setAttribute('data-forecast-modal', '');
+  modal.innerHTML = `
+    <div style="background:white;border-radius:28px 28px 0 0;width:100%;max-width:480px;max-height:88vh;display:flex;flex-direction:column">
+      <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div>
+          <div style="font-size:18px;font-weight:800">תשלומים צפויים</div>
+          <div style="font-size:12px;color:var(--on-surface-3);margin-top:2px">120 יום קדימה — לפי הסדרי תשלום לפי ספק</div>
+        </div>
+        <button onclick="this.closest('[data-forecast-modal]').remove()" style="background:none;border:none;cursor:pointer;font-size:24px;color:var(--on-surface-3);line-height:1">×</button>
+      </div>
+      <div style="margin:10px 20px 0;background:rgba(107,53,184,0.07);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--on-surface-2);line-height:1.6;flex-shrink:0">
+        ⭐ <b>שוטף+30</b> = תשלום 30 יום מסוף החודש שבו נצברו החשבוניות. לדוגמה: חשבוניות מאי → תשלום 30 ביוני. כך גם לגבי שוטף+60 ושוטף+90. מזומן בקבלת סחורה / בזמן הזמנה — אינם מוצגים (שולמו כבר).
+      </div>
+      <div id="forecast-body" style="overflow-y:auto;flex:1;padding:16px 20px 32px">
+        <div style="text-align:center;padding:40px 0;color:var(--on-surface-3)">טוען נתונים...</div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+
+  // Fetch last 4 months of invoices + all suppliers (for payment terms)
+  const today = new Date();
+  const from = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+  const fromStr = from.toISOString().split('T')[0];
+  const maxDate = new Date(today); maxDate.setDate(maxDate.getDate() + 120);
+
+  const [invoices, suppliers] = await Promise.all([
+    DB.get('invoices', `?select=*&date=gte.${fromStr}&order=date.asc`),
+    DB.get('suppliers', `?select=name,payment_terms`)
+  ]);
+
+  // Build supplier → payment terms map
+  const supTerms = {};
+  (suppliers || []).forEach(s => { supTerms[s.name] = s.payment_terms || 'net30'; });
+
+  // Calculate due dates, filter to today → today+120
+  const payments = [];
+  (invoices || []).forEach(inv => {
+    const terms = supTerms[inv.supplier_name] || 'net30';
+    const amount = parseFloat(inv.total_amount || inv.total || 0);
+    if (!amount) return;
+    const due = calcPaymentDueDate(inv.date, terms);
+    if (!due) return; // already paid
+    if (due < today || due > maxDate) return;
+    payments.push({ due, supplier: inv.supplier_name, amount, terms });
+  });
+
+  // Group by due date string, merge same supplier on same date
+  const groups = {};
+  payments.forEach(p => {
+    const key = p.due.toISOString().split('T')[0];
+    if (!groups[key]) groups[key] = { date: p.due, bySupplier: {}, total: 0 };
+    groups[key].bySupplier[p.supplier] = (groups[key].bySupplier[p.supplier] || 0) + p.amount;
+    groups[key].total += p.amount;
+  });
+
+  const sorted = Object.values(groups).sort((a, b) => a.date - b.date);
+
+  const body = document.getElementById('forecast-body');
+  if (!body) return;
+
+  if (!sorted.length) {
+    body.innerHTML = `<div style="text-align:center;padding:40px 0">
+      <div style="font-size:40px;margin-bottom:12px">✅</div>
+      <div style="font-size:15px;font-weight:700">אין תשלומים צפויים ב-120 הימים הקרובים</div>
+      <div style="font-size:12px;color:var(--on-surface-3);margin-top:6px">ודא שהסדרי התשלום הוגדרו לכל ספק</div>
+    </div>`;
+    return;
+  }
+
+  let cumulative = 0;
+  const termsLabel = t => PAYMENT_TERMS_LABELS[t] || t;
+  const fmtDate = d => d.toLocaleDateString('he-IL', { weekday:'short', day:'numeric', month:'long', year:'numeric' });
+  const fmtMoney = n => '₪' + Math.round(n).toLocaleString('he-IL');
+
+  body.innerHTML = sorted.map(g => {
+    cumulative += g.total;
+    const daysFromNow = Math.round((g.date - today) / 86400000);
+    const urgency = daysFromNow <= 14 ? 'var(--error)' : daysFromNow <= 30 ? '#D97706' : 'var(--on-surface-3)';
+    const rows = Object.entries(g.bySupplier).map(([name, amt]) =>
+      `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;font-weight:600">${name}</div>
+        <div style="font-size:13px;font-weight:700">${fmtMoney(amt)}</div>
+      </div>`
+    ).join('');
+
+    return `
+      <div style="margin-bottom:16px;background:white;border:1.5px solid var(--border);border-radius:16px;overflow:hidden">
+        <div style="background:var(--surface-low);padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:13px;font-weight:800">${fmtDate(g.date)}</div>
+            <div style="font-size:11px;color:${urgency};font-weight:700;margin-top:2px">
+              ${daysFromNow === 0 ? 'היום' : `בעוד ${daysFromNow} ימים`}
+            </div>
+          </div>
+          <div style="text-align:left">
+            <div style="font-size:16px;font-weight:800;color:var(--primary)">${fmtMoney(g.total)}</div>
+            <div style="font-size:10px;color:var(--on-surface-3)">תשלום יחיד</div>
+          </div>
+        </div>
+        <div style="padding:10px 14px">${rows}</div>
+        <div style="padding:8px 14px;background:linear-gradient(135deg,rgba(107,53,184,0.06),rgba(139,92,246,0.08));display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:11px;color:var(--on-surface-3)">סה"כ מצטבר עד תאריך זה</div>
+          <div style="font-size:14px;font-weight:800;color:var(--primary)">${fmtMoney(cumulative)}</div>
+        </div>
+      </div>`;
+  }).join('');
 }

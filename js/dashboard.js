@@ -50,10 +50,14 @@ async function renderDashboard() {
 }
 
 function renderPlanBadge() {
-  const profile = Auth.profile;
-  const isPro = profile.plan === 'pro' && profile.pro_until && new Date(profile.pro_until) > new Date();
   const badge = document.getElementById('plan-badge');
   if (!badge) return;
+  if (isManager()) {
+    badge.innerHTML = '<span style="background:linear-gradient(135deg,#6B35B8,#9B6DD6);color:white;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800">מנהל</span>';
+    return;
+  }
+  const profile = Auth.profile;
+  const isPro = profile.plan === 'pro' && profile.pro_until && new Date(profile.pro_until) > new Date();
 
   if (isPro) {
     const daysLeft = Math.ceil((new Date(profile.pro_until) - new Date()) / (1000*60*60*24));
@@ -79,14 +83,20 @@ function renderStats() {
 
   document.getElementById('dash-saving').textContent = '₪0';
 
-  // Revenue card — monthly total + today indicator
-  const today = new Date().toISOString().slice(0, 10);
-  const todayRevenue = dashData.revenues.find(r => r.date === today);
+  // Revenue card — managers see an "Add Z daily" button instead of totals
   const revEl = document.getElementById('dash-today-revenue');
   const revSubEl = document.getElementById('dash-today-revenue-sub');
   if (revEl) {
-    revEl.textContent = monthlyRevenue > 0 ? '₪' + Math.round(monthlyRevenue).toLocaleString('he-IL') : '—';
-    if (revSubEl) revSubEl.textContent = todayRevenue ? `היום: ₪${parseFloat(todayRevenue.amount).toLocaleString('he-IL', {maximumFractionDigits:0})} ✓` : 'היום: לא הוזן';
+    if (isManager()) {
+      revEl.textContent = '+';
+      revEl.style.color = 'var(--primary)';
+      if (revSubEl) revSubEl.textContent = 'לחץ להוספה';
+    } else {
+      const today = new Date().toISOString().slice(0, 10);
+      const todayRevenue = dashData.revenues.find(r => r.date === today);
+      revEl.textContent = monthlyRevenue > 0 ? '₪' + Math.round(monthlyRevenue).toLocaleString('he-IL') : '—';
+      if (revSubEl) revSubEl.textContent = todayRevenue ? `היום: ₪${parseFloat(todayRevenue.amount).toLocaleString('he-IL', {maximumFractionDigits:0})} ✓` : 'היום: לא הוזן';
+    }
   }
 
   const fcEl = document.getElementById('dash-foodcost');
@@ -95,7 +105,7 @@ function renderStats() {
     const fc = (monthlyPurchases / monthlyRevenue * 100).toFixed(1);
     fcEl.textContent = fc + '%';
     fcEl.style.color = parseFloat(fc) > 35 ? 'var(--error)' : parseFloat(fc) > 28 ? '#F59E0B' : 'var(--success)';
-    fcSubEl.textContent = 'מחזור ₪' + monthlyRevenue.toLocaleString('he-IL', {maximumFractionDigits: 0});
+    fcSubEl.textContent = isManager() ? 'לניתוח AI' : 'מחזור ₪' + monthlyRevenue.toLocaleString('he-IL', {maximumFractionDigits: 0});
   } else if (monthlyRevenue > 0 && monthlyPurchases === 0) {
     fcEl.textContent = '--%';
     fcEl.style.color = 'var(--on-surface-3)';
@@ -531,34 +541,71 @@ async function showAIInsights(topic) {
 
 function showProModal() {
   const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px)';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(8px)';
   modal.innerHTML = `
-    <div style="background:white;border-radius:24px;max-width:380px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-      <div style="background:linear-gradient(135deg,#4A1F85,#9B6DD6);padding:24px;color:white;text-align:center">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="white" style="margin-bottom:8px"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg>
-        <div style="font-size:24px;font-weight:800;letter-spacing:-0.5px">Reverto PRO</div>
-        <div style="font-size:13px;opacity:0.9;margin-top:4px">כל הכלים לעסק חכם</div>
-      </div>
-      <div style="padding:24px">
-        <div style="font-size:32px;font-weight:800;color:var(--on-surface);text-align:center;margin-bottom:4px">₪98<span style="font-size:14px;font-weight:600;color:var(--on-surface-3)">/חודש</span></div>
-        <div style="font-size:12px;text-align:center;color:var(--on-surface-3);margin-bottom:20px">ביטול בכל עת</div>
-        <div style="border-top:1px solid var(--border);padding-top:16px">
-          ${[
-            'מעקב מחזור יומי וגרף מצטבר',
-            'חישוב Food Cost חודשי ושנתי',
-            'תובנות AI על נתוני העסק שלך',
-            'השוואה לעסקים דומים בשוק',
-            'תזכורות יומיות חכמות',
-            'BID — הצעות מחיר מספקים מתחרים'
-          ].map(f => `
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              <span style="font-size:13px;font-weight:600">${f}</span>
-            </div>
-          `).join('')}
+    <div style="background:white;border-radius:28px 28px 0 0;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;box-shadow:0 -8px 40px rgba(0,0,0,0.25)">
+
+      <div style="background:linear-gradient(135deg,#3A1570,#8B5CF6);padding:28px 24px 24px;text-align:center;color:white">
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;background:rgba(255,255,255,0.18);border-radius:16px;margin-bottom:12px">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg>
         </div>
-        <button class="btn-primary" style="margin-top:20px" onclick="alert('בקרוב — תשלום מאובטח')">שדרג עכשיו</button>
-        <button class="btn-ghost" style="margin-top:8px" onclick="this.closest('.pro-modal-wrap').remove()">לא עכשיו</button>
+        <div style="font-size:26px;font-weight:800;letter-spacing:-0.5px">REVERTO PRO</div>
+        <div style="font-size:11px;font-weight:700;opacity:0.75;letter-spacing:1px;margin-top:4px">REVERTO NETWORK + AND SO MUCH MORE</div>
+        <div style="margin-top:16px;display:flex;align-items:baseline;justify-content:center;gap:4px">
+          <span style="font-size:42px;font-weight:800;line-height:1">₪98</span>
+          <span style="font-size:13px;opacity:0.75">/ חודש · ביטול בכל עת</span>
+        </div>
+      </div>
+
+      <div style="padding:24px 20px 40px">
+        <div style="font-size:10px;font-weight:800;color:var(--on-surface-3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px">תכונות PRO בלבד</div>
+
+        ${[
+          ['trending_up',    'מעקב מחזור יומי וגרף מצטבר'],
+          ['restaurant',     'חישוב Food Cost חודשי ושנתי'],
+          ['auto_awesome',   'תזכורות יומיות ותובנות AI מותאמות אישית לעסק ולנתוניו'],
+          ['receipt_long',   'חישוב ותכנון הוצאות סוף חודש עפ"י חשבוניות והסכמי תשלומים (שוטף+)'],
+          ['currency_exchange', 'מעקב אחרי זיכויים והחזרים סוף חודש'],
+        ].map(([icon, text]) => `
+          <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px">
+            <div style="width:36px;height:36px;background:var(--surface-low);border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <span class="mi" style="color:var(--primary)">${icon}</span>
+            </div>
+            <div style="font-size:13px;font-weight:600;color:var(--on-surface);line-height:1.5;padding-top:8px">${text}</div>
+          </div>
+        `).join('')}
+
+        <div style="display:flex;align-items:center;gap:10px;margin:20px 0">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <div style="font-size:11px;font-weight:700;color:var(--on-surface-3);white-space:nowrap">כולל גם — בחינם לכולם</div>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+
+        <div style="background:linear-gradient(135deg,rgba(107,53,184,0.06),rgba(139,92,246,0.1));border:1.5px solid rgba(107,53,184,0.2);border-radius:18px;padding:18px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <div style="font-size:14px;font-weight:800;color:var(--primary)">REVERTO NETWORK</div>
+            <div style="background:var(--primary);color:white;font-size:9px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:0.5px">FREE</div>
+          </div>
+          <div style="font-size:11px;color:var(--on-surface-3);margin-bottom:16px;line-height:1.5">Our Free Network — שירות חינמי בנוי ומושתת על נתינה וקבלה בתוך הקהילה</div>
+
+          <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px">
+            <span class="mi" style="color:var(--primary);margin-top:1px">bar_chart</span>
+            <div>
+              <div style="font-size:12px;font-weight:800;color:var(--primary)">REVERTO benchmark</div>
+              <div style="font-size:11px;color:var(--on-surface-2);line-height:1.5;margin-top:2px">סטנדרט חדש למחירון מוצרים — השוואה למחירי השוק</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <span class="mi" style="color:var(--primary);margin-top:1px">bolt</span>
+            <div>
+              <div style="font-size:12px;font-weight:800;color:var(--primary)">REVERTO BID</div>
+              <div style="font-size:11px;color:var(--on-surface-2);line-height:1.5;margin-top:2px">ספקים מתחרים על כל אחת מההזמנות שלך</div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn-primary" style="margin-top:22px;width:100%;font-size:15px;padding:14px" onclick="alert('בקרוב — תשלום מאובטח')">שדרג ל-PRO עכשיו</button>
+        <button class="btn-ghost" style="margin-top:10px;width:100%" onclick="this.closest('.pro-modal-wrap').remove()">לא עכשיו</button>
       </div>
     </div>
   `;
@@ -647,7 +694,15 @@ async function openDeliveryClose(invoiceId) {
       </div>
     </div>
     <div style="padding:16px 20px;flex:1">
-      <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:12px">ערוך כמויות שהתקבלו בפועל. כמות שלא הגיעה תחושב כזיכוי.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <button onclick="quickCloseDelivery('${invoiceId}','returned')" style="background:#FEF9C3;color:#B45309;border:1.5px solid #FCD34D;border-radius:var(--radius-md);padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🔄 הוחזר לספק</button>
+        <button onclick="quickCloseDelivery('${invoiceId}','not_arrived')" style="background:#FEE2E2;color:#B91C1C;border:1.5px solid #FCA5A5;border-radius:var(--radius-md);padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">❌ לא הגיע כלל</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <div style="font-size:11px;color:var(--on-surface-3)">או סמן כמויות שהתקבלו בפועל</div>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
 
       <div style="display:grid;grid-template-columns:2fr 60px 60px 70px;gap:4px;padding:6px 10px;background:var(--surface-low);border-radius:var(--radius-md) var(--radius-md) 0 0;font-size:10px;font-weight:700;color:var(--on-surface-3)">
         <div>מוצר</div><div style="text-align:center">הוזמן</div><div style="text-align:center">התקבל</div><div style="text-align:center">זוכה ₪</div>
@@ -757,6 +812,19 @@ async function saveDeliveryClose(invoiceId) {
 
   modal?.remove();
   showToast(totalCredit > 0 ? `קבלה נסגרה · זיכוי צפוי: ₪${totalCredit.toFixed(2)}` : 'קבלה נסגרה ✓');
+  renderPendingDeliveries();
+}
+
+async function quickCloseDelivery(invoiceId, status) {
+  const labels = { returned: 'הוחזר לספק', not_arrived: 'לא הגיע כלל' };
+  await DB.update('invoices', `?id=eq.${invoiceId}`, {
+    delivery_status: status,
+    delivery_closed_at: new Date().toISOString()
+  });
+  const localInv = dashData.invoices.find(i => i.id === invoiceId);
+  if (localInv) localInv.delivery_status = status;
+  document.querySelector('[data-delivery-modal]')?.remove();
+  showToast(`${labels[status]} ✓`);
   renderPendingDeliveries();
 }
 
@@ -898,7 +966,7 @@ function exportMonthlySummary() {
   const rows = invoices.map(inv => {
     const adj = inv.adjustments ? (typeof inv.adjustments === 'string' ? JSON.parse(inv.adjustments) : inv.adjustments) : [];
     const credit = adj.reduce((s,a) => s + (a.credit_amount||0), 0);
-    return [inv.date, inv.supplier_name, inv.invoice_number, parseFloat(inv.total_amount||inv.total||0).toFixed(2), credit.toFixed(2), (parseFloat(inv.total_amount||inv.total||0) - credit).toFixed(2), inv.delivery_status === 'closed' ? 'סגור' : 'פתוח'];
+    return [inv.date, inv.supplier_name, inv.invoice_number, parseFloat(inv.total_amount||inv.total||0).toFixed(2), credit.toFixed(2), (parseFloat(inv.total_amount||inv.total||0) - credit).toFixed(2), {closed:'סגור',returned:'הוחזר',not_arrived:'לא הגיע'}[inv.delivery_status] || 'פתוח'];
   });
   const headers = ['תאריך','ספק','מספר חשבונית','סכום','זיכוי','נטו','סטטוס'];
   const csv = '﻿' + [headers, ...rows].map(r => r.join(',')).join('\n');
@@ -911,6 +979,7 @@ function exportMonthlySummary() {
 // ── Payment Forecast ──────────────────────────────────────────
 
 async function renderPaymentForecast() {
+  if (isManager()) return;
   const el = document.getElementById('dash-payment-forecast');
   if (!el) return;
 

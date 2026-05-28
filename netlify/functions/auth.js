@@ -62,13 +62,14 @@ exports.handler = async (event) => {
 
     // ── Personal + partner codes (RV-) → returning user ───────
     if (codeUpper.startsWith('RV-')) {
-      // Look up via access_codes — supports both personal and partner codes
+      // Look up via access_codes — supports personal, partner and manager codes
       const cr = await fetch(
-        `${SUPABASE_URL}/rest/v1/access_codes?code=eq.${encodeURIComponent(codeUpper)}&type=in.(personal,partner)&is_active=eq.true&select=user_id`,
+        `${SUPABASE_URL}/rest/v1/access_codes?code=eq.${encodeURIComponent(codeUpper)}&type=in.(personal,partner,manager)&is_active=eq.true&select=user_id,type`,
         { headers: H }
       );
       const codes = await cr.json();
       if (!codes?.length) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid code' }) };
+      const codeType = codes[0].type;
 
       const ur = await fetch(
         `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(codes[0].user_id)}&select=*`,
@@ -90,10 +91,9 @@ exports.handler = async (event) => {
         }).catch(() => {});
       }
 
-      const jwt = signJWT(
-        { user_id: user.id, plan: user.plan, exp: Math.floor(Date.now() / 1000) + 86400 }, // 24 hours
-        JWT_SECRET
-      );
+      const jwtPayload = { user_id: user.id, plan: user.plan, exp: Math.floor(Date.now() / 1000) + 86400 * 90 };
+      if (codeType === 'manager') jwtPayload.role = 'manager';
+      const jwt = signJWT(jwtPayload, JWT_SECRET);
       return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, jwt }) };
     }
 

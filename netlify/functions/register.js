@@ -182,7 +182,7 @@ exports.handler = async (event) => {
     sendCodeEmail(profile.email, profile.business_name, personal_code).catch(() => {});
 
     const jwt = signJWT(
-      { user_id: user.id, plan: 'pro', exp: Math.floor(Date.now() / 1000) + 86400 },
+      { user_id: user.id, plan: 'pro', exp: Math.floor(Date.now() / 1000) + 86400 * 90 },
       process.env.JWT_SECRET
     );
 

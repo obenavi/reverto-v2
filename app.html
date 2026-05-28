@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Reverto</title>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet"/>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -58,7 +59,7 @@
             <div class="stat-value" id="dash-monthly" style="font-size:20px">₪0</div>
             <div class="stat-sub" id="dash-monthly-sub">0 חשבוניות</div>
           </div>
-          <div class="card-tap" onclick="openRevenueHistory()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
+          <div id="dash-revenue-card" class="card-tap" onclick="openRevenueHistory()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
             <div class="stat-label">מחזור</div>
             <div class="stat-value" id="dash-today-revenue" style="font-size:20px">—</div>
             <div class="stat-sub" id="dash-today-revenue-sub">לחץ לפירוט</div>
@@ -68,10 +69,10 @@
             <div class="stat-value" id="dash-foodcost" style="font-size:20px">--%</div>
             <div class="stat-sub" id="dash-foodcost-sub">הכנס מחזור</div>
           </div>
-          <div class="card-tap" onclick="showAIInsights('savings')" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
-            <div class="stat-label">חיסכון פוטנציאלי</div>
-            <div class="stat-value text-success" id="dash-saving" style="font-size:20px">₪0</div>
-            <div class="stat-sub">לעומת שוק</div>
+          <div id="dash-payments-card" class="card-tap" onclick="showPaymentForecast()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
+            <div class="stat-label">תשלומים</div>
+            <div class="stat-value" style="font-size:20px">120 יום</div>
+            <div class="stat-sub">לחץ לצפייה</div>
           </div>
         </div>
       </div>
@@ -106,6 +107,18 @@
               <span style="font-size:11px;color:var(--on-surface-3);font-weight:600">Food Cost %</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Savings row (moved from stat grid) -->
+      <div class="card card-pad mb-12" onclick="showAIInsights('savings')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:13px;font-weight:700">חיסכון פוטנציאלי</div>
+          <div style="font-size:11px;color:var(--on-surface-3)">לעומת מחירי השוק</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:20px;font-weight:800;color:var(--success)" id="dash-saving">₪0</div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-surface-3)" stroke-width="2" stroke-linecap="round"><path d="M9 18l-6-6 6-6"/></svg>
         </div>
       </div>
 
@@ -165,18 +178,21 @@
       <div style="font-size:13px;color:var(--on-surface-3);margin-bottom:24px">צלם או העלה חשבונית לניתוח אוטומטי</div>
 
       <!-- Scan Area -->
-      <div id="scanner-idle">
+      <div id="scanner-idle" style="display:flex;flex-direction:column;align-items:center;padding:16px 0">
         <div onclick="document.getElementById('scan-file').click()"
-          style="border:2px dashed var(--border);border-radius:var(--radius-xl);padding:48px 24px;text-align:center;cursor:pointer;background:var(--surface-card);transition:all 0.2s;margin-bottom:12px"
-          onmouseenter="this.style.borderColor='var(--primary)'"
-          onmouseleave="this.style.borderColor='var(--border)'">
-          <div style="width:64px;height:64px;background:linear-gradient(135deg,var(--primary-dark),var(--primary-light));border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          style="width:100%;background:linear-gradient(135deg,var(--primary-dark),var(--primary-light));border-radius:24px;padding:40px 24px;text-align:center;cursor:pointer;box-shadow:0 8px 32px rgba(107,53,184,0.35);transition:transform 0.15s,box-shadow 0.15s;margin-bottom:16px"
+          onmousedown="this.style.transform='scale(0.97)';this.style.boxShadow='0 4px 16px rgba(107,53,184,0.25)'"
+          onmouseup="this.style.transform='';this.style.boxShadow='0 8px 32px rgba(107,53,184,0.35)'"
+          ontouchstart="this.style.transform='scale(0.97)'"
+          ontouchend="this.style.transform=''">
+          <div style="width:80px;height:80px;background:rgba(255,255,255,0.18);border-radius:24px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+            <span class="mi" style="color:white;font-size:40px">document_scanner</span>
           </div>
-          <div style="font-size:16px;font-weight:800;margin-bottom:6px">צלם או העלה חשבונית</div>
-          <div style="font-size:13px;color:var(--on-surface-3)">מצלמה · גלריה · הורדות</div>
+          <div style="font-size:22px;font-weight:800;color:white;margin-bottom:8px;letter-spacing:-0.5px">סריקת חשבונית</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.75);font-weight:500">מצלמה · גלריה · PDF</div>
         </div>
         <input type="file" id="scan-file" accept="image/*,application/pdf" style="display:none" onchange="scannerHandleFile(this.files[0])">
+        <div style="font-size:12px;color:var(--on-surface-3);text-align:center;margin-top:4px">לחץ על הכפתור לסריקה אוטומטית עם AI</div>
       </div>
 
       <!-- Loading -->
@@ -239,84 +255,83 @@
     <div class="page-content">
       <div style="font-size:22px;font-weight:800;margin-bottom:20px">פרופיל העסק</div>
 
-      <div class="card card-pad mb-12">
-        <div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:12px">פרטי העסק</div>
-        <label class="field-label">שם המסעדה / העסק</label>
-        <input class="input mb-10" id="prof-biz-name" type="text">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-          <div>
-            <label class="field-label">שם פרטי</label>
-            <input class="input" id="prof-first-name" type="text">
-          </div>
-          <div>
-            <label class="field-label">שם משפחה</label>
-            <input class="input" id="prof-last-name" type="text">
-          </div>
+      <!-- פרטי עסק -->
+      <div class="card mb-12">
+        <div onclick="toggleSection('biz')" style="display:flex;align-items:center;justify-content:space-between;padding:16px;cursor:pointer">
+          <div style="font-size:14px;font-weight:800;color:var(--primary)">פרטי עסק</div>
+          <div id="arrow-biz" style="font-size:20px;transition:transform 0.2s;color:var(--on-surface-3)">›</div>
         </div>
-        <label class="field-label">טלפון</label>
-        <input class="input mb-10" id="prof-phone" type="tel">
-        <label class="field-label">מייל</label>
-        <input class="input mb-10" id="prof-email" type="email">
-        <label class="field-label">רחוב ומספר</label>
-        <input class="input mb-10" id="prof-address" type="text">
-        <label class="field-label">עיר</label>
-        <input class="input mb-10" id="prof-city" type="text">
+        <div id="body-biz" style="display:none;padding:0 16px 16px"></div>
       </div>
 
-      <div class="card card-pad mb-12">
-        <div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:12px">פרטי תפעול</div>
-        <label class="field-label" style="margin-bottom:8px">ימי עבודה</label>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-          ${['א','ב','ג','ד','ה','ו','ש'].map(d => `
-            <button id="wd-${d}" onclick="toggleWorkDay('${d}')"
-              style="width:38px;height:38px;border-radius:50%;border:2px solid var(--border);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--on-surface-2);transition:all 0.15s">
-              ${d}
-            </button>`).join('')}
+      <!-- פרטי תפעול -->
+      <div class="card mb-12">
+        <div onclick="toggleSection('ops')" style="display:flex;align-items:center;justify-content:space-between;padding:16px;cursor:pointer">
+          <div style="font-size:14px;font-weight:800;color:var(--primary)">פרטי תפעול</div>
+          <div id="arrow-ops" style="font-size:20px;transition:transform 0.2s;color:var(--on-surface-3)">›</div>
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <div>
-            <label class="field-label" style="margin-bottom:2px">כשרות</label>
-            <div style="font-size:11px;color:var(--on-surface-3)">משפיע על בנצ'מארק עם עסקים דומים</div>
+        <div id="body-ops" style="display:none;padding:0 16px 16px"></div>
+      </div>
+
+      <!-- סניפים -->
+      <div class="card mb-12">
+        <div onclick="toggleSection('locs')" style="display:flex;align-items:center;justify-content:space-between;padding:16px;cursor:pointer">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:14px;font-weight:800">סניפים</div>
+            <span style="font-size:11px;color:var(--on-surface-3)" id="location-count"></span>
           </div>
-          <div style="display:flex;gap:6px">
-            <button id="kosher-no" onclick="setKosher(false)"
-              style="padding:6px 14px;border-radius:20px;border:2px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--on-surface-2)">לא כשר</button>
-            <button id="kosher-yes" onclick="setKosher(true)"
-              style="padding:6px 14px;border-radius:20px;border:2px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--on-surface-2)">כשר ✡</button>
-          </div>
+          <div id="arrow-locs" style="font-size:20px;transition:transform 0.2s;color:var(--on-surface-3)">›</div>
+        </div>
+        <div id="body-locs" style="display:none;padding:0 16px 16px">
+          <div id="locations-list" style="margin-bottom:10px"></div>
+          <button onclick="showAddLocation()" class="btn-ghost" style="width:100%;font-size:13px">+ הוסף סניף</button>
         </div>
       </div>
 
-      <div class="card card-pad mb-12">
-        <button class="btn-primary" onclick="saveProfile()" style="width:100%">שמור שינויים</button>
-      </div>
-      <div class="card card-pad mb-12">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <div style="font-size:14px;font-weight:800">סניפים</div>
-          <span style="font-size:11px;color:var(--on-surface-3)" id="location-count"></span>
+      <!-- קוד שותף -->
+      <div class="card mb-12" id="partner-card">
+        <div onclick="toggleSection('partner')" style="display:flex;align-items:center;justify-content:space-between;padding:16px;cursor:pointer">
+          <div style="font-size:14px;font-weight:800">קוד שותף</div>
+          <div id="arrow-partner" style="font-size:20px;transition:transform 0.2s;color:var(--on-surface-3)">›</div>
         </div>
-        <div id="locations-list" style="margin-bottom:10px"></div>
-        <button onclick="showAddLocation()" class="btn-ghost" style="width:100%;font-size:13px">+ הוסף סניף</button>
+        <div id="body-partner" style="display:none;padding:0 16px 16px">
+          <div style="font-size:12px;color:var(--on-surface-3);margin-bottom:12px">שתף קוד גישה עם שותף שיוכל להיכנס לחשבון שלך</div>
+          <div id="partner-codes-list" style="margin-bottom:10px"></div>
+          <button onclick="generatePartnerCode()" class="btn-ghost" style="width:100%;font-size:13px">+ צור קוד שותף חדש</button>
+        </div>
       </div>
 
-      <div class="card card-pad mb-12">
-        <div style="font-size:14px;font-weight:800;margin-bottom:12px">קוד שותף</div>
-        <div style="font-size:12px;color:var(--on-surface-3);margin-bottom:12px">שתף קוד גישה עם שותף שיוכל להיכנס לחשבון שלך</div>
-        <div id="partner-codes-list" style="margin-bottom:10px"></div>
-        <button onclick="generatePartnerCode()" class="btn-ghost" style="width:100%;font-size:13px">+ צור קוד שותף חדש</button>
-      </div>
-      <div class="card card-pad mb-12">
-        <div style="font-size:14px;font-weight:800;margin-bottom:12px">ייצוא נתונים</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <button onclick="exportData('invoices',this)" class="btn-ghost" style="font-size:12px">📄 חשבוניות</button>
-          <button onclick="exportData('items',this)" class="btn-ghost" style="font-size:12px">📦 פריטי חשבוניות</button>
-          <button onclick="exportData('suppliers',this)" class="btn-ghost" style="font-size:12px">🏢 ספקים</button>
-          <button onclick="exportData('revenues',this)" class="btn-ghost" style="font-size:12px">💰 מחזורים</button>
-          <button onclick="exportData('products',this)" class="btn-ghost" style="font-size:12px">🗂️ קטלוג מוצרים</button>
-          <button onclick="exportData('recipes',this)" class="btn-ghost" style="font-size:12px">🍽️ מתכונים</button>
+      <!-- קוד מנהל -->
+      <div class="card mb-12" id="manager-card">
+        <div onclick="toggleSection('manager-codes')" style="display:flex;align-items:center;justify-content:space-between;padding:16px;cursor:pointer">
+          <div style="font-size:14px;font-weight:800">קוד מנהל</div>
+          <div id="arrow-manager-codes" style="font-size:20px;transition:transform 0.2s;color:var(--on-surface-3)">›</div>
         </div>
-        <button onclick="exportData('all',this)" class="btn-primary" style="width:100%;font-size:13px">⬇ ייצא הכל</button>
-        <div style="font-size:10px;color:var(--on-surface-3);margin-top:8px;text-align:center">CSV · פתח ב-Excel · גרור ל-Google Drive → פתח עם Google Sheets</div>
+        <div id="body-manager-codes" style="display:none;padding:0 16px 16px">
+          <div style="font-size:12px;color:var(--on-surface-3);margin-bottom:12px">מנהל יכול לסרוק, לנהל ספקים, שוק, עץ מוצר ולהוסיף Z יומי — ללא גישה להכנסות ותשלומים</div>
+          <div id="manager-codes-list" style="margin-bottom:10px"></div>
+          <button onclick="generateManagerCode()" class="btn-ghost" style="width:100%;font-size:13px">+ צור קוד מנהל חדש</button>
+        </div>
+      </div>
+
+      <!-- ייצא נתונים -->
+      <div class="card mb-12">
+        <div onclick="toggleSection('export')" style="display:flex;align-items:center;justify-content:space-between;padding:16px;cursor:pointer">
+          <div style="font-size:14px;font-weight:800">ייצוא נתונים</div>
+          <div id="arrow-export" style="font-size:20px;transition:transform 0.2s;color:var(--on-surface-3)">›</div>
+        </div>
+        <div id="body-export" style="display:none;padding:0 16px 16px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <button onclick="exportData('invoices',this)" class="btn-ghost" style="font-size:12px">📄 חשבוניות</button>
+            <button onclick="exportData('items',this)" class="btn-ghost" style="font-size:12px">📦 פריטי חשבוניות</button>
+            <button onclick="exportData('suppliers',this)" class="btn-ghost" style="font-size:12px">🏢 ספקים</button>
+            <button onclick="exportData('revenues',this)" class="btn-ghost" style="font-size:12px">💰 מחזורים</button>
+            <button onclick="exportData('products',this)" class="btn-ghost" style="font-size:12px">🗂️ קטלוג מוצרים</button>
+            <button onclick="exportData('recipes',this)" class="btn-ghost" style="font-size:12px">🍽️ מתכונים</button>
+          </div>
+          <button onclick="exportData('all',this)" class="btn-primary" style="width:100%;font-size:13px">⬇ ייצא הכל</button>
+          <div style="font-size:10px;color:var(--on-surface-3);margin-top:8px;text-align:center">CSV · פתח ב-Excel · גרור ל-Google Drive → פתח עם Google Sheets</div>
+        </div>
       </div>
 
       <div class="card card-pad mb-12" id="admin-link-wrap" style="display:none">
@@ -386,13 +401,13 @@
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span>דשבורד</span>
     </button>
-    <button class="nav-item" id="nav-scanner" onclick="navTo('scanner')">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-      <span>סריקה</span>
-    </button>
     <button class="nav-item" id="nav-suppliers" onclick="navTo('suppliers')">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
       <span>ספקים</span>
+    </button>
+    <button class="nav-item" id="nav-scanner" onclick="navTo('scanner')">
+      <span class="mi">document_scanner</span>
+      <span>סריקה</span>
     </button>
     <button class="nav-item" id="nav-market" onclick="navTo('market')">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>

@@ -278,7 +278,7 @@ tr:hover td{background:rgba(139,92,246,.04)}
 
 </div>
 <script>
-const JWT = sessionStorage.getItem('rv_jwt');
+const JWT = sessionStorage.getItem('rv_jwt') || localStorage.getItem('rv_jwt');
 if (!JWT) { alert('נדרשת כניסה עם PILOT-001'); location.href='/'; }
 
 let USERS=[],INVOICES=[],INVOICE_ITEMS=[],DB_SUPPLIERS=[],MARKET=[],WAITLIST=[];

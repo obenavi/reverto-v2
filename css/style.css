@@ -101,6 +101,26 @@ body {
   letter-spacing: 0.2px;
 }
 
+#nav-scanner {
+  position: relative;
+  bottom: 20px;
+  width: 74px;
+  height: 74px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary-light));
+  box-shadow: 0 8px 24px rgba(107,53,184,0.5);
+  padding: 0;
+  gap: 0;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#nav-scanner:active { transform: scale(0.91); box-shadow: 0 3px 10px rgba(107,53,184,0.25); }
+#nav-scanner .mi { color: white; font-size: 32px; }
+#nav-scanner span:not(.mi) { display: none; }
+#nav-scanner.active { background: linear-gradient(135deg,#2D0F6B,#7C3AED); }
+
 /* ── PAGES ── */
 .page {
   display: none;
@@ -377,6 +397,9 @@ body {
   text-align: center;
 }
 .toast.show { transform: translateY(0); opacity: 1; }
+
+/* ── MATERIAL ICONS ── */
+.mi { font-family: 'Material Symbols Rounded'; font-size: 20px; line-height: 1; user-select: none; }
 
 /* ── UTILS ── */
 .mt-8 { margin-top: 8px; }

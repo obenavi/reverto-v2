@@ -133,13 +133,16 @@
         </div>
       </div>
 
-      <!-- Code tab (PILOT + RV- legacy) -->
+      <!-- Code tab -->
       <div id="panel-code" style="display:none">
-        <label class="input-label">קוד גישה</label>
-        <input class="input" id="access-code" type="text" placeholder="PILOT-001 / RV-XXXXXX / REVERTO03"
-          style="letter-spacing:1px;font-weight:700;text-transform:uppercase"
-          oninput="this.value=this.value.toUpperCase()"
-          onkeydown="if(event.key==='Enter')tryLogin()">
+        <label class="input-label">קוד גישה אישי</label>
+        <div style="display:flex;align-items:stretch;border:1.5px solid var(--border);border-radius:var(--radius-md);overflow:hidden;background:var(--surface-card);transition:border-color 0.15s" onfocusin="this.style.borderColor='var(--primary)'" onfocusout="this.style.borderColor='var(--border)'">
+          <span style="background:var(--surface-low);padding:0 14px;display:flex;align-items:center;font-size:16px;font-weight:800;color:var(--primary);letter-spacing:1px;border-left:1.5px solid var(--border);flex-shrink:0">RV-</span>
+          <input id="access-code" type="text" placeholder="XXXXXX" maxlength="6"
+            style="flex:1;border:none;outline:none;padding:14px 12px;font-family:inherit;font-size:20px;font-weight:800;letter-spacing:5px;text-transform:uppercase;background:transparent;color:var(--on-surface);width:0"
+            oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+            onkeydown="if(event.key==='Enter')tryLogin()">
+        </div>
         <button class="btn-primary mt-12" onclick="tryLogin()" id="login-btn">כניסה</button>
         <div class="error-msg" id="error-msg">קוד גישה שגוי. נסה שוב.</div>
         <div style="text-align:center;margin-top:12px">
@@ -181,8 +184,9 @@
 
   <script>
     async function tryLogin() {
-      const code = document.getElementById('access-code').value.trim();
-      if (!code) return;
+      const suffix = document.getElementById('access-code').value.trim();
+      if (!suffix) return;
+      const code = 'RV-' + suffix;
       const btn = document.getElementById('login-btn');
       const err = document.getElementById('error-msg');
       btn.textContent = '...בודק';
@@ -312,10 +316,22 @@
       alert('תודה! נחזור אליך בקרוב.');
     }
 
-    // Auto-redirect if already logged in (check both storages)
-    if (sessionStorage.getItem('rv_jwt') || localStorage.getItem('rv_jwt')) {
-      window.location.href = '/app.html';
-    }
+    // Auto-redirect if already logged in with a valid (non-expired) JWT
+    (function() {
+      const jwt = sessionStorage.getItem('rv_jwt') || localStorage.getItem('rv_jwt');
+      if (!jwt) return;
+      try {
+        const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        if (!payload.exp || payload.exp > Math.floor(Date.now() / 1000)) {
+          window.location.href = '/app.html';
+          return;
+        }
+      } catch {}
+      // JWT exists but is expired — clear it so the login form shows clean
+      ['rv_token','rv_jwt','rv_user','rv_profile'].forEach(k => {
+        sessionStorage.removeItem(k); localStorage.removeItem(k);
+      });
+    })();
   </script>
 </body>
 </html>

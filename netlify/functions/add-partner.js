@@ -20,6 +20,10 @@ function generateCode() {
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
+  let body = {};
+  try { body = JSON.parse(event.body || '{}'); } catch {}
+  const codeType = body.role === 'manager' ? 'manager' : 'partner';
+
   const authHeader = (event.headers['authorization'] || '').replace('Bearer ', '');
   let jwt;
   try { jwt = verifyJWT(authHeader, process.env.JWT_SECRET); }
@@ -46,7 +50,7 @@ exports.handler = async (event) => {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/access_codes`, {
       method: 'POST',
       headers: { ...H, 'Prefer': 'return=representation' },
-      body: JSON.stringify({ code, type: 'partner', duration_months: 0, user_id: jwt.user_id, is_active: true })
+      body: JSON.stringify({ code, type: codeType, duration_months: 0, user_id: jwt.user_id, is_active: true })
     });
     if (!r.ok) return { statusCode: 500, body: JSON.stringify({ error: 'Failed to create code' }) };
 

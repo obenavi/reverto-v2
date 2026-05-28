@@ -2,7 +2,7 @@
 
 const DB = {
   _headers() {
-    const jwt = sessionStorage.getItem('rv_jwt');
+    const jwt = _store.get('rv_jwt');
     const h = { 'Content-Type': 'application/json' };
     if (jwt) h['Authorization'] = 'Bearer ' + jwt;
     return h;
@@ -90,12 +90,31 @@ const Auth = {
   }
 };
 
+function isManager() {
+  try {
+    const jwt = _store.get('rv_jwt');
+    if (!jwt) return false;
+    const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.role === 'manager';
+  } catch { return false; }
+}
+
 // ── Payment terms ─────────────────────────────────────────────
 const PAYMENT_TERMS_LABELS = {
   cash_delivery: 'מזומן בקבלת סחורה',
-  cash_eom: 'מזומן סוף חודש',
+  order_time:    'תשלום בזמן הזמנה',
+  cash_eom:      'מזומן סוף חודש',
   net30: 'שוטף+30', net60: 'שוטף+60', net90: 'שוטף+90'
 };
+
+const PAYMENT_TERMS_LIST = [
+  { val: 'cash_delivery', label: 'מזומן בקבלת סחורה', color: '#059669' },
+  { val: 'order_time',    label: 'תשלום בזמן הזמנה',  color: '#0891B2' },
+  { val: 'cash_eom',      label: 'מזומן סוף חודש',    color: '#6B35B8' },
+  { val: 'net30',         label: 'שוטף+30',            color: '#7C3AED' },
+  { val: 'net60',         label: 'שוטף+60',            color: '#D97706' },
+  { val: 'net90',         label: 'שוטף+90',            color: '#DC2626' },
+];
 
 function calcDueDate(invoiceDate, terms) {
   const d = new Date((invoiceDate || '').slice(0,10) + 'T00:00:00');

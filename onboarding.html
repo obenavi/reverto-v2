@@ -378,16 +378,19 @@
           _s('rv_token', data.personal_code);
           _s('rv_user', JSON.stringify(data.user));
           sessionStorage.removeItem('rv_signup');
-          // For password users, show email login reminder instead of code
+          _savedPersonalCode = data.personal_code;
+          // Show login credentials on success screen
           const pwdBox = document.getElementById('ob-personal-code-box');
           const codeEl = document.getElementById('ob-personal-code');
           if (pwdBox && codeEl) {
             const email = profile.email;
-            codeEl.textContent = email;
-            codeEl.style.fontSize = '16px';
+            const personalCode = data.personal_code;
+            pwdBox.querySelector('div:first-child').textContent = 'פרטי הכניסה שלך — שמור אותם!';
+            codeEl.innerHTML = `<div style="font-size:13px;color:var(--on-surface-2);margin-bottom:4px">כניסה ראשית: <strong>${email}</strong> + הסיסמה שבחרת</div><div style="font-size:13px;color:var(--on-surface-2);margin-top:8px">קוד גיבוי: <strong style="letter-spacing:2px;color:var(--primary);font-family:monospace">${personalCode}</strong></div>`;
+            codeEl.style.fontSize = '14px';
             codeEl.style.letterSpacing = '0';
-            pwdBox.querySelector('div:first-child').textContent = 'הכניסה שלך';
-            pwdBox.querySelector('div:nth-child(3)').textContent = 'כנס עם המייל + הסיסמה שבחרת';
+            codeEl.style.textAlign = 'right';
+            pwdBox.querySelector('div:nth-child(3)').textContent = 'הקוד נשלח גם למייל שלך';
             pwdBox.style.display = 'block';
           }
         } catch(e) {
@@ -405,13 +408,15 @@
       goToStep(isNewUser ? 6 : 5);
     }
 
+    let _savedPersonalCode = '';
+
     function copyPersonalCode() {
-      const code = document.getElementById('ob-personal-code').textContent;
+      const code = _savedPersonalCode || document.getElementById('ob-personal-code').textContent;
       navigator.clipboard.writeText(code).then(() => showToast('הקוד הועתק!')).catch(() => {});
     }
 
     function waShareCode() {
-      const code = document.getElementById('ob-personal-code').textContent;
+      const code = _savedPersonalCode || document.getElementById('ob-personal-code').textContent;
       const msg = encodeURIComponent('הקוד האישי שלי ב-Reverto: ' + code + '\nשמור אותו לכניסות עתידיות!');
       window.open('https://wa.me/?text=' + msg, '_blank');
     }
