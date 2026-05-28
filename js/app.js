@@ -147,7 +147,7 @@ function showWelcomeTour() {
   overlay.id = 'welcome-tour';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(30,10,60,0.82);z-index:99999;display:flex;align-items:flex-end;justify-content:center';
 
-  const done = () => { overlay.remove(); localStorage.setItem('rv_welcome_done', '1'); };
+  const done = () => { overlay.remove(); localStorage.setItem('rv_welcome_done', '1'); setTimeout(requestPushIfConfigured, 800); };
 
   const render = () => {
     const s = steps[current];
@@ -247,7 +247,7 @@ function showRoleWelcome() {
   overlay.id = 'role-welcome';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(30,10,60,0.82);z-index:99999;display:flex;align-items:flex-end;justify-content:center';
 
-  const done = () => { overlay.remove(); localStorage.setItem('rv_role_welcome_done', '1'); };
+  const done = () => { overlay.remove(); localStorage.setItem('rv_role_welcome_done', '1'); setTimeout(requestPushIfConfigured, 800); };
 
   const saveStaffProfile = async () => {
     const name  = (document.getElementById('sw-staff-name')  || {}).value || '';
@@ -915,6 +915,71 @@ async function saveOpsDetails() {
     showToast('שגיאה בשמירה');
     if (btn) { btn.textContent = 'שמור פרטי תפעול'; btn.disabled = false; }
   }
+}
+
+// ── Push Notifications ────────────────────────────────────────
+
+const VAPID_PUBLIC_KEY = 'BKY5wqGE2gQHVSlUuj7TBWzfUHqSR7ixPsRYobU9raiAEyLIfG8Y1jKVZjYo1nK2PzyWqXD0IxFQyn2uAwSUOqQ';
+
+function _urlB64ToUint8(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function subscribePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if (await reg.pushManager.getSubscription()) return;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _urlB64ToUint8(VAPID_PUBLIC_KEY)
+    });
+    await fetch('/.netlify/functions/save-push-sub', {
+      method: 'POST',
+      headers: DB._headers(),
+      body: JSON.stringify({ sub: sub.toJSON() })
+    });
+  } catch (e) { console.log('Push subscribe error:', e); }
+}
+
+async function requestPushIfConfigured() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const profile = Auth.profile;
+  if (!profile.notification_prefs) return;
+  if (Notification.permission === 'denied') return;
+  if (Notification.permission === 'granted') { await subscribePush(); return; }
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(30,10,60,0.82);z-index:99999;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:28px 28px 0 0;width:100%;max-width:480px;padding:32px 28px 52px;text-align:center">
+      <div style="font-size:52px;margin-bottom:14px">🔔</div>
+      <div style="font-size:21px;font-weight:800;color:#4A1F85;margin-bottom:12px">אפשר תזכורות?</div>
+      <div style="font-size:14px;color:#555;line-height:1.7;margin-bottom:24px">
+        הגדרת תזכורות במהלך ההגדרה הראשונית.<br>
+        כדי לשלוח אותן לטלפון — נצטרך את רשותך.
+      </div>
+      <button id="push-allow-btn" style="display:block;width:100%;padding:14px;border:none;border-radius:14px;background:linear-gradient(135deg,#4A1F85,#9B6DD6);color:white;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:10px">
+        אפשר תזכורות
+      </button>
+      <button onclick="this.closest('div[style*=fixed]').remove()" style="display:block;width:100%;padding:12px;border:none;background:none;font-size:14px;color:#bbb;cursor:pointer;font-family:inherit">
+        לא עכשיו
+      </button>
+    </div>`;
+
+  document.body.appendChild(modal);
+  modal.querySelector('#push-allow-btn').addEventListener('click', async () => {
+    modal.remove();
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') await subscribePush();
+  });
+}
+
+// Register service worker on load (non-blocking)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
 // Start

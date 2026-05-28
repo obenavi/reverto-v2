@@ -1,0 +1,19 @@
+name: Push Notifications
+
+on:
+  schedule:
+    # Runs every hour — the function itself checks Israel time and matches user prefs
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  send-push:
+    name: Send scheduled push notifications
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger send-push function
+        run: |
+          curl -f -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.NETLIFY_URL }}/.netlify/functions/send-push"

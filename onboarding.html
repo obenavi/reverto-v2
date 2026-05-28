@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
@@ -29,6 +29,16 @@
     .terms-check { display:flex; align-items:flex-start; gap:10px; margin-bottom:12px; }
     .terms-check input[type=checkbox] { width:20px; height:20px; margin-top:2px; accent-color:var(--primary); flex-shrink:0; }
     .terms-check label { font-size:13px; font-weight:600; color:var(--on-surface); line-height:1.5; }
+    .wd-btn { width:40px;height:40px;border-radius:50%;border:2px solid var(--border);background:transparent;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;color:var(--on-surface-2);transition:all 0.15s; }
+    .wd-btn.on { background:var(--primary);border-color:var(--primary);color:white; }
+    .notif-section { background:var(--surface-low);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:12px; }
+    .notif-title { font-size:13px;font-weight:800;color:var(--on-surface);margin-bottom:10px; }
+    .timing-toggle { display:flex;border:1.5px solid var(--border);border-radius:20px;overflow:hidden;margin-bottom:10px; }
+    .timing-btn { flex:1;padding:8px 4px;border:none;background:transparent;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-2);transition:all 0.15s; }
+    .timing-btn.on { background:var(--primary);color:white; }
+    .time-chips { display:flex;flex-wrap:wrap;gap:6px; }
+    .time-chip { padding:5px 9px;border-radius:16px;border:1.5px solid transparent;background:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-2);transition:all 0.15s; }
+    .time-chip.on { background:var(--primary);color:white;border-color:var(--primary); }
   </style>
 </head>
 <body>
@@ -37,14 +47,15 @@
       <button onclick="obBack()" id="ob-back-btn" style="background:none;border:none;cursor:pointer;padding:8px;color:var(--on-surface-3);display:none">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <span class="ob-step-label" id="ob-step-label">שלב 1 מתוך 4</span>
+      <span class="ob-step-label" id="ob-step-label">שלב 1 מתוך 6</span>
       <div style="width:36px"></div>
     </div>
     <div class="ob-progress">
-      <div class="ob-progress-fill" id="ob-progress-fill" style="width:25%"></div>
+      <div class="ob-progress-fill" id="ob-progress-fill" style="width:16.6%"></div>
     </div>
     <div class="ob-body">
 
+      <!-- Step 1: Personal info -->
       <div class="ob-step active" id="ob-step-1">
         <div class="ob-step-icon">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -73,6 +84,7 @@
         <div id="ob-email-warn" style="display:none;background:var(--error-bg);border:1px solid var(--error);border-radius:var(--radius-md);padding:10px 14px;margin-top:8px;font-size:13px;color:var(--error);font-weight:600"></div>
       </div>
 
+      <!-- Step 2: Business type -->
       <div class="ob-step" id="ob-step-2">
         <div class="ob-step-icon">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
@@ -93,6 +105,7 @@
         </div>
       </div>
 
+      <!-- Step 3: Address -->
       <div class="ob-step" id="ob-step-3">
         <div class="ob-step-icon">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -110,7 +123,81 @@
         </div>
       </div>
 
+      <!-- Step 4: Working days (NEW) -->
       <div class="ob-step" id="ob-step-4">
+        <div class="ob-step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div class="ob-step-title">ימי עבודה</div>
+        <div class="ob-step-desc">באילו ימים העסק שלך פתוח? תזכורות יישלחו רק בימים אלה.</div>
+        <div style="display:flex;gap:8px;justify-content:center;margin-bottom:20px">
+          <button class="wd-btn on" id="ob-wd-א" onclick="obToggleDay('א')">א׳</button>
+          <button class="wd-btn on" id="ob-wd-ב" onclick="obToggleDay('ב')">ב׳</button>
+          <button class="wd-btn on" id="ob-wd-ג" onclick="obToggleDay('ג')">ג׳</button>
+          <button class="wd-btn on" id="ob-wd-ד" onclick="obToggleDay('ד')">ד׳</button>
+          <button class="wd-btn on" id="ob-wd-ה" onclick="obToggleDay('ה')">ה׳</button>
+          <button class="wd-btn" id="ob-wd-ו" onclick="obToggleDay('ו')">ו׳</button>
+          <button class="wd-btn" id="ob-wd-ש" onclick="obToggleDay('ש')">ש׳</button>
+        </div>
+        <div style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px 14px;font-size:12px;color:var(--on-surface-3);line-height:1.6">
+          ניתן לשנות בכל עת מהגדרות הפרופיל.
+        </div>
+      </div>
+
+      <!-- Step 5: Notification prefs (NEW) -->
+      <div class="ob-step" id="ob-step-5">
+        <div class="ob-step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        </div>
+        <div class="ob-step-title">מתי לתזכר אותך?</div>
+        <div class="ob-step-desc">תזכורות יישלחו בימי הפעילות בלבד</div>
+
+        <div class="notif-section">
+          <div class="notif-title">📊 Z יומי — מתי להזין?</div>
+          <div class="timing-toggle">
+            <button class="timing-btn on" id="nt-z-same" onclick="obSetZTiming('same_day')">באותו יום</button>
+            <button class="timing-btn" id="nt-z-next" onclick="obSetZTiming('next_day')">ביום שלמחרת בבוקר</button>
+          </div>
+          <div class="time-chips" id="chips-z">
+            <button class="time-chip" data-field="z_hour" data-h="9" onclick="obSetHour('z_hour',9)">09:00</button>
+            <button class="time-chip" data-field="z_hour" data-h="10" onclick="obSetHour('z_hour',10)">10:00</button>
+            <button class="time-chip" data-field="z_hour" data-h="12" onclick="obSetHour('z_hour',12)">12:00</button>
+            <button class="time-chip" data-field="z_hour" data-h="14" onclick="obSetHour('z_hour',14)">14:00</button>
+            <button class="time-chip" data-field="z_hour" data-h="16" onclick="obSetHour('z_hour',16)">16:00</button>
+            <button class="time-chip" data-field="z_hour" data-h="18" onclick="obSetHour('z_hour',18)">18:00</button>
+            <button class="time-chip" data-field="z_hour" data-h="20" onclick="obSetHour('z_hour',20)">20:00</button>
+            <button class="time-chip on" data-field="z_hour" data-h="21" onclick="obSetHour('z_hour',21)">21:00</button>
+            <button class="time-chip" data-field="z_hour" data-h="22" onclick="obSetHour('z_hour',22)">22:00</button>
+          </div>
+        </div>
+
+        <div class="notif-section">
+          <div class="notif-title">📄 סריקת חשבוניות</div>
+          <div class="time-chips">
+            <button class="time-chip" data-field="scan_hour" data-h="9" onclick="obSetHour('scan_hour',9)">09:00</button>
+            <button class="time-chip on" data-field="scan_hour" data-h="10" onclick="obSetHour('scan_hour',10)">10:00</button>
+            <button class="time-chip" data-field="scan_hour" data-h="12" onclick="obSetHour('scan_hour',12)">12:00</button>
+            <button class="time-chip" data-field="scan_hour" data-h="14" onclick="obSetHour('scan_hour',14)">14:00</button>
+            <button class="time-chip" data-field="scan_hour" data-h="16" onclick="obSetHour('scan_hour',16)">16:00</button>
+            <button class="time-chip" data-field="scan_hour" data-h="18" onclick="obSetHour('scan_hour',18)">18:00</button>
+          </div>
+        </div>
+
+        <div class="notif-section">
+          <div class="notif-title">🔄 עדכון החזרות לספק</div>
+          <div class="time-chips">
+            <button class="time-chip" data-field="returns_hour" data-h="10" onclick="obSetHour('returns_hour',10)">10:00</button>
+            <button class="time-chip" data-field="returns_hour" data-h="12" onclick="obSetHour('returns_hour',12)">12:00</button>
+            <button class="time-chip on" data-field="returns_hour" data-h="14" onclick="obSetHour('returns_hour',14)">14:00</button>
+            <button class="time-chip" data-field="returns_hour" data-h="16" onclick="obSetHour('returns_hour',16)">16:00</button>
+            <button class="time-chip" data-field="returns_hour" data-h="18" onclick="obSetHour('returns_hour',18)">18:00</button>
+            <button class="time-chip" data-field="returns_hour" data-h="20" onclick="obSetHour('returns_hour',20)">20:00</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 6: Terms (was step 4) -->
+      <div class="ob-step" id="ob-step-6">
         <div class="ob-step-icon">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         </div>
@@ -159,8 +246,8 @@
         </div>
       </div>
 
-      <!-- Step 5: Choose password -->
-      <div class="ob-step" id="ob-step-5">
+      <!-- Step 7: Password (new users only, was step 5) -->
+      <div class="ob-step" id="ob-step-7">
         <div class="ob-step-icon">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
         </div>
@@ -178,8 +265,8 @@
         </div>
       </div>
 
-      <!-- Step 6: Success -->
-      <div class="ob-step" id="ob-step-6">
+      <!-- Step 8: Success (was step 6) -->
+      <div class="ob-step" id="ob-step-8">
         <div style="text-align:center;padding-top:40px">
           <div style="width:80px;height:80px;background:var(--success-bg);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 24px">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -187,7 +274,6 @@
           <div style="font-size:26px;font-weight:800;margin-bottom:10px">הכל מוכן!</div>
           <div style="font-size:15px;color:var(--on-surface-3);line-height:1.6;margin-bottom:24px">העסק שלך הוגדר בהצלחה.<br>עכשיו תוכל להתחיל לסרוק חשבוניות ולחסוך כסף.</div>
 
-          <!-- Personal code box — shown only for new REVERTO signups -->
           <div id="ob-personal-code-box" style="display:none;background:var(--surface-low);border-radius:var(--radius-md);border:2px solid var(--primary);padding:20px;margin-bottom:24px;text-align:center">
             <div style="font-size:11px;font-weight:700;color:var(--on-surface-3);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">הקוד האישי שלך לכניסות עתידיות</div>
             <div id="ob-personal-code" style="font-size:28px;font-weight:800;letter-spacing:4px;color:var(--primary);margin-bottom:6px;font-family:monospace"></div>
@@ -219,14 +305,51 @@
     const signupData = JSON.parse(sessionStorage.getItem('rv_signup') || 'null');
     const isNewUser = !!(signupData?.new_user_signup);
     if (!sessionStorage.getItem('rv_jwt') && !localStorage.getItem('rv_jwt') && !isNewUser) window.location.href = '/';
-    const TOTAL_STEPS = isNewUser ? 5 : 4;
 
+    // isNewUser: 7 user-facing steps (1-7) + success(8); returning: 6 steps (1-6) + success(7)
+    const TOTAL_STEPS = isNewUser ? 7 : 6;
+    const SUCCESS_STEP = isNewUser ? 8 : 7;
+
+    // Working days state
+    let obWorkDays = new Set(['א','ב','ג','ד','ה']);
+
+    // Notification prefs state (defaults match highlighted chips)
+    let obNotifPrefs = { z_timing: 'same_day', z_hour: 21, scan_hour: 10, returns_hour: 14 };
+
+    // ── Working days ──────────────────────────────────────────────
+    function obToggleDay(d) {
+      if (obWorkDays.has(d)) {
+        if (obWorkDays.size <= 1) return; // must keep at least one
+        obWorkDays.delete(d);
+      } else {
+        obWorkDays.add(d);
+      }
+      const btn = document.getElementById('ob-wd-' + d);
+      if (btn) btn.classList.toggle('on', obWorkDays.has(d));
+    }
+
+    // ── Notification prefs ────────────────────────────────────────
+    function obSetZTiming(timing) {
+      obNotifPrefs.z_timing = timing;
+      document.getElementById('nt-z-same').classList.toggle('on', timing === 'same_day');
+      document.getElementById('nt-z-next').classList.toggle('on', timing === 'next_day');
+    }
+
+    function obSetHour(field, h) {
+      obNotifPrefs[field] = h;
+      document.querySelectorAll('[data-field="' + field + '"]').forEach(btn => {
+        btn.classList.toggle('on', parseInt(btn.dataset.h) === h);
+      });
+    }
+
+    // ── Terms ─────────────────────────────────────────────────────
     function checkTerms() {
       const agreed = document.getElementById('terms-agree').checked;
       document.getElementById('ob-next-btn').disabled = !agreed;
       document.getElementById('ob-next-btn').style.opacity = agreed ? '1' : '0.5';
     }
 
+    // ── Navigation ────────────────────────────────────────────────
     function obNext() {
       if (currentStep === 1) {
         const firstName = document.getElementById('ob-first-name').value.trim();
@@ -249,12 +372,14 @@
         if (!city) { document.getElementById('ob-city').focus(); return; }
         if (!email || !email.includes('@')) { document.getElementById('ob-email').focus(); return; }
       }
-      if (currentStep === 4) {
+      // Step 4 (working days) — at least 1 day enforced by toggle (size >= 1 always)
+      // Step 5 (notif prefs) — always valid, has defaults
+      if (currentStep === 6) {
         if (!document.getElementById('terms-agree').checked) return;
-        if (isNewUser) { goToStep(5); return; }
+        if (isNewUser) { goToStep(7); return; }
         saveAndFinish(); return;
       }
-      if (currentStep === 5 && isNewUser) {
+      if (currentStep === 7 && isNewUser) {
         const pwd = document.getElementById('ob-password').value;
         const confirm = document.getElementById('ob-password-confirm').value;
         if (!validatePassword(pwd)) { showToast('הסיסמה לא עומדת בדרישות'); return; }
@@ -269,6 +394,7 @@
     function validatePassword(pwd) {
       return pwd.length >= 10 && /[A-Z]/.test(pwd) && /[0-9]/.test(pwd) && /^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/.test(pwd);
     }
+
     function checkPwdStrength() {
       const pwd = document.getElementById('ob-password').value;
       const set = (id, ok) => { const el = document.getElementById(id); if(el) el.style.color = ok ? 'var(--success)' : 'var(--on-surface-3)'; };
@@ -285,17 +411,17 @@
       const displayStep = Math.min(n, TOTAL_STEPS);
       document.getElementById('ob-step-label').textContent = 'שלב ' + displayStep + ' מתוך ' + TOTAL_STEPS;
       document.getElementById('ob-progress-fill').style.width = (displayStep / TOTAL_STEPS * 100) + '%';
-      document.getElementById('ob-back-btn').style.display = n > 1 && n < 5 ? 'block' : 'none';
+      document.getElementById('ob-back-btn').style.display = n > 1 && n < SUCCESS_STEP ? 'block' : 'none';
       const footer = document.getElementById('ob-footer');
       const nextBtn = document.getElementById('ob-next-btn');
-      const successStep = isNewUser ? 6 : 5;
-      if (n === successStep) { footer.style.display = 'none'; }
-      else {
+      if (n === SUCCESS_STEP) {
+        footer.style.display = 'none';
+      } else {
         footer.style.display = 'block';
         nextBtn.disabled = false;
         nextBtn.style.opacity = '1';
-        if (n === 4) { nextBtn.textContent = 'אישור והצטרפות'; checkTerms(); }
-        else if (n === 5 && isNewUser) nextBtn.textContent = 'סיום הרשמה';
+        if (n === 6) { nextBtn.textContent = 'אישור והצטרפות'; checkTerms(); }
+        else if (n === 7 && isNewUser) nextBtn.textContent = 'סיום הרשמה';
         else nextBtn.textContent = 'המשך';
       }
     }
@@ -344,7 +470,9 @@
         address: document.getElementById('ob-address').value.trim(),
         city: document.getElementById('ob-city').value.trim(),
         email: document.getElementById('ob-email-early').value.trim() || document.getElementById('ob-email').value.trim(),
-        marketing_consent: document.getElementById('marketing-agree').checked
+        marketing_consent: document.getElementById('marketing-agree').checked,
+        working_days: [...obWorkDays].join(','),
+        notification_prefs: obNotifPrefs
       };
 
       if (isNewUser) {
@@ -356,7 +484,6 @@
           });
           const data = await res.json();
           if (res.status === 409) {
-            // Email already exists — auto-login the existing account
             if (data.jwt && data.user) {
               const _s = (k,v) => { sessionStorage.setItem(k,v); localStorage.setItem(k,v); };
               _s('rv_jwt', data.jwt);
@@ -379,7 +506,6 @@
           _s('rv_user', JSON.stringify(data.user));
           sessionStorage.removeItem('rv_signup');
           _savedPersonalCode = data.personal_code;
-          // Show login credentials on success screen
           const pwdBox = document.getElementById('ob-personal-code-box');
           const codeEl = document.getElementById('ob-personal-code');
           if (pwdBox && codeEl) {
@@ -405,7 +531,7 @@
         } catch(e) { console.log('Save error', e); }
       }
 
-      goToStep(isNewUser ? 6 : 5);
+      goToStep(SUCCESS_STEP);
     }
 
     let _savedPersonalCode = '';
