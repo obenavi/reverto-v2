@@ -213,6 +213,7 @@
             _s('rv_token', data.user.personal_code || code);
             _s('rv_jwt', data.jwt);
             _s('rv_user', JSON.stringify(data.user));
+            _s('rv_access_code', code);
             window.location.href = '/app.html';
           }
         } else {

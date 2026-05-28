@@ -193,7 +193,14 @@ function showRoleWelcome() {
   const manager = isManager();
   const bizName = Auth.profile.business_name || '';
 
-  const steps = manager ? [
+  const infoStep = {
+    _isForm: true,
+    icon: manager ? '🪪' : '🤝',
+    title: manager ? 'קצת עלייך, מנהל/ת' : 'קצת עלייך, שותף/ה',
+    color: '#4A1F85'
+  };
+
+  const roleSteps = manager ? [
     {
       icon: '👋',
       title: `ברוכ/ה הבא/ה כמנהל${bizName ? ' של ' + bizName : ''}!`,
@@ -233,6 +240,8 @@ function showRoleWelcome() {
     }
   ];
 
+  const steps = [infoStep, ...roleSteps];
+
   let current = 0;
   const overlay = document.createElement('div');
   overlay.id = 'role-welcome';
@@ -240,8 +249,68 @@ function showRoleWelcome() {
 
   const done = () => { overlay.remove(); localStorage.setItem('rv_role_welcome_done', '1'); };
 
+  const saveStaffProfile = async () => {
+    const name  = (document.getElementById('sw-staff-name')  || {}).value || '';
+    const phone = (document.getElementById('sw-staff-phone') || {}).value || '';
+    const email = (document.getElementById('sw-staff-email') || {}).value || '';
+    const code  = _store.get('rv_access_code') || '';
+    if (!name.trim()) { document.getElementById('sw-staff-name').focus(); return false; }
+    try {
+      await fetch('/.netlify/functions/save-staff-profile', {
+        method: 'POST',
+        headers: DB._headers(),
+        body: JSON.stringify({ code, staff_name: name.trim(), staff_phone: phone.trim(), staff_email: email.trim() })
+      });
+    } catch {}
+    return true;
+  };
+
+  const renderFormStep = (s) => {
+    const dots = steps.map((_, i) =>
+      `<div style="width:${i === current ? '22px' : '8px'};height:8px;border-radius:4px;background:${i === current ? s.color : '#e0d7f5'};transition:all 0.3s"></div>`
+    ).join('');
+    overlay.innerHTML = `
+      <div style="background:white;border-radius:28px 28px 0 0;width:100%;max-width:480px;padding:32px 28px 52px;position:relative">
+        <button onclick="document.getElementById('role-welcome')._done()"
+          style="position:absolute;top:18px;left:20px;background:none;border:none;font-size:13px;color:#bbb;cursor:pointer;font-family:inherit;padding:4px 8px">דלג</button>
+        <div style="font-size:11px;color:#bbb;position:absolute;top:22px;right:24px">${current + 1} / ${steps.length}</div>
+        <div style="display:flex;justify-content:center;gap:5px;margin-bottom:24px">${dots}</div>
+        <div style="text-align:center;margin-bottom:22px">
+          <div style="font-size:48px;margin-bottom:10px;line-height:1">${s.icon}</div>
+          <div style="font-size:20px;font-weight:800;color:${s.color};line-height:1.3">${s.title}</div>
+          <div style="font-size:13px;color:#888;margin-top:6px">הפרטים יופיעו אצל בעל העסק</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <input id="sw-staff-name" type="text" placeholder="שם מלא *" dir="rtl"
+            style="width:100%;padding:13px 14px;border:1.5px solid #e0d7f5;border-radius:12px;font-size:15px;font-family:inherit;outline:none;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4A1F85'" onblur="this.style.borderColor='#e0d7f5'">
+          <input id="sw-staff-phone" type="tel" placeholder="טלפון" dir="ltr"
+            style="width:100%;padding:13px 14px;border:1.5px solid #e0d7f5;border-radius:12px;font-size:15px;font-family:inherit;outline:none;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4A1F85'" onblur="this.style.borderColor='#e0d7f5'">
+          <input id="sw-staff-email" type="email" placeholder="אימייל" dir="ltr"
+            style="width:100%;padding:13px 14px;border:1.5px solid #e0d7f5;border-radius:12px;font-size:15px;font-family:inherit;outline:none;box-sizing:border-box"
+            onfocus="this.style.borderColor='#4A1F85'" onblur="this.style.borderColor='#e0d7f5'">
+        </div>
+        <button id="sw-next-btn" onclick="document.getElementById('role-welcome')._nextForm()"
+          style="width:100%;margin-top:22px;padding:14px;border:none;border-radius:14px;background:linear-gradient(135deg,#4A1F85,#9B6DD6);color:white;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit">
+          הבא ←
+        </button>
+      </div>`;
+
+    overlay._nextForm = async () => {
+      const btn = document.getElementById('sw-next-btn');
+      btn.disabled = true; btn.textContent = '...';
+      const ok = await saveStaffProfile();
+      if (!ok) { btn.disabled = false; btn.textContent = 'הבא ←'; return; }
+      current++; render();
+    };
+    overlay._done = done;
+  };
+
   const render = () => {
     const s = steps[current];
+    if (s._isForm) { renderFormStep(s); return; }
+
     const isLast = current === steps.length - 1;
     const dots = steps.map((_, i) =>
       `<div style="width:${i === current ? '22px' : '8px'};height:8px;border-radius:4px;background:${i === current ? s.color : '#e0d7f5'};transition:all 0.3s"></div>`
@@ -728,19 +797,30 @@ function initProfile() {
 }
 
 function _renderCodeRows(codes) {
-  return codes.map(c => `
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <div style="flex:1;font-size:14px;font-weight:800;letter-spacing:2px;color:var(--primary)">${c.code}</div>
-      <button onclick="navigator.clipboard.writeText('${c.code}').then(()=>showToast('הועתק!'))" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">העתק</button>
-    </div>
-  `).join('');
+  return codes.map(c => {
+    const staffLine = c.staff_name
+      ? `<div style="font-size:12px;color:#555;margin-top:3px;display:flex;gap:10px;flex-wrap:wrap">
+           <span style="font-weight:700">${c.staff_name}</span>
+           ${c.staff_phone ? `<span style="color:#888">${c.staff_phone}</span>` : ''}
+           ${c.staff_email ? `<span style="color:#888">${c.staff_email}</span>` : ''}
+         </div>`
+      : `<div style="font-size:11px;color:#bbb;margin-top:2px">טרם הוזנו פרטים אישיים</div>`;
+    return `
+    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;font-size:14px;font-weight:800;letter-spacing:2px;color:var(--primary)">${c.code}</div>
+        <button onclick="navigator.clipboard.writeText('${c.code}').then(()=>showToast('הועתק!'))" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">העתק</button>
+      </div>
+      ${staffLine}
+    </div>`;
+  }).join('');
 }
 
 async function loadPartnerCodes() {
   if (isManager()) return;
   const [partnerCodes, managerCodes] = await Promise.all([
-    DB.get('access_codes', '?type=eq.partner&select=code,is_active,created_at&order=created_at.desc'),
-    DB.get('access_codes', '?type=eq.manager&select=code,is_active,created_at&order=created_at.desc')
+    DB.get('access_codes', '?type=eq.partner&select=code,is_active,created_at,staff_name,staff_phone,staff_email&order=created_at.desc'),
+    DB.get('access_codes', '?type=eq.manager&select=code,is_active,created_at,staff_name,staff_phone,staff_email&order=created_at.desc')
   ]);
   const el = document.getElementById('partner-codes-list');
   if (el) el.innerHTML = partnerCodes?.length ? _renderCodeRows(partnerCodes) : `<div style="font-size:12px;color:var(--on-surface-3)">אין קודי שותף עדיין</div>`;
