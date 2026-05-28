@@ -7,20 +7,6 @@ on:
 
 jobs:
 
-  update-market-prices:
-    name: Update Market Prices
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Run scraper
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: node scrapers/update-market.js
-
   aggregate-community:
     name: Aggregate Community Prices
     runs-on: ubuntu-latest
