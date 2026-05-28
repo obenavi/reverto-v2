@@ -89,9 +89,10 @@ exports.handler = async (event) => {
     const dueDate = calcDueDate(inv.date, terms).toISOString().slice(0, 10);
     if (dueDate >= mStart && dueDate <= mEnd) {
       const net = inv.total_amount - (inv.credit || 0);
-      if (!payForecastMap[terms]) payForecastMap[terms] = { total: 0, count: 0 };
-      payForecastMap[terms].total += net;
-      payForecastMap[terms].count++;
+      const key = inv.supplier_name || '—';
+      if (!payForecastMap[key]) payForecastMap[key] = { total: 0, count: 0, terms };
+      payForecastMap[key].total += net;
+      payForecastMap[key].count++;
     }
   });
 
@@ -117,8 +118,8 @@ exports.handler = async (event) => {
 
   const payForecastRows = Object.entries(payForecastMap)
     .sort((a, b) => b[1].total - a[1].total)
-    .map(([terms, v]) => `<tr>
-      <td style="padding:7px 12px;border-bottom:1px solid #ede9fe">${TERMS_LABELS[terms] || terms}</td>
+    .map(([supplier, v]) => `<tr>
+      <td style="padding:7px 12px;border-bottom:1px solid #ede9fe;font-weight:600">${supplier} <span style="font-size:10px;color:#888;font-weight:400">(${TERMS_LABELS[v.terms] || v.terms})</span></td>
       <td style="padding:7px 12px;border-bottom:1px solid #ede9fe;text-align:center;color:#888;font-size:12px">${v.count} חשבוניות</td>
       <td style="padding:7px 12px;border-bottom:1px solid #ede9fe;text-align:left;font-weight:800;color:#4A1F85">₪${fmt(v.total)}</td>
     </tr>`).join('');
@@ -161,9 +162,9 @@ exports.handler = async (event) => {
       </div>
     </div>
 
-    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#c2410c">
-      ⚠️ ${openCount} חשבונית עדיין פתוחה לאישור קבלה — יש לסגור לפני תשלום הספק.
-    </div>
+    <a href="${SITE_URL}/app" style="display:block;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#c2410c;text-decoration:none">
+      ⚠️ ${openCount} חשבונית פתוחה לאישור קבלה — <strong>לחץ לסיום מהיר ←</strong>
+    </a>
 
     <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
       <thead>
@@ -183,7 +184,7 @@ exports.handler = async (event) => {
       <div style="font-size:15px;font-weight:800;color:#4A1F85;margin-bottom:12px">📅 תשלומים צפויים החודש</div>
       <table style="width:100%;border-collapse:collapse">
         <thead><tr>
-          <th style="padding:7px 12px;text-align:right;font-size:12px;color:#888;font-weight:700">הסדר תשלום</th>
+          <th style="padding:7px 12px;text-align:right;font-size:12px;color:#888;font-weight:700">ספק</th>
           <th style="padding:7px 12px;text-align:center;font-size:12px;color:#888;font-weight:700">חשבוניות</th>
           <th style="padding:7px 12px;text-align:left;font-size:12px;color:#888;font-weight:700">סכום</th>
         </tr></thead>
