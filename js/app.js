@@ -1,6 +1,7 @@
 ﻿// ── Reverto App Core ──────────────────────────────────────────
 
 let currentPage = 'dashboard';
+let _cachedLocations = null;
 
 function navTo(pageId) {
   // Hide all pages
@@ -67,8 +68,8 @@ async function appInit() {
     return;
   }
 
-  // Show active location in top bar
-  updateTopBarLocation();
+  // Load branches (background, updates top bar when ready)
+  loadCachedLocations();
 
   // Show admin link if admin
   if (isAdmin()) {
@@ -498,8 +499,57 @@ function updateTopBarLocation() {
   const loc = getActiveLocation();
   const el = document.getElementById('top-location');
   if (!el) return;
-  if (loc) { el.textContent = '📍 ' + loc.name; el.style.display = 'block'; }
-  else el.style.display = 'none';
+  const multi = _cachedLocations && _cachedLocations.length > 1;
+  if (multi) {
+    const label = loc ? loc.name : 'כל הסניפים';
+    el.innerHTML = `📍 ${label} <span style="font-size:9px;opacity:0.7">▼</span>`;
+    el.style.display = 'block';
+    el.style.cursor = 'pointer';
+    el.onclick = showBranchSwitcher;
+  } else if (loc) {
+    el.textContent = '📍 ' + loc.name;
+    el.style.display = 'block';
+    el.onclick = () => navTo('profile');
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+async function loadCachedLocations() {
+  const locs = await DB.get('locations', '?select=id,name,city&is_active=eq.true&order=created_at.asc');
+  _cachedLocations = locs || [];
+  updateTopBarLocation();
+}
+
+function showBranchSwitcher() {
+  const activeLoc = getActiveLocation();
+  const locs = _cachedLocations || [];
+  const all = [{ id: null, name: 'כל הסניפים', city: null }, ...locs];
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;padding:20px 20px 48px;width:100%;max-width:480px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:800">בחר סניף</div>
+        <button onclick="this.closest('[data-bs]').remove()" style="background:none;border:none;font-size:22px;color:#bbb;cursor:pointer;line-height:1">×</button>
+      </div>
+      ${all.map(l => {
+        const active = l.id ? activeLoc?.id === l.id : !activeLoc;
+        return `<div onclick="setActiveLocation(${l.id ? JSON.stringify({id:l.id,name:l.name}) : 'null'});this.closest('[data-bs]').remove()"
+          style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:var(--radius-md);margin-bottom:6px;cursor:pointer;background:${active ? 'var(--surface-low)' : 'transparent'};border:1.5px solid ${active ? 'var(--primary)' : 'var(--border)'}">
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:${active?'800':'700'};color:${active?'var(--primary)':'var(--on-surface)'}">${escHtml(l.name)}</div>
+            ${l.city ? `<div style="font-size:11px;color:var(--on-surface-3)">${escHtml(l.city)}</div>` : ''}
+          </div>
+          ${active ? '<div style="font-size:16px">✓</div>' : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  modal.setAttribute('data-bs', '');
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
 }
 
 async function loadLocations() {
@@ -562,6 +612,7 @@ async function saveNewLocation() {
   await DB.insert('locations', { name, city: city||null, address: address||null });
   document.querySelector('[data-loc-modal]')?.remove();
   showToast('הסניף נוסף');
+  await loadCachedLocations();
   loadLocations();
 }
 
@@ -570,6 +621,7 @@ async function deleteLocation(id) {
   await DB.update('locations', `?id=eq.${id}`, { is_active: false });
   const active = getActiveLocation();
   if (active?.id === id) setActiveLocation(null);
+  await loadCachedLocations();
   loadLocations();
 }
 
