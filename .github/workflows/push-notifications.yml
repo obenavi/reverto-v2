@@ -1,10 +1,12 @@
 name: Push Notifications
 
 on:
-  schedule:
-    # Runs every hour — the function itself checks Israel time and matches user prefs
-    - cron: '0 * * * *'
   workflow_dispatch:
+    # Scheduled push is disabled until VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY
+    # are set in Netlify environment variables.
+    # To re-enable, add back:
+    #   schedule:
+    #     - cron: '0 * * * *'
 
 jobs:
   send-push:
