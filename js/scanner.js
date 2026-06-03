@@ -11,10 +11,53 @@ function scannerReset(autoOpen = false) {
   document.getElementById('scanner-error').style.display = 'none';
   document.getElementById('scanner-results').style.display = 'none';
   document.getElementById('scanner-results').innerHTML = '';
-  const f = document.getElementById('scan-file');
-  if (f) f.value = '';
+  ['scan-file', 'scan-file-gallery', 'scan-file-pdf'].forEach(id => {
+    const f = document.getElementById(id);
+    if (f) f.value = '';
+  });
   scannerData = null;
-  if (autoOpen && f) setTimeout(() => f.click(), 100);
+  // Nav button auto-open → straight to rear camera
+  if (autoOpen) setTimeout(() => document.getElementById('scan-file')?.click(), 100);
+}
+
+function scannerShowActionSheet() {
+  const sheet = document.createElement('div');
+  sheet.id = 'scan-action-sheet';
+  sheet.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  sheet.innerHTML = `
+    <div style="background:var(--surface,#fff);border-radius:24px 24px 0 0;padding:20px 16px 40px;width:100%;max-width:480px">
+      <div style="width:36px;height:4px;background:var(--border,#e0e0e0);border-radius:2px;margin:0 auto 20px"></div>
+      <button onclick="_scanPick('scan-file')" style="display:flex;align-items:center;gap:14px;width:100%;background:none;border:none;padding:14px 8px;cursor:pointer;font-family:inherit;border-radius:var(--radius-md,12px);margin-bottom:4px" onmouseenter="this.style.background='var(--surface-low,#f5f5f5)'" onmouseleave="this.style.background='none'">
+        <span class="mi" style="font-size:26px;color:var(--primary,#6b35b8)">photo_camera</span>
+        <div style="text-align:right">
+          <div style="font-size:16px;font-weight:700;color:var(--on-surface,#111)">מצלמה</div>
+          <div style="font-size:12px;color:var(--on-surface-3,#888)">צלם את החשבונית עכשיו</div>
+        </div>
+      </button>
+      <button onclick="_scanPick('scan-file-gallery')" style="display:flex;align-items:center;gap:14px;width:100%;background:none;border:none;padding:14px 8px;cursor:pointer;font-family:inherit;border-radius:var(--radius-md,12px);margin-bottom:4px" onmouseenter="this.style.background='var(--surface-low,#f5f5f5)'" onmouseleave="this.style.background='none'">
+        <span class="mi" style="font-size:26px;color:var(--primary,#6b35b8)">image</span>
+        <div style="text-align:right">
+          <div style="font-size:16px;font-weight:700;color:var(--on-surface,#111)">גלריה</div>
+          <div style="font-size:12px;color:var(--on-surface-3,#888)">בחר תמונה מהאלבום</div>
+        </div>
+      </button>
+      <button onclick="_scanPick('scan-file-pdf')" style="display:flex;align-items:center;gap:14px;width:100%;background:none;border:none;padding:14px 8px;cursor:pointer;font-family:inherit;border-radius:var(--radius-md,12px);margin-bottom:16px" onmouseenter="this.style.background='var(--surface-low,#f5f5f5)'" onmouseleave="this.style.background='none'">
+        <span class="mi" style="font-size:26px;color:var(--primary,#6b35b8)">picture_as_pdf</span>
+        <div style="text-align:right">
+          <div style="font-size:16px;font-weight:700;color:var(--on-surface,#111)">PDF</div>
+          <div style="font-size:12px;color:var(--on-surface-3,#888)">העלה קובץ PDF</div>
+        </div>
+      </button>
+      <button onclick="document.getElementById('scan-action-sheet')?.remove()" style="width:100%;background:none;border:1px solid var(--border,#e0e0e0);border-radius:var(--radius-md,12px);padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-2,#555)">ביטול</button>
+    </div>
+  `;
+  sheet.addEventListener('click', e => { if (e.target === sheet) sheet.remove(); });
+  document.body.appendChild(sheet);
+}
+
+function _scanPick(inputId) {
+  document.getElementById('scan-action-sheet')?.remove();
+  setTimeout(() => document.getElementById(inputId)?.click(), 80);
 }
 
 async function scannerHandleFile(file) {
@@ -31,8 +74,9 @@ async function scannerHandleFile(file) {
 }
 
 async function scannerRun(file, attempt) {
-  const base64 = await fileToBase64(file);
   const isPDF = file.type === 'application/pdf';
+  const base64 = await fileToBase64(file);
+  const mimeType = isPDF ? 'application/pdf' : 'image/jpeg';
 
   document.getElementById('scanner-loading-text').textContent = 'מנתח עם Azure OCR...';
 
@@ -40,7 +84,7 @@ async function scannerRun(file, attempt) {
   const res = await fetch('/.netlify/functions/ocr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base64, isPDF, mimeType: file.type })
+    body: JSON.stringify({ base64, isPDF, mimeType })
   });
 
   if (!res.ok) {
@@ -419,11 +463,35 @@ function dismissWAModal() {
 }
 
 function fileToBase64(file) {
+  if (file.type === 'application/pdf') {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = () => rej(new Error('שגיאת קריאת קובץ'));
+      r.readAsDataURL(file);
+    });
+  }
+  // Compress images before upload — Netlify Functions has a 6MB body limit
   return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result.split(',')[1]);
-    r.onerror = () => rej(new Error('שגיאת קריאת קובץ'));
-    r.readAsDataURL(file);
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 2000;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+        else { width = Math.round(width * MAX / height); height = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      res(dataUrl.split(',')[1]);
+    };
+    img.onerror = () => rej(new Error('שגיאת קריאת קובץ'));
+    img.src = url;
   });
 }
 

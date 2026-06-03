@@ -179,7 +179,7 @@
 
       <!-- Scan Area -->
       <div id="scanner-idle" style="display:flex;flex-direction:column;align-items:center;padding:16px 0">
-        <div onclick="document.getElementById('scan-file').click()"
+        <div onclick="scannerShowActionSheet()"
           style="width:100%;background:linear-gradient(135deg,var(--primary-dark),var(--primary-light));border-radius:24px;padding:40px 24px;text-align:center;cursor:pointer;box-shadow:0 8px 32px rgba(107,53,184,0.35);transition:transform 0.15s,box-shadow 0.15s;margin-bottom:16px"
           onmousedown="this.style.transform='scale(0.97)';this.style.boxShadow='0 4px 16px rgba(107,53,184,0.25)'"
           onmouseup="this.style.transform='';this.style.boxShadow='0 8px 32px rgba(107,53,184,0.35)'"
@@ -191,7 +191,12 @@
           <div style="font-size:22px;font-weight:800;color:white;margin-bottom:8px;letter-spacing:-0.5px">סריקת חשבונית</div>
           <div style="font-size:14px;color:rgba(255,255,255,0.75);font-weight:500">מצלמה · גלריה · PDF</div>
         </div>
-        <input type="file" id="scan-file" accept="image/*,application/pdf" style="display:none" onchange="scannerHandleFile(this.files[0])">
+        <!-- Camera (rear) — triggered by nav button auto-open -->
+        <input type="file" id="scan-file" accept="image/*" capture="environment" style="display:none" onchange="scannerHandleFile(this.files[0])">
+        <!-- Gallery (no capture — lets user pick from photos) -->
+        <input type="file" id="scan-file-gallery" accept="image/*" style="display:none" onchange="scannerHandleFile(this.files[0])">
+        <!-- PDF -->
+        <input type="file" id="scan-file-pdf" accept="application/pdf" style="display:none" onchange="scannerHandleFile(this.files[0])">
         <div style="font-size:12px;color:var(--on-surface-3);text-align:center;margin-top:4px">לחץ על הכפתור לסריקה אוטומטית עם AI</div>
       </div>
 
