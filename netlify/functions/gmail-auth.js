@@ -2,7 +2,7 @@ const crypto = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'https://reverto.cloud/.netlify/functions/gmail-callback';
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
 
 function verifyJwt(authHeader) {
   if (!authHeader?.startsWith('Bearer ')) return null;

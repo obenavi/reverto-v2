@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const JWT_SECRET = process.env.JWT_SECRET;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'https://reverto.cloud/.netlify/functions/gmail-callback';
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
