@@ -1,0 +1,18 @@
+name: Email Invoice Agent
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # Every hour
+  workflow_dispatch:
+
+jobs:
+  check-emails:
+    name: Check Gmail for invoice attachments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger email agent function
+        run: |
+          curl -f -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.NETLIFY_URL }}/.netlify/functions/email-agent"

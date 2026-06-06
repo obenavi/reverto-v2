@@ -265,8 +265,44 @@
         </div>
       </div>
 
-      <!-- Step 8: Success (was step 6) -->
+      <!-- Step 8: Gmail connection (optional) -->
       <div class="ob-step" id="ob-step-8">
+        <div style="text-align:center;padding-top:16px">
+          <div style="width:72px;height:72px;background:#EA4335;border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+            <svg width="38" height="38" viewBox="0 0 24 24" fill="white"><path d="M20 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+          </div>
+          <div style="font-size:22px;font-weight:800;margin-bottom:10px">חשבוניות מהמייל אוטומטית</div>
+          <div style="font-size:14px;color:var(--on-surface-3);line-height:1.7;margin-bottom:24px">
+            חבר את Gmail שלך ואנחנו נזהה חשבוניות<br>שנשלחות מהספקים — ונוסיף אותן אוטומטית.
+          </div>
+
+          <div style="background:var(--surface-low);border-radius:var(--radius-md);padding:16px;margin-bottom:20px;text-align:right">
+            <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--on-surface-2)">ההרשאה שתאשר:</div>
+            <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
+              <span style="color:#22c55e;font-size:18px;line-height:1">✓</span>
+              <span style="font-size:13px;color:var(--on-surface-2)">קריאת מיילים עם קבצים מצורפים מהספקים שלך</span>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
+              <span style="color:#22c55e;font-size:18px;line-height:1">✓</span>
+              <span style="font-size:13px;color:var(--on-surface-2)">זיהוי אוטומטי של ספקים מוכרים</span>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="color:#ef4444;font-size:18px;line-height:1">✗</span>
+              <span style="font-size:13px;color:var(--on-surface-2)">אין גישה לשליחת מיילים — קריאה בלבד</span>
+            </div>
+          </div>
+
+          <button id="gmail-connect-btn" onclick="obConnectGmail()" style="width:100%;background:#EA4335;border:none;color:white;border-radius:var(--radius-md);padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:10px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M20 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+            חבר Gmail
+          </button>
+          <div id="gmail-connected-msg" style="display:none;color:#22c55e;font-weight:700;font-size:14px;margin-bottom:10px">✓ Gmail חובר בהצלחה</div>
+          <button onclick="goToStep(SUCCESS_STEP)" style="width:100%;background:none;border:none;color:var(--on-surface-3);font-size:14px;cursor:pointer;padding:10px;font-family:inherit">דלג בינתיים</button>
+        </div>
+      </div>
+
+      <!-- Step 9: Success (was step 8) -->
+      <div class="ob-step" id="ob-step-9">
         <div style="text-align:center;padding-top:40px">
           <div style="width:80px;height:80px;background:var(--success-bg);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 24px">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -307,8 +343,9 @@
     if (!sessionStorage.getItem('rv_jwt') && !localStorage.getItem('rv_jwt') && !isNewUser) window.location.href = '/';
 
     // isNewUser: 7 user-facing steps (1-7) + success(8); returning: 6 steps (1-6) + success(7)
-    const TOTAL_STEPS = isNewUser ? 7 : 6;
-    const SUCCESS_STEP = isNewUser ? 8 : 7;
+    const TOTAL_STEPS = isNewUser ? 8 : 7;
+    const SUCCESS_STEP = isNewUser ? 9 : 8;
+    const GMAIL_STEP = SUCCESS_STEP - 1;
 
     // Working days state
     let obWorkDays = new Set(['א','ב','ג','ד','ה']);
@@ -531,10 +568,47 @@
         } catch(e) { console.log('Save error', e); }
       }
 
-      goToStep(SUCCESS_STEP);
+      goToStep(GMAIL_STEP);
     }
 
     let _savedPersonalCode = '';
+
+    async function obConnectGmail() {
+      const btn = document.getElementById('gmail-connect-btn');
+      btn.textContent = 'מתחבר...';
+      btn.disabled = true;
+      const jwt = sessionStorage.getItem('rv_jwt') || localStorage.getItem('rv_jwt');
+      try {
+        const r = await fetch('/.netlify/functions/gmail-auth', {
+          headers: { 'Authorization': 'Bearer ' + jwt }
+        });
+        const { url } = await r.json();
+        const popup = window.open(url, 'gmail-oauth', 'width=520,height=620,scrollbars=yes');
+        const timer = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(timer);
+            // Check if connected
+            fetch('/.netlify/functions/db-read', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ table: 'email_integrations', filter: '?select=id&active=eq.true&limit=1' })
+            }).then(r => r.json())
+              .then(d => {
+                if (Array.isArray(d) && d.length) {
+                  document.getElementById('gmail-connect-btn').style.display = 'none';
+                  document.getElementById('gmail-connected-msg').style.display = 'block';
+                } else {
+                  btn.textContent = 'חבר Gmail';
+                  btn.disabled = false;
+                }
+              }).catch(() => { btn.textContent = 'חבר Gmail'; btn.disabled = false; });
+          }
+        }, 800);
+      } catch(e) {
+        btn.textContent = 'חבר Gmail';
+        btn.disabled = false;
+      }
+    }
 
     function copyPersonalCode() {
       const code = _savedPersonalCode || document.getElementById('ob-personal-code').textContent;

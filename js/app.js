@@ -22,7 +22,7 @@ function navTo(pageId) {
   if (pageId === 'suppliers') renderSuppliersList();
   if (pageId === 'market') renderMarket();
   if (pageId === 'profile') initProfile();
-  if (pageId === 'scanner') scannerReset(true);
+  if (pageId === 'scanner') { scannerReset(true); loadPendingEmails(); }
   if (pageId === 'admin') initAdmin();
   if (pageId === 'product-tree') initProductTree();
 }

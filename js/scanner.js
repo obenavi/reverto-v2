@@ -498,3 +498,73 @@ function fileToBase64(file) {
 function escHtml(str) {
   return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Pending email invoices ───────────────────────────────────────
+async function loadPendingEmails() {
+  const jwt = sessionStorage.getItem('rv_jwt') || localStorage.getItem('rv_jwt');
+  if (!jwt) return;
+  try {
+    const r = await fetch('/.netlify/functions/gmail-pending', {
+      headers: { 'Authorization': 'Bearer ' + jwt }
+    });
+    if (!r.ok) return;
+    const items = await r.json();
+    const section = document.getElementById('pending-emails-section');
+    const list = document.getElementById('pending-emails-list');
+    if (!section || !list) return;
+    if (!items.length) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    list.innerHTML = items.map(item => `
+      <div id="pem-${escHtml(item.id)}" style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);padding:14px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:var(--on-surface);margin-bottom:2px">${escHtml(item.sender_name || item.sender_email)}</div>
+        <div style="font-size:11px;color:var(--on-surface-3);margin-bottom:6px">${escHtml(item.sender_email)} · ${escHtml(item.attachment_name || '')}</div>
+        <div style="font-size:12px;color:var(--on-surface-2);margin-bottom:10px">${escHtml(item.subject || '')}</div>
+        <div style="display:flex;gap:8px">
+          <button onclick="pendingEmailApprove('${escHtml(item.id)}','${escHtml(item.sender_name||item.sender_email)}')"
+            style="flex:1;background:var(--primary);border:none;color:white;border-radius:var(--radius-sm);padding:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+            אשר וסרוק
+          </button>
+          <button onclick="pendingEmailReject('${escHtml(item.id)}')"
+            style="flex:1;background:none;border:1.5px solid var(--border);color:var(--on-surface-2);border-radius:var(--radius-sm);padding:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+            התעלם
+          </button>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) { /* silent */ }
+}
+
+async function pendingEmailApprove(id, senderName) {
+  const jwt = sessionStorage.getItem('rv_jwt') || localStorage.getItem('rv_jwt');
+  // Ask which supplier (simple prompt for now)
+  const supplierName = prompt(`מאיזה ספק הגיעה החשבונית?\n(ברירת מחדל: ${senderName})`) ?? senderName;
+  if (supplierName === null) return;
+
+  const r = await fetch('/.netlify/functions/gmail-pending', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, action: 'approve', supplier_name: supplierName })
+  });
+  if (r.ok) {
+    document.getElementById('pem-' + id)?.remove();
+    showToast('החשבונית נשלחה לעיבוד OCR');
+    if (!document.getElementById('pending-emails-list')?.children.length) {
+      document.getElementById('pending-emails-section').style.display = 'none';
+    }
+  }
+}
+
+async function pendingEmailReject(id) {
+  const jwt = sessionStorage.getItem('rv_jwt') || localStorage.getItem('rv_jwt');
+  const r = await fetch('/.netlify/functions/gmail-pending', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, action: 'reject' })
+  });
+  if (r.ok) {
+    document.getElementById('pem-' + id)?.remove();
+    if (!document.getElementById('pending-emails-list')?.children.length) {
+      document.getElementById('pending-emails-section').style.display = 'none';
+    }
+  }
+}

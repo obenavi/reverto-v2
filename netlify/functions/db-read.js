@@ -12,6 +12,8 @@ const USER_TABLES = {
   product_catalog: 'user_id',
   recipes: 'user_id',
   recipe_ingredients: 'user_id',
+  email_integrations: 'user_id',
+  pending_invoice_emails: 'user_id',
 };
 
 function verifyJWT(token, secret) {
