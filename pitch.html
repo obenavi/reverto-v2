@@ -519,7 +519,7 @@ body {
     </div>
   </div>
 
-  <a href="/" class="cta-btn">הצטרפו חינם לפיילוט עכשיו</a>
+  <a href="#" onclick="startPilot(event)" class="cta-btn">הצטרפו חינם לפיילוט עכשיו — 3 חודשים מתנה</a>
 
   <div class="cta-sub">
     ניסיון ראשון ללא עלות · ללא כרטיס אשראי<br>
@@ -542,5 +542,15 @@ body {
   <div class="footer-copy">© 2026 Reverto · reverto.ino@gmail.com</div>
 </div>
 
+<script>
+function startPilot(e) {
+  if (e) e.preventDefault();
+  // Store pilot signup in sessionStorage — onboarding picks this up
+  const signup = { signup_code: 'REVERTO-PILOT-2026', new_user_signup: true, source: 'pitch' };
+  sessionStorage.setItem('rv_signup', JSON.stringify(signup));
+  localStorage.setItem('rv_signup', JSON.stringify(signup));
+  window.location.href = '/onboarding.html';
+}
+</script>
 </body>
 </html>
