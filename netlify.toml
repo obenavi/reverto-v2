@@ -27,3 +27,13 @@
   from = "/app"
   to = "/app.html"
   status = 200
+
+[[redirects]]
+  from = "/pitch"
+  to = "/pitch.html"
+  status = 200
+
+[[redirects]]
+  from = "/join"
+  to = "/pitch.html"
+  status = 200
