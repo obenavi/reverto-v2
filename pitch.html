@@ -338,6 +338,36 @@ body {
 }
 .community-text strong { color:#a78bfa; }
 
+/* ── QR SECTION ── */
+.qr-section {
+  padding:28px 20px 24px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:12px;
+  border-top:1px solid #1f2937;
+  background:#0a0a0a;
+}
+.qr-label-top {
+  font-size:13px;
+  font-weight:700;
+  color:#6b7280;
+  text-align:center;
+}
+#pitch-qr {
+  background:#fff;
+  border-radius:16px;
+  padding:10px;
+  display:inline-block;
+}
+#pitch-qr canvas, #pitch-qr img { display:block; }
+.qr-url {
+  font-size:14px;
+  font-weight:800;
+  color:#a78bfa;
+  letter-spacing:-0.3px;
+}
+
 /* ── FOOTER ── */
 .footer {
   padding:16px 20px 32px;
@@ -553,14 +583,30 @@ body {
   </div>
 </div>
 
+<!-- QR SECTION -->
+<div class="qr-section">
+  <div class="qr-label-top">סרוק וקבל את הדף בטלפון שלך</div>
+  <div id="pitch-qr"></div>
+  <div class="qr-url">reverto.cloud/pitch</div>
+</div>
+
 <!-- FOOTER -->
 <div class="footer">
   <a href="/" class="footer-logo">REVERTO<span style="color:#7c3aed">.</span></a>
-  <div class="footer-url">reverto.cloud</div>
   <div class="footer-copy">© 2026 Reverto · reverto.ino@gmail.com</div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
+new QRCode(document.getElementById('pitch-qr'), {
+  text: 'https://reverto.cloud/pitch',
+  width: 180,
+  height: 180,
+  colorDark: '#111',
+  colorLight: '#ffffff',
+  correctLevel: QRCode.CorrectLevel.M
+});
+
 function startPilot(e) {
   if (e) e.preventDefault();
   // Store pilot signup in sessionStorage — onboarding picks this up
