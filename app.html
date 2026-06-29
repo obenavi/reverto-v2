@@ -37,59 +37,101 @@
 
   <!-- DASHBOARD -->
   <div class="page active" id="page-dashboard">
+
+    <!-- ── GRADIENT HERO ── -->
+    <div class="dash-hero">
+
+      <!-- Row 1: REVERTO | Restaurant logo -->
+      <div class="dash-hero-top">
+        <div class="dash-hero-brand" onclick="showInfoPanel()" style="cursor:pointer">
+          <div class="dash-hero-brand-icon">
+            <svg width="16" height="16" viewBox="0 0 38 38" fill="none">
+              <path d="M8 10 L19 6 L30 10 L30 22 Q30 30 19 34 Q8 30 8 22 Z" fill="white" opacity="0.9"/>
+              <path d="M14 18 L17 21 L24 14" stroke="rgba(139,33,232,0.8)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+          </div>
+          <span class="dash-hero-brand-name">REVERTO</span>
+        </div>
+        <label class="dash-hero-logo-upload" title="לוגו המסעדה">
+          <input type="file" accept="image/*" style="display:none" onchange="var r=new FileReader();r.onload=function(e){var img=this.parentElement.querySelector('img');img.src=e.target.result;img.style.display='block';this.parentElement.querySelector('span').style.display='none'}.bind(this);r.readAsDataURL(this.files[0])">
+          <img src="" alt="">
+          <span>לוגו<br>מסעדה</span>
+        </label>
+      </div>
+
+      <!-- Row 2: Biz name + date | Branch chip -->
+      <div class="dash-hero-row2">
+        <div class="dash-hero-biz">
+          <div class="dash-hero-greeting" id="dash-greeting">שלום!</div>
+          <div class="dash-hero-biz-name" id="top-biz-name"></div>
+        </div>
+        <div class="dash-hero-branch" onclick="showBranchSwitcher()">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+          <span id="top-location-hero">סניף</span>
+          <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </div>
+      <div class="dash-hero-date" id="dash-date"></div>
+
+      <!-- Food Cost BIG number -->
+      <div class="dash-hero-fc-label">Food Cost החודש</div>
+      <div onclick="showAIInsights('foodcost')" style="cursor:pointer">
+        <div class="dash-hero-fc-value"><span id="dash-foodcost">--</span><span class="dash-hero-fc-decimal">%</span></div>
+        <div class="dash-hero-fc-badge" id="dash-foodcost-sub">הכנס נתוני מחזור</div>
+      </div>
+
+      <!-- 3 KPI cards -->
+      <div class="dash-hero-kpis">
+        <div class="dash-hero-kpi" onclick="openInvoiceList()">
+          <div class="dash-hero-kpi-label">רכש</div>
+          <div class="dash-hero-kpi-value" id="dash-monthly">₪0</div>
+          <div class="dash-hero-kpi-sub neutral" id="dash-monthly-sub">0 חשבוניות</div>
+        </div>
+        <div class="dash-hero-kpi" id="dash-revenue-card" onclick="openRevenueHistory()">
+          <div class="dash-hero-kpi-label">מחזור</div>
+          <div class="dash-hero-kpi-value" id="dash-today-revenue">—</div>
+          <div class="dash-hero-kpi-sub down" id="dash-today-revenue-sub">לחץ לפירוט</div>
+        </div>
+        <div class="dash-hero-kpi" id="dash-payments-card" onclick="showPaymentForecast()">
+          <div class="dash-hero-kpi-label">תשלומים</div>
+          <div class="dash-hero-kpi-value">—</div>
+          <div class="dash-hero-kpi-sub neutral">לחץ לצפייה</div>
+        </div>
+      </div>
+      <div style="display:none"><div id="plan-badge"></div></div>
+
+      <!-- AI Briefing button -->
+      <div class="dash-hero-ai">
+        <div class="dash-hero-divider"></div>
+        <button type="button" class="dash-hero-ai-btn" onclick="showAIInsights('overview')">
+          <div class="dash-hero-ai-btn-left">
+            <span class="dash-hero-ai-star">✦</span>
+            <span>AI Briefing — סיכום יומי חכם</span>
+          </div>
+          <span style="font-size:11px;color:rgba(255,255,255,0.5);">פרטים ›</span>
+        </button>
+      </div>
+    </div>
+    <!-- ── END HERO ── -->
+
+    <!-- Period tabs — between hero and chart -->
+    <div style="background:linear-gradient(180deg,rgba(192,38,211,0.07) 0%,rgba(249,247,252,0) 100%);padding:0 16px;border-bottom:1px solid rgba(139,33,232,0.1);">
+      <div style="display:flex;max-width:480px;margin:0 auto;">
+        <button class="period-btn active" onclick="setPeriod('week',this)" style="flex:1;text-align:center;border:none;border-bottom:2.5px solid var(--primary);background:none;padding:11px 4px;font-size:13px;font-weight:700;color:var(--primary);font-family:inherit;cursor:pointer;">שבוע</button>
+        <button class="period-btn" onclick="setPeriod('month',this)" style="flex:1;text-align:center;border:none;border-bottom:2.5px solid transparent;background:none;padding:11px 4px;font-size:13px;font-weight:700;color:var(--on-surface-3);font-family:inherit;cursor:pointer;">חודש</button>
+        <button class="period-btn" onclick="setPeriod('quarter',this)" style="flex:1;text-align:center;border:none;border-bottom:2.5px solid transparent;background:none;padding:11px 4px;font-size:13px;font-weight:700;color:var(--on-surface-3);font-family:inherit;cursor:pointer;">רבעון</button>
+        <button class="period-btn" onclick="setPeriod('year',this)" style="flex:1;text-align:center;border:none;border-bottom:2.5px solid transparent;background:none;padding:11px 4px;font-size:13px;font-weight:700;color:var(--on-surface-3);font-family:inherit;cursor:pointer;">שנה</button>
+      </div>
+    </div>
+
     <div class="page-content">
-
-      <!-- Greeting -->
-      <div style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:22px;font-weight:800;letter-spacing:-0.5px" id="dash-greeting">שלום!</div><div id="plan-badge"></div></div>
-        <div style="font-size:13px;color:var(--on-surface-3)" id="dash-date"></div>
-      </div>
-
-      <!-- Combined Business Overview Card -->
-      <div class="card card-pad mb-12">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800">סיכום עסקי</div>
-          <button onclick="showAIInsights('overview')" style="background:linear-gradient(135deg,#6B35B8,#C084FC);border:none;border-radius:20px;padding:7px 14px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;font-size:12px;font-weight:700;color:white">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-            ניתוח AI
-          </button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div class="card-tap" onclick="openInvoiceList()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
-            <div class="stat-label">רכש החודש</div>
-            <div class="stat-value" id="dash-monthly" style="font-size:20px">₪0</div>
-            <div class="stat-sub" id="dash-monthly-sub">0 חשבוניות</div>
-          </div>
-          <div id="dash-revenue-card" class="card-tap" onclick="openRevenueHistory()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
-            <div class="stat-label">מחזור</div>
-            <div class="stat-value" id="dash-today-revenue" style="font-size:20px">—</div>
-            <div class="stat-sub" id="dash-today-revenue-sub">לחץ לפירוט</div>
-          </div>
-          <div class="card-tap" onclick="showAIInsights('foodcost')" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
-            <div class="stat-label">Food Cost</div>
-            <div class="stat-value" id="dash-foodcost" style="font-size:20px">--%</div>
-            <div class="stat-sub" id="dash-foodcost-sub">הכנס מחזור</div>
-          </div>
-          <div id="dash-payments-card" class="card-tap" onclick="showPaymentForecast()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
-            <div class="stat-label">תשלומים</div>
-            <div class="stat-value" style="font-size:20px">120 יום</div>
-            <div class="stat-sub">לחץ לצפייה</div>
-          </div>
-        </div>
-      </div>
-
 
       <!-- Chart -->
       <div class="card mb-12">
         <div class="card-pad">
           <div class="flex-between mb-8">
-            <div class="section-title">רכש / מחזורים <span id="chart-range-label" style="font-size:10px;font-weight:500;color:var(--on-surface-3)"></span><button onclick="showAIInsights('גרף משולב')" style="background:linear-gradient(135deg,#6B35B8,#C084FC);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-right:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></button></div>
-            <div style="display:flex;gap:4px">
-              <button class="period-btn active" onclick="setPeriod('week',this)">שבוע</button>
-              <button class="period-btn" onclick="setPeriod('month',this)">חודש</button>
-              <button class="period-btn" onclick="setPeriod('quarter',this)">רבעון</button>
-              <button class="period-btn" onclick="setPeriod('year',this)">שנה</button>
-            </div>
+            <div class="section-title">רכש / מחזורים <span id="chart-range-label" style="font-size:10px;font-weight:500;color:var(--on-surface-3)"></span></div>
+            <button onclick="showAIInsights('גרף משולב')" style="background:linear-gradient(135deg,var(--primary-dark),var(--primary-light));border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></button>
           </div>
           <div class="chart-wrap" id="dash-chart">
             <canvas id="chart-canvas" style="width:100%;height:130px"></canvas>

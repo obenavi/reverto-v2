@@ -12,6 +12,9 @@ function navTo(pageId) {
   page.classList.add('active');
   currentPage = pageId;
 
+  // Hero mode: hide top-bar on dashboard
+  document.body.classList.toggle('on-dashboard', pageId === 'dashboard');
+
   // Update nav
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navBtn = document.getElementById('nav-' + pageId);
@@ -49,6 +52,9 @@ function applyManagerRestrictions() {
 }
 
 async function appInit() {
+  // Dashboard starts in hero mode
+  document.body.classList.add('on-dashboard');
+
   // Check auth
   if (!Auth.token) {
     window.location.href = '/';
@@ -498,10 +504,15 @@ function setActiveLocation(loc) {
 function updateTopBarLocation() {
   const loc = getActiveLocation();
   const el = document.getElementById('top-location');
-  if (!el) return;
+  const heroEl = document.getElementById('top-location-hero');
   const multi = _cachedLocations && _cachedLocations.length > 1;
+  const label = loc ? loc.name : (multi ? 'כל הסניפים' : '');
+
+  // Hero branch chip
+  if (heroEl) heroEl.textContent = label || 'סניף';
+
+  if (!el) return;
   if (multi) {
-    const label = loc ? loc.name : 'כל הסניפים';
     el.innerHTML = `📍 ${label} <span style="font-size:9px;opacity:0.7">▼</span>`;
     el.style.display = 'block';
     el.style.cursor = 'pointer';
