@@ -209,6 +209,12 @@
   </div>
 
   <script>
+    function goToApp() {
+      const ret = sessionStorage.getItem('rv_return_url');
+      if (ret) { sessionStorage.removeItem('rv_return_url'); window.location.href = ret; return; }
+      goToApp();
+    }
+
     async function tryLogin() {
       const suffix = document.getElementById('access-code').value.trim();
       if (!suffix) return;
@@ -240,7 +246,7 @@
             _s('rv_jwt', data.jwt);
             _s('rv_user', JSON.stringify(data.user));
             _s('rv_access_code', code);
-            window.location.href = '/app.html';
+            goToApp();
           }
         } else {
           err.style.display = 'block';
@@ -304,7 +310,7 @@
           _s('rv_token', data.user.personal_code || raw);
           _s('rv_jwt', data.jwt);
           _s('rv_user', JSON.stringify(data.user));
-          window.location.href = '/app.html';
+          goToApp();
         }
       } catch(e) {
         err.textContent = 'שגיאת חיבור. בדוק אינטרנט.';
@@ -333,7 +339,7 @@
           _s('rv_token', email);
           _s('rv_jwt', data.jwt);
           _s('rv_user', JSON.stringify(data.user));
-          window.location.href = '/app.html';
+          goToApp();
         } else {
           if (data.error === 'use_code') {
             err.textContent = 'משתמש זה נכנס עם קוד — עבור ל"קוד גישה"';
@@ -400,7 +406,7 @@
       try {
         const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
         if (!payload.exp || payload.exp > Math.floor(Date.now() / 1000)) {
-          window.location.href = '/app.html';
+          goToApp();
           return;
         }
       } catch {}
@@ -447,7 +453,7 @@
         if (data.new_user || !data.user.onboarding_done) {
           window.location.href = '/onboarding.html';
         } else {
-          window.location.href = '/app.html';
+          goToApp();
         }
       } catch(e) {
         btn.disabled = false;
