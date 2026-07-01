@@ -91,14 +91,18 @@ async function appInit() {
     weekday: 'long', day: 'numeric', month: 'long'
   });
 
-  // Load dashboard
-  renderDashboard();
-
-  // Onboarding — role-specific for partner/manager, full tour for owner
-  if (isManager() || isPartner()) {
-    if (!localStorage.getItem('rv_role_welcome_done')) setTimeout(() => showRoleWelcome(), 700);
+  // Deep-link from email: ?goto=invoices etc.
+  const gotoPage = new URLSearchParams(window.location.search).get('goto');
+  if (gotoPage) {
+    navTo(gotoPage);
   } else {
-    if (!localStorage.getItem('rv_welcome_done')) setTimeout(showWelcomeTour, 700);
+    renderDashboard();
+    // Onboarding — role-specific for partner/manager, full tour for owner
+    if (isManager() || isPartner()) {
+      if (!localStorage.getItem('rv_role_welcome_done')) setTimeout(() => showRoleWelcome(), 700);
+    } else {
+      if (!localStorage.getItem('rv_welcome_done')) setTimeout(showWelcomeTour, 700);
+    }
   }
 }
 
