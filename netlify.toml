@@ -37,3 +37,8 @@
   from = "/join"
   to = "/pitch.html"
   status = 200
+
+[[redirects]]
+  from = "/report"
+  to = "/report.html"
+  status = 200

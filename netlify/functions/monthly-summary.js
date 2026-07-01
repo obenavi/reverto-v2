@@ -396,8 +396,8 @@ ${topSavings.slice(0,5).map(s => `${s.product}: משלם ₪${s.avgPaid} vs שו
 
     <!-- CTA -->
     <div style="text-align:center;margin:28px 0 8px">
-      <a href="${SITE_URL}/app.html" style="display:inline-block;background:linear-gradient(135deg,#3D1582,#6B35B8);color:white;text-decoration:none;padding:14px 36px;border-radius:30px;font-size:15px;font-weight:800;letter-spacing:-0.3px">
-        כניסה ל-Reverto ←
+      <a href="${SITE_URL}/report?month=${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}" style="display:inline-block;background:linear-gradient(135deg,#3D1582,#6B35B8);color:white;text-decoration:none;padding:14px 36px;border-radius:30px;font-size:15px;font-weight:800;letter-spacing:-0.3px">
+        לדוח המלא עם כל הנתונים ←
       </a>
     </div>
 

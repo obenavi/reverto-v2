@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Reverto — דוח חודשי</title>
+<link rel="icon" href="/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+.rpt-wrap { max-width: 640px; margin: 0 auto; padding: 0 0 60px; }
+.rpt-header {
+  background: linear-gradient(135deg, #3D1582, #6B35B8, #9B6DD6);
+  padding: 52px 24px 28px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.rpt-header::before {
+  content: '';
+  position: absolute;
+  width: 300px; height: 300px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  top: -80px; left: -80px;
+}
+.rpt-logo { font-size: 15px; font-weight: 700; color: rgba(255,255,255,0.6); margin-bottom: 4px; }
+.rpt-title { font-size: 26px; font-weight: 800; color: #fff; letter-spacing: -0.5px; margin-bottom: 2px; }
+.rpt-sub { font-size: 14px; color: rgba(255,255,255,0.65); }
+.rpt-actions {
+  display: flex; gap: 8px; margin-top: 16px;
+  position: relative; z-index: 1;
+}
+.btn-print {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 20px; padding: 7px 16px;
+  font-size: 13px; font-weight: 700; color: #fff;
+  font-family: inherit; cursor: pointer;
+}
+.btn-app {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.9); border: none;
+  border-radius: 20px; padding: 7px 16px;
+  font-size: 13px; font-weight: 700; color: #4A1F85;
+  font-family: inherit; cursor: pointer; text-decoration: none;
+}
+
+/* KPI cards */
+.kpi-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; padding: 20px 16px 0; }
+.kpi-card {
+  background: var(--surface-card); border-radius: var(--radius-md);
+  border: 1px solid var(--border); padding: 14px 12px;
+  text-align: center;
+}
+.kpi-label { font-size: 10px; font-weight: 700; color: var(--on-surface-3); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 6px; }
+.kpi-value { font-size: 22px; font-weight: 800; color: var(--on-surface); letter-spacing: -0.5px; line-height: 1; }
+.kpi-sub { font-size: 10px; font-weight: 600; margin-top: 4px; }
+
+/* Section */
+.section { margin: 16px 16px 0; }
+.section-title { font-size: 15px; font-weight: 800; color: var(--on-surface); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.section-title .mi { font-size: 18px; color: var(--primary); }
+
+/* Wow box */
+.wow-box {
+  background: linear-gradient(135deg, #1C0A2E, #3D1582);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin: 16px 16px 0;
+  color: #fff;
+}
+.wow-label { font-size: 11px; font-weight: 700; color: #C084FC; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
+.wow-amount { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+.wow-year { font-size: 14px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+.wow-year strong { color: #FCD34D; }
+
+/* Tables */
+.rpt-table {
+  width: 100%; border-collapse: collapse;
+  background: var(--surface-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.rpt-table th {
+  padding: 10px 12px; font-size: 10px; font-weight: 700;
+  color: var(--on-surface-3); text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--surface-low);
+}
+.rpt-table td { padding: 11px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.rpt-table tr:last-child td { border-bottom: none; }
+.rpt-table tfoot td { background: var(--surface-low); font-weight: 800; font-size: 14px; }
+
+/* Alert banner */
+.alert-banner {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(217,119,6,0.08); border: 1px solid rgba(217,119,6,0.2);
+  border-radius: var(--radius-md); padding: 12px 14px;
+  margin: 16px 16px 0; font-size: 13px; font-weight: 600; color: #92400E;
+  cursor: pointer; text-decoration: none;
+}
+
+/* AI analysis */
+.ai-card {
+  background: var(--surface-low);
+  border-right: 4px solid var(--primary);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 16px 18px;
+}
+.ai-label { font-size: 11px; font-weight: 700; color: var(--primary); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+.ai-text { font-size: 14px; color: var(--on-surface-2); line-height: 1.8; }
+
+/* Revenue chart */
+.chart-bar-wrap { display: flex; align-items: flex-end; gap: 4px; height: 60px; }
+.chart-bar-col { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.chart-bar { width: 100%; background: linear-gradient(to top, #6B35B8, #9B6DD6); border-radius: 4px 4px 0 0; min-height: 4px; }
+.chart-bar-lbl { font-size: 8px; color: var(--on-surface-3); margin-top: 3px; }
+
+/* Savings highlight */
+.saving-month { font-weight: 800; color: #c2410c; }
+.saving-year { font-weight: 800; color: #92400E; }
+
+/* Loading/error */
+.rpt-loading { text-align: center; padding: 60px 24px; color: var(--on-surface-3); }
+.rpt-error { text-align: center; padding: 40px 24px; color: var(--error); }
+
+/* Bottom nav back button */
+.back-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: rgba(255,255,255,0.96); backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  padding: 12px 16px 20px;
+  display: flex; gap: 10px; max-width: 640px; margin: 0 auto;
+}
+
+@media print {
+  .rpt-actions, .back-bar { display: none !important; }
+  .rpt-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .wow-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+
+<div class="rpt-wrap" id="rpt-wrap">
+  <div class="rpt-loading">
+    <div class="mi" style="font-size:48px;color:var(--primary)">description</div>
+    <div style="font-size:15px;margin-top:12px">טוען דוח...</div>
+  </div>
+</div>
+
+<div class="back-bar" id="back-bar" style="display:none">
+  <a href="/app.html" class="btn-ghost" style="flex:1;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px">
+    <span class="mi" style="font-size:18px">home</span> חזרה לאפליקציה
+  </a>
+  <button class="btn-primary" style="flex:1" onclick="window.print()">
+    ייצוא PDF
+  </button>
+</div>
+
+<script src="js/db.js"></script>
+<script>
+const TERMS = { cash_delivery:'מזומן בקבלה', cash_eom:'מזומן סוף חודש', net30:'שוטף+30', net60:'שוטף+60', net90:'שוטף+90' };
+const fmt = n => Math.round(n).toLocaleString('he-IL');
+const fmtDec = (n, d=1) => (+n).toFixed(d);
+const il = d => new Date(d + 'T12:00:00').toLocaleDateString('he-IL', { day:'numeric', month:'short' });
+
+async function loadReport() {
+  const jwt = sessionStorage.getItem('rv_jwt') || localStorage.getItem('rv_jwt');
+  if (!jwt) { window.location.href = '/'; return; }
+
+  const month = new URLSearchParams(window.location.search).get('month');
+  if (!month) {
+    // Default to last month
+    const now = new Date();
+    const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    window.location.search = `?month=${lm.getFullYear()}-${String(lm.getMonth()+1).padStart(2,'0')}`;
+    return;
+  }
+
+  try {
+    const res = await fetch(`/.netlify/functions/monthly-report?month=${month}`, {
+      headers: { 'Authorization': 'Bearer ' + jwt }
+    });
+    if (!res.ok) throw new Error('שגיאה בטעינת הדוח');
+    const d = await res.json();
+    render(d, month);
+  } catch(e) {
+    document.getElementById('rpt-wrap').innerHTML = `<div class="rpt-error"><div class="mi" style="font-size:40px">error</div><div style="margin-top:12px">${e.message}</div><br><a href="/app.html" class="btn-primary" style="display:inline-block;margin-top:16px;text-decoration:none">חזרה לאפליקציה</a></div>`;
+  }
+}
+
+function render(d, month) {
+  const [year, mon] = month.split('-');
+  const monthName = new Date(+year, +mon-1, 1).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+  const fcColor = d.fcPct > 33 ? 'var(--error)' : 'var(--success)';
+  const fcArrow = d.fcPct > 33 ? '↑ מעל היעד' : '↓ בתוך היעד';
+
+  // Revenue chart
+  const days = Object.entries(d.revenueByDay || {}).sort((a,b) => a[0] > b[0] ? 1 : -1);
+  const maxRev = Math.max(...days.map(x => x[1]), 1);
+  const chartBars = days.length ? days.map(([date, amt]) => `
+    <div class="chart-bar-col">
+      <div class="chart-bar" style="height:${Math.max(4, Math.round(amt/maxRev*56))}px" title="₪${fmt(amt)}"></div>
+      <div class="chart-bar-lbl">${new Date(date+'T12:00:00').getDate()}</div>
+    </div>`).join('') : '<div style="font-size:12px;color:var(--on-surface-3);padding:8px">אין נתוני Z להצגה</div>';
+
+  // Supplier rows
+  const supRows = d.suppliers.map(s => `
+    <tr>
+      <td style="font-weight:600">${s.name}</td>
+      <td style="text-align:left">₪${fmt(s.total)}</td>
+      <td style="text-align:left;color:var(--success)">${s.credit > 0 ? '₪'+fmt(s.credit) : '—'}</td>
+      <td style="text-align:left;font-weight:800;color:var(--primary)">₪${fmt(s.total - s.credit)}</td>
+      <td style="text-align:center">
+        ${s.open > 0 ? `<span style="background:rgba(217,119,6,0.1);color:#92400E;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">⚠ ${s.open}</span>` : '<span style="color:var(--success);font-size:16px">✓</span>'}
+      </td>
+    </tr>`).join('');
+
+  // Savings rows
+  const savingsRows = d.savings.map((s, i) => `
+    <tr style="background:${i%2===0?'#fff':'var(--surface-low)'}">
+      <td style="font-weight:600">${s.product}</td>
+      <td style="text-align:center;color:var(--on-surface-3);font-size:12px">${s.qty} ${s.unit}</td>
+      <td style="text-align:left;color:var(--error);font-weight:700">₪${s.avgPaid}</td>
+      <td style="text-align:left;color:var(--success);font-weight:700">₪${s.marketPrice}</td>
+      <td style="text-align:left;font-weight:700">₪${s.diff}</td>
+      <td class="saving-month" style="text-align:left">₪${fmt(s.savingMonth)}</td>
+      <td class="saving-year" style="text-align:left">₪${fmt(s.savingYear)}</td>
+    </tr>`).join('');
+
+  // Payment rows
+  const payRows = d.payForecast.map(p => `
+    <tr>
+      <td style="font-weight:600">${p.name}<br><span style="font-size:10px;color:var(--on-surface-3);font-weight:400">${TERMS[p.terms]||p.terms}</span></td>
+      <td style="text-align:center;color:var(--on-surface-3);font-size:12px">${p.count} חשבוניות</td>
+      <td style="text-align:left;font-weight:800;color:var(--primary)">₪${fmt(p.total)}</td>
+    </tr>`).join('');
+
+  const html = `
+    <!-- HEADER -->
+    <div class="rpt-header">
+      <div class="rpt-logo" style="position:relative;z-index:1">Reverto · דוח חודשי</div>
+      <div class="rpt-title" style="position:relative;z-index:1">${monthName}</div>
+      <div class="rpt-sub" style="position:relative;z-index:1">${d.user.business_name || ''}</div>
+      <div class="rpt-actions">
+        <button class="btn-print" onclick="window.print()">
+          <span class="mi" style="font-size:16px">print</span> ייצוא PDF
+        </button>
+        <a href="/app.html" class="btn-app">
+          <span class="mi" style="font-size:16px">home</span> לאפליקציה
+        </a>
+      </div>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">רכש נטו</div>
+        <div class="kpi-value" style="color:var(--primary)">₪${fmt(d.totalNet)}</div>
+        ${d.totalCredit > 0 ? `<div class="kpi-sub" style="color:var(--success)">זיכוי ₪${fmt(d.totalCredit)}</div>` : ''}
+      </div>
+      ${d.totalRevenue > 0 ? `
+      <div class="kpi-card">
+        <div class="kpi-label">מחזור Z</div>
+        <div class="kpi-value" style="color:#0891B2">₪${fmt(d.totalRevenue)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Food Cost</div>
+        <div class="kpi-value" style="color:${fcColor}">${fmtDec(d.fcPct)}%</div>
+        <div class="kpi-sub" style="color:${fcColor}">${fcArrow}</div>
+      </div>` : `
+      <div class="kpi-card">
+        <div class="kpi-label">חשבוניות</div>
+        <div class="kpi-value">${d.invoiceCount}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">ספקים</div>
+        <div class="kpi-value">${d.suppliers.length}</div>
+      </div>`}
+    </div>
+
+    ${d.openCount > 0 ? `
+    <a href="/app.html" class="alert-banner">
+      <span class="mi" style="font-size:20px;color:#D97706">warning</span>
+      ${d.openCount} חשבונית${d.openCount>1?'ות':''} פתוח${d.openCount>1?'ות':'ה'} לאישור קבלה — לחץ לטיפול
+    </a>` : ''}
+
+    <!-- REVENUE CHART -->
+    ${days.length > 0 ? `
+    <div class="section">
+      <div class="section-title"><span class="mi">show_chart</span> מחזור Z לפי יום</div>
+      <div class="card card-pad">
+        <div class="chart-bar-wrap">${chartBars}</div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--on-surface-3)">
+          <span>₪${fmt(Math.min(...days.map(x=>x[1])))}</span>
+          <span style="font-weight:700">סה"כ ₪${fmt(d.totalRevenue)}</span>
+          <span>₪${fmt(Math.max(...days.map(x=>x[1])))}</span>
+        </div>
+      </div>
+    </div>` : ''}
+
+    <!-- SUPPLIERS -->
+    <div class="section">
+      <div class="section-title"><span class="mi">handshake</span> פירוט רכש לפי ספק</div>
+      <div style="overflow-x:auto">
+        <table class="rpt-table">
+          <thead><tr>
+            <th style="text-align:right">ספק</th>
+            <th style="text-align:left">חשבוניות</th>
+            <th style="text-align:left">זיכויים</th>
+            <th style="text-align:left">נטו</th>
+            <th style="text-align:center">קבלה</th>
+          </tr></thead>
+          <tbody>${supRows}</tbody>
+          <tfoot><tr>
+            <td>סה"כ</td>
+            <td style="text-align:left">₪${fmt(d.totalInvoiced)}</td>
+            <td style="text-align:left;color:var(--success)">${d.totalCredit>0?'₪'+fmt(d.totalCredit):'—'}</td>
+            <td style="text-align:left;color:var(--primary)">₪${fmt(d.totalNet)}</td>
+            <td></td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    ${d.savings.length > 0 ? `
+    <!-- WOW BOX -->
+    <div class="wow-box">
+      <div class="wow-label">פוטנציאל חיסכון — ניתוח שוק</div>
+      <div class="wow-amount">₪${fmt(d.totalSavingMonth)} / חודש</div>
+      <div class="wow-year">שווה ל <strong>₪${fmt(d.totalSavingYear)} בשנה</strong> — אם תקנה ${d.savings.length} מוצרים במחיר השוק</div>
+    </div>
+
+    <!-- SENSITIVITY TABLE -->
+    <div class="section">
+      <div class="section-title"><span class="mi">trending_down</span> טבלת רגישות — כמה כסף על השולחן?</div>
+      <div style="overflow-x:auto">
+        <table class="rpt-table" style="min-width:520px">
+          <thead><tr>
+            <th style="text-align:right">מוצר</th>
+            <th style="text-align:center">כמות</th>
+            <th style="text-align:left;color:var(--error)">שילמת</th>
+            <th style="text-align:left;color:var(--success)">שוק</th>
+            <th style="text-align:left">הפרש/יח'</th>
+            <th style="text-align:left">חיסכון/חודש</th>
+            <th style="text-align:left">חיסכון/שנה</th>
+          </tr></thead>
+          <tbody>${savingsRows}</tbody>
+          <tfoot><tr>
+            <td colspan="5">סה"כ פוטנציאל</td>
+            <td class="saving-month">₪${fmt(d.totalSavingMonth)}</td>
+            <td class="saving-year">₪${fmt(d.totalSavingYear)}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>` : ''}
+
+    ${d.payForecast.length > 0 ? `
+    <!-- PAYMENTS -->
+    <div class="section">
+      <div class="section-title"><span class="mi">calendar_month</span> תשלומים צפויים בחודש זה</div>
+      <table class="rpt-table">
+        <thead><tr>
+          <th style="text-align:right">ספק</th>
+          <th style="text-align:center">חשבוניות</th>
+          <th style="text-align:left">סכום</th>
+        </tr></thead>
+        <tbody>${payRows}</tbody>
+        <tfoot><tr>
+          <td colspan="2">סה"כ יוצא</td>
+          <td style="color:var(--primary)">₪${fmt(d.totalPayForecast)}</td>
+        </tr></tfoot>
+      </table>
+    </div>` : ''}
+
+    <div style="height:80px"></div>
+  `;
+
+  document.getElementById('rpt-wrap').innerHTML = html;
+  document.getElementById('back-bar').style.display = 'flex';
+}
+
+loadReport();
+</script>
+</body>
+</html>
