@@ -72,6 +72,9 @@ exports.handler = async (event) => {
   const secret = event.headers['x-cron-secret'] || '';
   if (secret !== process.env.CRON_SECRET) return { statusCode: 401 };
 
+  let testEmail = '';
+  try { testEmail = (JSON.parse(event.body || '{}').test_email || '').toLowerCase().trim(); } catch(_) {}
+
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_KEY;
   const RESEND_KEY   = process.env.RESEND_API_KEY;
@@ -99,8 +102,9 @@ exports.handler = async (event) => {
     }
     const marketPrices = Object.values(marketMap);
 
+    const emailFilter = testEmail ? `&email=eq.${encodeURIComponent(testEmail)}` : '';
     const usersRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/users?plan=eq.pro&is_active=eq.true&email=not.is.null&onboarding_done=eq.true&select=id,email,business_name,contact_name,category`,
+      `${SUPABASE_URL}/rest/v1/users?plan=eq.pro&is_active=eq.true&email=not.is.null&onboarding_done=eq.true${emailFilter}&select=id,email,business_name,contact_name,category`,
       { headers: H }
     );
     const users = await usersRes.json();

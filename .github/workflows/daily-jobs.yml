@@ -9,6 +9,10 @@ on:
         description: 'שלח דוח חודשי עכשיו (ללא בדיקת תאריך)'
         type: boolean
         default: false
+      test_email:
+        description: 'שלח רק לכתובת מייל זו (ריק = כולם)'
+        type: string
+        default: ''
 
 jobs:
 
@@ -39,4 +43,5 @@ jobs:
           curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -d '{"test_email":"${{ github.event.inputs.test_email }}"}' \
             "${{ secrets.NETLIFY_URL }}/.netlify/functions/monthly-summary"
