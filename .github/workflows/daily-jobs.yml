@@ -3,7 +3,12 @@ name: Daily Jobs
 on:
   schedule:
     - cron: '0 4 * * *'   # 06:00 Israel time (UTC+2)
-  workflow_dispatch:        # Allow manual run from GitHub UI
+  workflow_dispatch:
+    inputs:
+      force_monthly:
+        description: 'שלח דוח חודשי עכשיו (ללא בדיקת תאריך)'
+        type: boolean
+        default: false
 
 jobs:
 
@@ -29,7 +34,7 @@ jobs:
           last=$(cal $(date +%m) $(date +%Y) | awk 'NF{f=$NF} END{print f}')
           if [ "$today" = "$last" ]; then echo "is_last=true" >> $GITHUB_OUTPUT; fi
       - name: Trigger monthly summary
-        if: steps.check.outputs.is_last == 'true'
+        if: steps.check.outputs.is_last == 'true' || github.event.inputs.force_monthly == 'true'
         run: |
           curl -s -X POST \
             -H "Content-Type: application/json" \
