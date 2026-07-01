@@ -97,7 +97,10 @@ async function renderUsers(body) {
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.business_name || '—'}</div>
               <div style="font-size:11px;color:var(--on-surface-3)">${u.city || ''} · ${u.category || ''} · ${u.invoice_count} חשבוניות</div>
-              <div style="font-size:11px;color:var(--on-surface-3)">${u.personal_code || ''}</div>
+              <div style="font-size:11px;color:var(--on-surface-3)">${u.personal_code || ''} · ${u.email || ''}</div>
+              <div style="font-size:10px;margin-top:2px;color:${u.gmail_consent ? 'var(--success)' : 'var(--on-surface-3)'};font-weight:${u.gmail_consent ? '700' : '400'}">
+                ${u.gmail_consent ? '✓ אישר חיבור Gmail' : 'לא אישר Gmail'}
+              </div>
             </div>
             <div style="text-align:left;flex-shrink:0">
               <div style="font-size:11px;font-weight:700;color:${isPro ? 'var(--success)' : 'var(--on-surface-3)'}">${proLabel}</div>

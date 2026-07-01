@@ -67,7 +67,7 @@ exports.handler = async (event) => {
     // ── Users list ────────────────────────────────────────────
     if (action === 'users') {
       const users = await fetch(
-        `${SUPABASE_URL}/rest/v1/users?select=id,business_name,contact_name,phone,email,city,category,plan,pro_until,personal_code,onboarding_done,created_at,is_active&order=created_at.desc`,
+        `${SUPABASE_URL}/rest/v1/users?select=id,business_name,contact_name,phone,email,city,category,plan,pro_until,personal_code,onboarding_done,created_at,is_active,gmail_consent,gmail_consent_at&order=created_at.desc`,
         { headers: H }
       ).then(r => r.json());
 
