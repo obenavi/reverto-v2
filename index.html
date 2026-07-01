@@ -110,12 +110,16 @@
       <!-- Tabs -->
       <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--border)">
         <button id="tab-password" onclick="switchTab('password')"
-          style="flex:1;background:none;border:none;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--primary);border-bottom:2px solid var(--primary);margin-bottom:-2px">
+          style="flex:1;background:none;border:none;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--primary);border-bottom:2px solid var(--primary);margin-bottom:-2px">
           מייל + סיסמה
         </button>
         <button id="tab-code" onclick="switchTab('code')"
-          style="flex:1;background:none;border:none;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-3);border-bottom:2px solid transparent;margin-bottom:-2px">
+          style="flex:1;background:none;border:none;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-3);border-bottom:2px solid transparent;margin-bottom:-2px">
           קוד גישה
+        </button>
+        <button id="tab-promo" onclick="switchTab('promo')"
+          style="flex:1;background:none;border:none;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-3);border-bottom:2px solid transparent;margin-bottom:-2px">
+          קוד הטבה
         </button>
       </div>
 
@@ -149,6 +153,17 @@
         <div style="text-align:center;margin-top:12px">
           <span onclick="showForgotCode()" style="font-size:12px;color:var(--on-surface-3);cursor:pointer;text-decoration:underline">שכחתי את הקוד האישי שלי</span>
         </div>
+      </div>
+
+      <!-- Promo code tab -->
+      <div id="panel-promo" style="display:none">
+        <label class="input-label">קוד הטבה</label>
+        <input class="input" id="promo-code" type="text" placeholder="לדוגמה: REVERTO03"
+          style="text-transform:uppercase;letter-spacing:2px;font-weight:700"
+          oninput="this.value=this.value.toUpperCase().replace(/\s/g,'')"
+          onkeydown="if(event.key==='Enter')tryLoginPromo()">
+        <button class="btn-primary mt-12" onclick="tryLoginPromo()" id="promo-btn">המשך</button>
+        <div class="error-msg" id="error-promo-msg">קוד לא נמצא. בדוק שוב.</div>
       </div>
 
       <div class="divider">— אין לך חשבון עדיין? —</div>
@@ -231,12 +246,62 @@
     }
 
     function switchTab(tab) {
-      document.getElementById('panel-password').style.display = tab === 'password' ? 'block' : 'none';
-      document.getElementById('panel-code').style.display = tab === 'code' ? 'block' : 'none';
-      document.getElementById('tab-password').style.color = tab === 'password' ? 'var(--primary)' : 'var(--on-surface-3)';
-      document.getElementById('tab-password').style.borderBottomColor = tab === 'password' ? 'var(--primary)' : 'transparent';
-      document.getElementById('tab-code').style.color = tab === 'code' ? 'var(--primary)' : 'var(--on-surface-3)';
-      document.getElementById('tab-code').style.borderBottomColor = tab === 'code' ? 'var(--primary)' : 'transparent';
+      ['password','code','promo'].forEach(t => {
+        document.getElementById('panel-' + t).style.display = t === tab ? 'block' : 'none';
+        document.getElementById('tab-' + t).style.color = t === tab ? 'var(--primary)' : 'var(--on-surface-3)';
+        document.getElementById('tab-' + t).style.borderBottomColor = t === tab ? 'var(--primary)' : 'transparent';
+      });
+    }
+
+    async function tryLoginPromo() {
+      const raw = document.getElementById('promo-code').value.trim().toUpperCase();
+      if (!raw) return;
+      const btn = document.getElementById('promo-btn');
+      const err = document.getElementById('error-promo-msg');
+      btn.textContent = '...בודק';
+      btn.disabled = true;
+      err.style.display = 'none';
+      try {
+        const res = await fetch('/.netlify/functions/auth', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ code: raw })
+        });
+        if (!res.ok) {
+          err.style.display = 'block';
+          btn.textContent = 'המשך';
+          btn.disabled = false;
+          return;
+        }
+        const data = await res.json();
+        if (data.new_user_signup) {
+          // Generic promo code — go to full onboarding
+          sessionStorage.setItem('rv_signup', JSON.stringify({
+            new_user_signup: true,
+            duration_months: data.duration_months,
+            signup_code: data.signup_code
+          }));
+          localStorage.setItem('rv_signup', JSON.stringify({
+            new_user_signup: true,
+            duration_months: data.duration_months,
+            signup_code: data.signup_code
+          }));
+          window.location.href = '/onboarding.html';
+        } else {
+          // Existing user (PILOT or personal code entered here)
+          ['rv_token','rv_jwt','rv_user'].forEach(k => localStorage.removeItem(k));
+          const _s = (k,v) => { sessionStorage.setItem(k,v); localStorage.setItem(k,v); };
+          _s('rv_token', data.user.personal_code || raw);
+          _s('rv_jwt', data.jwt);
+          _s('rv_user', JSON.stringify(data.user));
+          window.location.href = '/app.html';
+        }
+      } catch(e) {
+        err.textContent = 'שגיאת חיבור. בדוק אינטרנט.';
+        err.style.display = 'block';
+        btn.textContent = 'המשך';
+        btn.disabled = false;
+      }
     }
 
     async function tryLoginPassword() {
