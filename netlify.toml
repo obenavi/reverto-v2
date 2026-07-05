@@ -3,6 +3,9 @@
   functions = "netlify/functions"
   command = "npm install --prefix netlify/functions/send-push"
 
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "GOOGLE_CLIENT_ID"
+
 [[headers]]
   for = "/*.html"
   [headers.values]
