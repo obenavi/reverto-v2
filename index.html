@@ -417,15 +417,23 @@
     })();
 
     // ── Google Sign-In ─────────────────────────────────────────
-    const GOOGLE_CLIENT_ID = '647296013201-tlq2hbc0ahs6eijd1ithbd1k4dlmmmc2.apps.googleusercontent.com';
+    let _googleClientIdPromise;
+    function getGoogleClientId() {
+      if (!_googleClientIdPromise) {
+        _googleClientIdPromise = fetch('/.netlify/functions/google-config')
+          .then(r => r.json()).then(d => d.clientId);
+      }
+      return _googleClientIdPromise;
+    }
 
-    function handleGoogleSignIn() {
+    async function handleGoogleSignIn() {
       if (typeof google === 'undefined') {
         alert('טוען... נסה שוב בעוד שנייה');
         return;
       }
+      const clientId = await getGoogleClientId();
       google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
+        client_id: clientId,
         callback: onGoogleCredential,
         ux_mode: 'popup'
       });
