@@ -529,19 +529,10 @@
           });
           const data = await res.json();
           if (res.status === 409) {
-            if (data.jwt && data.user) {
-              const _s = (k,v) => { sessionStorage.setItem(k,v); localStorage.setItem(k,v); };
-              _s('rv_jwt', data.jwt);
-              _s('rv_token', data.personal_code || '');
-              _s('rv_user', JSON.stringify(data.user));
-              sessionStorage.removeItem('rv_signup');
-              localStorage.removeItem('rv_signup');
-              alert(`ברוך השב! 👋\n\nהחשבון שלך כבר קיים.\nהקוד האישי שלך: ${data.personal_code}\nשמור אותו לכניסות עתידיות.`);
-              window.location.href = '/app.html';
-            } else {
-              alert('חשבון עם מייל זה כבר קיים.\nהקוד האישי שלך נשלח למייל.');
-              window.location.href = '/';
-            }
+            sessionStorage.removeItem('rv_signup');
+            localStorage.removeItem('rv_signup');
+            alert('חשבון עם מייל זה כבר קיים.\nהקוד האישי שלך נשלח למייל.');
+            window.location.href = '/';
             return;
           }
           if (!res.ok) throw new Error(data.error || 'שגיאה');

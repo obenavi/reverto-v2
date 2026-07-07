@@ -45,7 +45,8 @@ exports.handler = async (event) => {
       if (users.size < MIN_SAMPLE) return;
       prices.sort((a, b) => a - b);
       const avg = prices.reduce((s, p) => s + p, 0) / prices.length;
-      const median = prices[Math.floor(prices.length / 2)];
+      const mid = Math.floor(prices.length / 2);
+      const median = prices.length % 2 === 0 ? (prices[mid - 1] + prices[mid]) / 2 : prices[mid];
       rows.push({
         product_name: name,
         avg_price: Math.round(avg * 100) / 100,

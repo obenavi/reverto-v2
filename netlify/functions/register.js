@@ -95,20 +95,15 @@ exports.handler = async (event) => {
         if (ex.personal_code) {
           sendCodeEmail(profile.email, ex.business_name || profile.business_name, ex.personal_code).catch(() => {});
         }
-        // Return JWT so the client can auto-login the existing user
-        const autoJwt = signJWT(
-          { user_id: ex.id, plan: ex.plan || 'free' },
-          process.env.JWT_SECRET
-        );
+        // Do NOT return a JWT or personal_code here — anyone could submit a known/guessed
+        // email through this public form and get an authenticated session for that account.
+        // The code is sent only to the email address on file, not in this response.
         return {
           statusCode: 409,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             error: 'email_exists',
-            message: 'חשבון עם מייל זה כבר קיים.',
-            personal_code: ex.personal_code,
-            user: ex,
-            jwt: autoJwt
+            message: 'חשבון עם מייל זה כבר קיים. שלחנו את הקוד האישי שלך למייל.'
           })
         };
       }

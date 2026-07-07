@@ -113,7 +113,17 @@ async function scannerRun(file, attempt) {
       });
       if (claudeRes.ok) {
         const claudeData = await claudeRes.json();
-        if (claudeData.items?.length > 0) items = claudeData.items;
+        if (claudeData.items?.length > 0) {
+          // Claude's total_price already accounts for discount_pct, but unit_price is the
+          // pre-discount list price — recompute unit_price so it reflects the actual net
+          // price paid (used downstream for catalog/community pricing, not just this invoice).
+          items = claudeData.items.map(item => {
+            if (item.discount_pct > 0 && item.quantity > 0) {
+              return { ...item, unit_price: parseFloat((item.total_price / item.quantity).toFixed(2)) };
+            }
+            return item;
+          });
+        }
       }
     }
   } catch(e) {
@@ -179,8 +189,13 @@ function parseInvoiceFields(data) {
 
 function extractVendorFromContent(data) {
   const content = data?.analyzeResult?.content || '';
-  const lines = content.split('\n').filter(l => l.trim().length > 2);
-  return lines[0]?.trim() || '';
+  const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 2 && l.length < 60);
+  // Reject lines that are just a timestamp/date/number rather than an actual business name
+  const looksLikeName = l =>
+    /[א-ת]{2,}|[A-Za-z]{2,}/.test(l) &&
+    !/^\d{1,2}:\d{2}(:\d{2})?$/.test(l) &&
+    !/^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}$/.test(l);
+  return lines.find(looksLikeName) || '';
 }
 
 function parseLineItems(data) {
