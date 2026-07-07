@@ -716,28 +716,25 @@ async function openDeliveryClose(invoiceId) {
       </div>
     </div>
     <div style="padding:16px 20px;flex:1">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-        <button onclick="quickCloseDelivery('${invoiceId}','returned')" style="background:#FEF9C3;color:#B45309;border:1.5px solid #FCD34D;border-radius:var(--radius-md);padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🔄 הוחזר לספק</button>
-        <button onclick="quickCloseDelivery('${invoiceId}','not_arrived')" style="background:#FEE2E2;color:#B91C1C;border:1.5px solid #FCA5A5;border-radius:var(--radius-md);padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">❌ לא הגיע כלל</button>
-      </div>
+      <button onclick="quickCloseDelivery('${invoiceId}','not_arrived')" style="width:100%;background:#FEE2E2;color:#B91C1C;border:1.5px solid #FCA5A5;border-radius:var(--radius-md);padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:14px">❌ ההזמנה כולה לא הגיעה</button>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <div style="flex:1;height:1px;background:var(--border)"></div>
-        <div style="font-size:11px;color:var(--on-surface-3)">או סמן כמויות שהתקבלו בפועל</div>
+        <div style="font-size:11px;color:var(--on-surface-3)">סמן לכל מוצר כמה הוחזר לספק (אם בכלל)</div>
         <div style="flex:1;height:1px;background:var(--border)"></div>
       </div>
 
       <div style="display:grid;grid-template-columns:2fr 60px 60px 70px;gap:4px;padding:6px 10px;background:var(--surface-low);border-radius:var(--radius-md) var(--radius-md) 0 0;font-size:10px;font-weight:700;color:var(--on-surface-3)">
-        <div>מוצר</div><div style="text-align:center">הוזמן</div><div style="text-align:center">התקבל</div><div style="text-align:center">זוכה ₪</div>
+        <div>מוצר</div><div style="text-align:center">הוזמן</div><div style="text-align:center">הוחזר</div><div style="text-align:center">זוכה ₪</div>
       </div>
       <div class="card" style="border-radius:0 0 var(--radius-md) var(--radius-md);margin-bottom:16px">
         ${items.length ? items.map((item, i) => {
           const adj = adjMap[item.product_name] || {};
-          const received = adj.received_qty !== undefined ? adj.received_qty : (item.quantity || 1);
+          const returned = adj.returned_qty !== undefined ? adj.returned_qty : 0;
           const credit = adj.credit_amount || 0;
           return `<div style="display:grid;grid-template-columns:2fr 60px 60px 70px;gap:4px;padding:8px 10px;border-bottom:1px solid var(--border);align-items:center">
             <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.product_name}</div>
             <div style="text-align:center;font-size:12px;color:var(--on-surface-3)">${item.quantity||1}</div>
-            <input type="number" step="0.1" min="0" id="recv-${i}" value="${received}"
+            <input type="number" step="0.1" min="0" max="${item.quantity||1}" id="recv-${i}" value="${returned}"
               style="border:1px solid var(--border);border-radius:6px;padding:4px;font-size:12px;text-align:center;width:100%"
               oninput="calcDeliveryCredit(${i},${item.quantity||1},${parseFloat(item.unit_price||0)})">
             <div id="credit-${i}" style="text-align:center;font-size:11px;font-weight:700;color:${credit > 0 ? 'var(--success)' : 'var(--on-surface-3)'}">
@@ -765,9 +762,8 @@ async function openDeliveryClose(invoiceId) {
 }
 
 function calcDeliveryCredit(i, orderedQty, unitPrice) {
-  const received = parseFloat(document.getElementById('recv-' + i)?.value) || 0;
-  const shortage = Math.max(0, orderedQty - received);
-  const credit = shortage * unitPrice;
+  const returned = Math.min(orderedQty, Math.max(0, parseFloat(document.getElementById('recv-' + i)?.value) || 0));
+  const credit = returned * unitPrice;
   const el = document.getElementById('credit-' + i);
   if (el) {
     el.textContent = credit > 0 ? '₪' + credit.toFixed(2) : '—';
@@ -779,9 +775,9 @@ function calcDeliveryCredit(i, orderedQty, unitPrice) {
 function recalcAllDeliveryCredits(items) {
   let total = 0;
   items.forEach((item, i) => {
-    const received = parseFloat(document.getElementById('recv-' + i)?.value) || 0;
-    const shortage = Math.max(0, (item.quantity || 1) - received);
-    const credit = shortage * parseFloat(item.unit_price || 0);
+    const orderedQty = item.quantity || 1;
+    const returned = Math.min(orderedQty, Math.max(0, parseFloat(document.getElementById('recv-' + i)?.value) || 0));
+    const credit = returned * parseFloat(item.unit_price || 0);
     total += credit;
   });
   const el = document.getElementById('delivery-total');
@@ -805,14 +801,13 @@ async function saveDeliveryClose(invoiceId) {
 
   const notes = document.getElementById('delivery-notes')?.value || '';
   const adjustments = items.map((item, i) => {
-    const received = parseFloat(document.getElementById('recv-' + i)?.value) || item.quantity || 1;
-    const shortage = Math.max(0, (item.quantity || 1) - received);
-    const credit = shortage * parseFloat(item.unit_price || 0);
+    const orderedQty = item.quantity || 1;
+    const returned = Math.min(orderedQty, Math.max(0, parseFloat(document.getElementById('recv-' + i)?.value) || 0));
+    const credit = returned * parseFloat(item.unit_price || 0);
     return {
       product_name: item.product_name,
-      ordered_qty: item.quantity || 1,
-      received_qty: received,
-      shortage_qty: shortage,
+      ordered_qty: orderedQty,
+      returned_qty: returned,
       credit_amount: parseFloat(credit.toFixed(2)),
       unit_price: item.unit_price || 0
     };
