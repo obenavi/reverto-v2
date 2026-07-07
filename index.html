@@ -212,7 +212,7 @@
     function goToApp() {
       const ret = sessionStorage.getItem('rv_return_url');
       if (ret) { sessionStorage.removeItem('rv_return_url'); window.location.href = ret; return; }
-      goToApp();
+      window.location.href = '/app.html';
     }
 
     async function tryLogin() {
