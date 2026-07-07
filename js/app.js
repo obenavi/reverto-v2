@@ -502,20 +502,21 @@ function setActiveLocation(loc) {
 function updateTopBarLocation() {
   const loc = getActiveLocation();
   const el = document.getElementById('top-location');
+  const wrap = document.getElementById('top-name-wrap');
   if (!el) return;
   const multi = _cachedLocations && _cachedLocations.length > 1;
   if (multi) {
     const label = loc ? loc.name : 'כל הסניפים';
     el.innerHTML = `📍 ${label} <span style="font-size:9px;opacity:0.7">▼</span>`;
     el.style.display = 'block';
-    el.style.cursor = 'pointer';
-    el.onclick = showBranchSwitcher;
+    if (wrap) wrap.onclick = showBranchSwitcher;
   } else if (loc) {
     el.textContent = '📍 ' + loc.name;
     el.style.display = 'block';
-    el.onclick = () => navTo('profile');
+    if (wrap) wrap.onclick = () => navTo('profile');
   } else {
     el.style.display = 'none';
+    if (wrap) wrap.onclick = () => navTo('profile');
   }
 }
 
