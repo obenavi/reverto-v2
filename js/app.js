@@ -533,26 +533,41 @@ function showBranchSwitcher() {
 
   const modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
-  modal.innerHTML = `
-    <div style="background:white;border-radius:24px 24px 0 0;padding:20px 20px 48px;width:100%;max-width:480px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div style="font-size:16px;font-weight:800">בחר סניף</div>
-        <button onclick="this.closest('[data-bs]').remove()" style="background:none;border:none;font-size:22px;color:#bbb;cursor:pointer;line-height:1">×</button>
-      </div>
-      ${all.map(l => {
-        const active = l.id ? activeLoc?.id === l.id : !activeLoc;
-        return `<div onclick="setActiveLocation(${l.id ? JSON.stringify({id:l.id,name:l.name}) : 'null'});this.closest('[data-bs]').remove()"
-          style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:var(--radius-md);margin-bottom:6px;cursor:pointer;background:${active ? 'var(--surface-low)' : 'transparent'};border:1.5px solid ${active ? 'var(--primary)' : 'var(--border)'}">
-          <div style="flex:1">
-            <div style="font-size:14px;font-weight:${active?'800':'700'};color:${active?'var(--primary)':'var(--on-surface)'}">${escHtml(l.name)}</div>
-            ${l.city ? `<div style="font-size:11px;color:var(--on-surface-3)">${escHtml(l.city)}</div>` : ''}
-          </div>
-          ${active ? '<div style="font-size:16px">✓</div>' : ''}
-        </div>`;
-      }).join('')}
-    </div>`;
-
   modal.setAttribute('data-bs', '');
+
+  const sheet = document.createElement('div');
+  sheet.style.cssText = 'background:white;border-radius:24px 24px 0 0;padding:20px 20px 48px;width:100%;max-width:480px';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px';
+  header.innerHTML = `<div style="font-size:16px;font-weight:800">בחר סניף</div>`;
+  const closeBtn = document.createElement('button');
+  closeBtn.style.cssText = 'background:none;border:none;font-size:22px;color:#bbb;cursor:pointer;line-height:1';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = () => modal.remove();
+  header.appendChild(closeBtn);
+  sheet.appendChild(header);
+
+  // Built as real DOM elements with real event listeners (not string-interpolated
+  // onclick attributes) — a location's id/name previously went through
+  // JSON.stringify() into an onclick="..." attribute delimited by the same double
+  // quotes JSON uses, which silently broke the click handler for every real branch.
+  all.forEach(l => {
+    const active = l.id ? activeLoc?.id === l.id : !activeLoc;
+    const row = document.createElement('div');
+    row.style.cssText = `display:flex;align-items:center;gap:10px;padding:12px;border-radius:var(--radius-md);margin-bottom:6px;cursor:pointer;background:${active ? 'var(--surface-low)' : 'transparent'};border:1.5px solid ${active ? 'var(--primary)' : 'var(--border)'}`;
+    row.innerHTML = `
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:${active?'800':'700'};color:${active?'var(--primary)':'var(--on-surface)'}">${escHtml(l.name)}</div>
+        ${l.city ? `<div style="font-size:11px;color:var(--on-surface-3)">${escHtml(l.city)}</div>` : ''}
+      </div>
+      ${active ? '<div style="font-size:16px">✓</div>' : ''}
+    `;
+    row.onclick = () => { setActiveLocation(l.id ? { id: l.id, name: l.name } : null); modal.remove(); };
+    sheet.appendChild(row);
+  });
+
+  modal.appendChild(sheet);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
 }
@@ -569,21 +584,32 @@ async function loadLocations() {
     return;
   }
   el.innerHTML = `
-    <div onclick="setActiveLocation(null)" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;margin-bottom:4px;background:${!activeLoc ? 'var(--surface-low)' : 'transparent'};border:1.5px solid ${!activeLoc ? 'var(--primary)' : 'var(--border)'}">
+    <div id="loc-row-all" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;margin-bottom:4px;background:${!activeLoc ? 'var(--surface-low)' : 'transparent'};border:1.5px solid ${!activeLoc ? 'var(--primary)' : 'var(--border)'}">
       <div style="flex:1;font-size:13px;font-weight:700">כל הסניפים</div>
       ${!activeLoc ? '<div style="font-size:11px;color:var(--primary);font-weight:700">פעיל</div>' : ''}
     </div>
     ${locs.map(l => `
-      <div onclick="setActiveLocation({id:'${l.id}',name:'${escHtml(l.name)}'})" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;margin-bottom:4px;background:${activeLoc?.id===l.id?'var(--surface-low)':'transparent'};border:1.5px solid ${activeLoc?.id===l.id?'var(--primary)':'var(--border)'}">
+      <div class="loc-row" data-loc-id="${l.id}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;margin-bottom:4px;background:${activeLoc?.id===l.id?'var(--surface-low)':'transparent'};border:1.5px solid ${activeLoc?.id===l.id?'var(--primary)':'var(--border)'}">
         <div style="flex:1">
           <div style="font-size:13px;font-weight:700">${escHtml(l.name)}</div>
           ${l.city ? `<div style="font-size:11px;color:var(--on-surface-3)">${escHtml(l.city)}</div>` : ''}
         </div>
         ${activeLoc?.id===l.id ? '<div style="font-size:11px;color:var(--primary);font-weight:700">פעיל</div>' : ''}
-        <button onclick="event.stopPropagation();deleteLocation('${l.id}')" style="background:none;border:none;color:var(--on-surface-3);cursor:pointer;font-size:16px;padding:0 4px">×</button>
+        <button class="loc-delete-btn" data-loc-id="${l.id}" style="background:none;border:none;color:var(--on-surface-3);cursor:pointer;font-size:16px;padding:0 4px">×</button>
       </div>
     `).join('')}
   `;
+
+  // Real event listeners (not string-interpolated onclick attributes) — avoids
+  // breaking on names/ids with quotes, and matches the fix in showBranchSwitcher().
+  document.getElementById('loc-row-all')?.addEventListener('click', () => setActiveLocation(null));
+  el.querySelectorAll('.loc-row').forEach(row => {
+    const l = locs.find(loc => loc.id === row.dataset.locId);
+    if (l) row.addEventListener('click', () => setActiveLocation({ id: l.id, name: l.name }));
+  });
+  el.querySelectorAll('.loc-delete-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); deleteLocation(btn.dataset.locId); });
+  });
 }
 
 function showAddLocation() {
