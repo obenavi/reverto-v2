@@ -101,6 +101,7 @@ function renderStats() {
 
   const fcEl = document.getElementById('dash-foodcost');
   const fcSubEl = document.getElementById('dash-foodcost-sub');
+  const fcMiniEl = document.getElementById('dash-foodcost-mini');
   if (monthlyRevenue > 0 && monthlyPurchases > 0) {
     const fc = (monthlyPurchases / monthlyRevenue * 100).toFixed(1);
     fcEl.textContent = fc + '%';
@@ -115,6 +116,7 @@ function renderStats() {
     fcEl.style.color = 'var(--on-surface-3)';
     fcSubEl.textContent = 'הכנס מחזור יומי';
   }
+  if (fcMiniEl) fcMiniEl.textContent = fcEl.textContent;
 }
 
 function renderPriceAlerts() {
@@ -143,22 +145,27 @@ function renderPriceAlerts() {
     }
   });
 
-  document.getElementById('dash-alerts').textContent = alerts.length;
+  const dashAlertsEl = document.getElementById('dash-alerts');
+  if (dashAlertsEl) dashAlertsEl.textContent = alerts.length;
 
   const el = document.getElementById('dash-alerts-list');
   if (!alerts.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-state-title">אין התראות</div><div class="empty-state-sub">כל המחירים יציבים</div></div>`;
     return;
   }
-  el.innerHTML = alerts.slice(0,5).map(a => `
-    <div class="alert-row">
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:700">${a.name}</div>
-        <div style="font-size:11px;color:var(--on-surface-3)">היה ₪${a.prev.toFixed(2)} → עכשיו ₪${a.latest.toFixed(2)}</div>
+  el.innerHTML = alerts.slice(0,5).map(a => {
+    const pct = parseFloat(a.pct);
+    const barClass = pct >= 15 ? 'bar-high' : pct >= 8 ? 'bar-med' : 'bar-low';
+    return `
+    <div class="alert-row-v2">
+      <div class="alert-bar ${barClass}"></div>
+      <div class="alert-body">
+        <div class="alert-name">${a.name}</div>
+        <div class="alert-detail">היה ₪${a.prev.toFixed(2)} → עכשיו ₪${a.latest.toFixed(2)}</div>
       </div>
-      <div class="badge badge-error">+${a.pct}%</div>
-    </div>
-  `).join('');
+      <div class="alert-change chg-up">↑ ${a.pct}%</div>
+    </div>`;
+  }).join('');
 }
 
 async function renderBenchmark() {
@@ -187,16 +194,31 @@ function renderRecentInvoices(invoices) {
     </div>`;
     return;
   }
-  el.innerHTML = invoices.map(inv => `
-    <div class="list-row">
-      <div class="list-avatar">${(inv.supplier_name||'?')[0]}</div>
-      <div style="flex:1">
-        <div style="font-size:14px;font-weight:700">${inv.supplier_name || 'ספק לא ידוע'}</div>
-        <div style="font-size:12px;color:var(--on-surface-3)">${formatDate(inv.date)}</div>
+  el.innerHTML = invoices.map(inv => {
+    const amount = '₪' + parseFloat(inv.total_amount || inv.total || 0).toLocaleString('he-IL', {maximumFractionDigits: 0});
+    let actions;
+    if (inv.delivery_status === 'pending') {
+      actions = `<div class="inv-actions">
+        <button class="btn-sm btn-approve" onclick="event.stopPropagation();quickCloseDelivery('${inv.id}','closed')">אשר</button>
+        <button class="btn-sm btn-edit" onclick="event.stopPropagation();openDeliveryClose('${inv.id}')">ערוך</button>
+      </div>`;
+    } else if (inv.delivery_status === 'closed') {
+      actions = `<div class="inv-actions"><div class="status-paid">אושר</div></div>`;
+    } else {
+      actions = `<div class="inv-actions"><div class="status-pending">פתוח</div></div>`;
+    }
+    return `
+    <div class="inv-row">
+      <div class="inv-info">
+        <div class="inv-name">${inv.supplier_name || 'ספק לא ידוע'}</div>
+        <div class="inv-meta">${formatDate(inv.date)} · ${amount}</div>
       </div>
-      <div style="font-size:15px;font-weight:800;color:var(--primary)">₪${parseFloat(inv.total_amount||inv.total||0).toLocaleString('he-IL',{maximumFractionDigits:0})}</div>
-    </div>
-  `).join('');
+      <div class="inv-right">
+        <div class="inv-amount">${amount}</div>
+        ${actions}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function setPeriod(period, btn) {
@@ -813,10 +835,11 @@ async function saveDeliveryClose(invoiceId) {
   modal?.remove();
   showToast(totalCredit > 0 ? `קבלה נסגרה · זיכוי צפוי: ₪${totalCredit.toFixed(2)}` : 'קבלה נסגרה ✓');
   renderPendingDeliveries();
+  renderRecentInvoices(dashData.invoices.slice(0, 5));
 }
 
 async function quickCloseDelivery(invoiceId, status) {
-  const labels = { returned: 'הוחזר לספק', not_arrived: 'לא הגיע כלל' };
+  const labels = { returned: 'הוחזר לספק', not_arrived: 'לא הגיע כלל', closed: 'אושר' };
   await DB.update('invoices', `?id=eq.${invoiceId}`, {
     delivery_status: status,
     delivery_closed_at: new Date().toISOString()
@@ -826,6 +849,7 @@ async function quickCloseDelivery(invoiceId, status) {
   document.querySelector('[data-delivery-modal]')?.remove();
   showToast(`${labels[status]} ✓`);
   renderPendingDeliveries();
+  renderRecentInvoices(dashData.invoices.slice(0, 5));
 }
 
 // ── Month-End Summary ─────────────────────────────────────────

@@ -414,4 +414,104 @@ body {
 .text-error { color: var(--error); }
 .fw-800 { font-weight: 800; }
 .flex { display: flex; }
+
+/* ── DASHBOARD HERO ── */
+.dash-hero {
+  background: linear-gradient(180deg,
+    var(--primary-dark) 0%, var(--primary) 30%, var(--primary-light) 58%,
+    #D946B0 74%, #E879C8 86%, #F3D6EE 94%, var(--surface) 100%);
+  margin: -16px -16px 12px;
+  padding: 20px 16px 18px;
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+.dash-hero .fc-label { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.6); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 2px; }
+.dash-hero .fc-value { font-size: 44px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -1.5px; }
+.dash-hero .fc-badge {
+  margin-top: 8px; display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,0.14); border-radius: 20px; padding: 4px 11px;
+  font-size: 12px; font-weight: 700; color: #fff;
+}
+.kpi-mini-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; margin-top: 14px; }
+.kpi-mini-card {
+  background: rgba(0,0,0,0.22); border-radius: 12px; padding: 10px 8px 9px;
+  text-align: center; border: 1px solid rgba(255,255,255,0.14); cursor: pointer;
+  transition: transform 0.15s;
+}
+.kpi-mini-card:active { transform: scale(0.96); }
+.kpi-mini-label { font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.55); letter-spacing: 0.5px; margin-bottom: 4px; }
+.kpi-mini-value { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -0.5px; line-height: 1; }
+.kpi-mini-sub { font-size: 9.5px; font-weight: 700; margin-top: 4px; }
+
+/* ── PERIOD TABS (underline style, reuses .period-btn hooked up in dashboard.js) ── */
+.period-tabs-wrap { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.period-tabs-wrap .period-btn {
+  flex: 1; text-align: center; padding: 9px 4px; border-radius: 0;
+  border-bottom: 2.5px solid transparent; background: transparent; color: var(--on-surface-3);
+}
+.period-tabs-wrap .period-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: transparent; }
+
+/* ── ALERT ROW BAR (severity indicator) ── */
+.alert-row-v2 { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--border); }
+.alert-row-v2:last-child { border-bottom: none; }
+.alert-bar { width: 3px; align-self: stretch; border-radius: 99px; flex-shrink: 0; }
+.alert-bar.bar-high { background: var(--error); }
+.alert-bar.bar-med { background: var(--warning); }
+.alert-bar.bar-low { background: var(--success); }
+.alert-row-v2 .alert-body { flex: 1; min-width: 0; }
+.alert-row-v2 .alert-name { font-size: 13px; font-weight: 600; color: var(--on-surface); }
+.alert-row-v2 .alert-detail { font-size: 11px; color: var(--on-surface-3); margin-top: 1px; }
+.alert-row-v2 .alert-change { font-size: 12px; font-weight: 800; flex-shrink: 0; }
+.alert-row-v2 .chg-up { color: var(--error); }
+.alert-row-v2 .chg-down { color: var(--success); }
+
+/* ── INVOICE ROW (amounts always left-aligned regardless of status/buttons below) ── */
+.inv-row { display: flex; align-items: center; padding: 11px 16px; gap: 12px; border-bottom: 1px solid var(--border); }
+.inv-row:last-child { border-bottom: none; }
+.inv-info { flex: 1; min-width: 0; }
+.inv-name { font-size: 13px; font-weight: 700; color: var(--on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-meta { font-size: 11px; color: var(--on-surface-3); margin-top: 1px; }
+.inv-right { text-align: left; flex-shrink: 0; }
+.inv-amount { font-size: 14px; font-weight: 800; color: var(--on-surface); }
+.inv-actions { display: flex; gap: 6px; margin-top: 4px; justify-content: flex-end; }
+.btn-sm {
+  font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 8px;
+  font-family: inherit; cursor: pointer; border: none;
+}
+.btn-approve { background: var(--success-bg); color: var(--success); }
+.btn-edit { background: rgba(139,33,232,0.08); color: var(--primary); }
+.status-paid, .status-pending {
+  font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 8px; display: inline-block;
+}
+.status-paid { background: var(--success-bg); color: var(--success); }
+.status-pending { background: var(--warning-bg); color: var(--warning); }
+
+/* ── PAYMENT ROW ── */
+.payment-row { display: flex; align-items: center; padding: 11px 16px; border-bottom: 1px solid var(--border); }
+.payment-row:last-child { border-bottom: none; }
+.pay-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-left: 10px; }
+.pay-body { flex: 1; min-width: 0; }
+.pay-name { font-size: 13px; font-weight: 600; color: var(--on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pay-date { font-size: 11px; color: var(--on-surface-3); margin-top: 1px; }
+.pay-right { text-align: left; flex-shrink: 0; }
+.pay-amount { font-size: 14px; font-weight: 800; color: var(--on-surface); }
+.pay-status { font-size: 10px; font-weight: 700; margin-top: 2px; }
+.pay-due { color: var(--warning); }
+.pay-ok { color: var(--success); }
+.pay-late { color: var(--error); }
+
+/* ── SCAN FAB — animated gradient glow ── */
+#nav-scanner {
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary), var(--primary-light), var(--accent), var(--primary-light), var(--primary), var(--primary-dark));
+  background-size: 300% 300%;
+  animation: fabGlow 2.5s ease-in-out infinite, fabColor 4s ease infinite;
+}
+@keyframes fabGlow {
+  0%,100% { box-shadow: 0 8px 24px rgba(139,33,232,0.45), 0 0 0 4px rgba(139,33,232,0.12), 0 0 0 8px rgba(139,33,232,0.05); }
+  50% { box-shadow: 0 8px 32px rgba(236,72,153,0.6), 0 0 0 6px rgba(236,72,153,0.18), 0 0 0 12px rgba(236,72,153,0.07); }
+}
+@keyframes fabColor {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
 .flex-between { display: flex; justify-content: space-between; align-items: center; }

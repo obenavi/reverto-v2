@@ -37,59 +37,60 @@
 
   <!-- DASHBOARD -->
   <div class="page active" id="page-dashboard">
-    <div class="page-content">
+    <div class="page-content" style="padding-top:0">
 
-      <!-- Greeting -->
-      <div style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:22px;font-weight:800;letter-spacing:-0.5px" id="dash-greeting">שלום!</div><div id="plan-badge"></div></div>
-        <div style="font-size:13px;color:var(--on-surface-3)" id="dash-date"></div>
-      </div>
-
-      <!-- Combined Business Overview Card -->
-      <div class="card card-pad mb-12">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800">סיכום עסקי</div>
-          <button onclick="showAIInsights('overview')" style="background:linear-gradient(135deg,#6B35B8,#C084FC);border:none;border-radius:20px;padding:7px 14px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;font-size:12px;font-weight:700;color:white">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-            ניתוח AI
-          </button>
+      <!-- Hero: greeting + Food Cost + KPI row -->
+      <div class="dash-hero">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:20px;font-weight:800;letter-spacing:-0.5px;color:#fff" id="dash-greeting">שלום!</div>
+          <div id="plan-badge"></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div class="card-tap" onclick="openInvoiceList()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
-            <div class="stat-label">רכש החודש</div>
-            <div class="stat-value" id="dash-monthly" style="font-size:20px">₪0</div>
-            <div class="stat-sub" id="dash-monthly-sub">0 חשבוניות</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.55)" id="dash-date"></div>
+
+        <div style="margin-top:14px" class="card-tap" onclick="showAIInsights('foodcost')">
+          <div class="fc-label">Food Cost החודש</div>
+          <div class="fc-value" id="dash-foodcost">--%</div>
+          <div class="fc-badge" id="dash-foodcost-sub">הכנס מחזור</div>
+        </div>
+
+        <div class="kpi-mini-grid">
+          <div class="kpi-mini-card" onclick="showAIInsights('foodcost')">
+            <div class="kpi-mini-label">FOOD COST</div>
+            <div class="kpi-mini-value" id="dash-foodcost-mini">--%</div>
           </div>
-          <div id="dash-revenue-card" class="card-tap" onclick="openRevenueHistory()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
-            <div class="stat-label">מחזור</div>
-            <div class="stat-value" id="dash-today-revenue" style="font-size:20px">—</div>
-            <div class="stat-sub" id="dash-today-revenue-sub">לחץ לפירוט</div>
+          <div class="kpi-mini-card" id="dash-revenue-card" onclick="openRevenueHistory()">
+            <div class="kpi-mini-label">מחזור</div>
+            <div class="kpi-mini-value" id="dash-today-revenue">—</div>
           </div>
-          <div class="card-tap" onclick="showAIInsights('foodcost')" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
-            <div class="stat-label">Food Cost</div>
-            <div class="stat-value" id="dash-foodcost" style="font-size:20px">--%</div>
-            <div class="stat-sub" id="dash-foodcost-sub">הכנס מחזור</div>
-          </div>
-          <div id="dash-payments-card" class="card-tap" onclick="showPaymentForecast()" style="background:var(--surface-low);border-radius:var(--radius-md);padding:12px;cursor:pointer">
-            <div class="stat-label">תשלומים</div>
-            <div class="stat-value" style="font-size:20px">120 יום</div>
-            <div class="stat-sub">לחץ לצפייה</div>
+          <div class="kpi-mini-card" onclick="openInvoiceList()">
+            <div class="kpi-mini-label">רכש</div>
+            <div class="kpi-mini-value" id="dash-monthly">₪0</div>
+            <div class="kpi-mini-sub" id="dash-monthly-sub" style="color:rgba(255,255,255,0.55)">0 חשבוניות</div>
           </div>
         </div>
       </div>
 
+      <!-- AI Briefing -->
+      <button type="button" onclick="showAIInsights('overview')" class="card-tap" style="width:100%;background:var(--surface-card);border:1px solid var(--border);border-radius:14px;padding:11px 14px;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--on-surface);cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="display:flex;align-items:center;gap:7px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          <span>ניתוח AI — תובנות על העסק שלך</span>
+        </span>
+        <span style="font-size:11px;color:var(--on-surface-3)">פרטים ›</span>
+      </button>
 
       <!-- Chart -->
       <div class="card mb-12">
+        <div class="period-tabs-wrap">
+          <button class="period-btn active" onclick="setPeriod('week',this)">שבוע</button>
+          <button class="period-btn" onclick="setPeriod('month',this)">חודש</button>
+          <button class="period-btn" onclick="setPeriod('quarter',this)">רבעון</button>
+          <button class="period-btn" onclick="setPeriod('year',this)">שנה</button>
+        </div>
         <div class="card-pad">
           <div class="flex-between mb-8">
-            <div class="section-title">רכש / מחזורים <span id="chart-range-label" style="font-size:10px;font-weight:500;color:var(--on-surface-3)"></span><button onclick="showAIInsights('גרף משולב')" style="background:linear-gradient(135deg,#6B35B8,#C084FC);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-right:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></button></div>
-            <div style="display:flex;gap:4px">
-              <button class="period-btn active" onclick="setPeriod('week',this)">שבוע</button>
-              <button class="period-btn" onclick="setPeriod('month',this)">חודש</button>
-              <button class="period-btn" onclick="setPeriod('quarter',this)">רבעון</button>
-              <button class="period-btn" onclick="setPeriod('year',this)">שנה</button>
-            </div>
+            <div class="section-title">רכש / מחזורים <span id="chart-range-label" style="font-size:10px;font-weight:500;color:var(--on-surface-3)"></span></div>
+            <button onclick="showAIInsights('גרף משולב')" style="background:linear-gradient(135deg,#6B35B8,#C084FC);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></button>
           </div>
           <div class="chart-wrap" id="dash-chart">
             <canvas id="chart-canvas" style="width:100%;height:130px"></canvas>
@@ -123,6 +124,15 @@
         </div>
       </div>
 
+      <!-- Payments (tap to open forecast) -->
+      <div class="card card-pad mb-12" id="dash-payments-card" onclick="showPaymentForecast()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:13px;font-weight:700">תשלומים לספקים</div>
+          <div style="font-size:11px;color:var(--on-surface-3)">לחץ לצפייה בתחזית</div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--on-surface-3)" stroke-width="2" stroke-linecap="round"><path d="M9 18l-6-6 6-6"/></svg>
+      </div>
+
       <!-- Pending Deliveries -->
       <div id="dash-pending-deliveries" class="card card-pad mb-12" style="display:none;border:1.5px solid #D97706;background:rgba(217,119,6,0.04)"></div>
 
@@ -132,7 +142,7 @@
       <!-- Price Alerts -->
       <div class="section-header">
         <div class="section-title">התראות מחיר</div>
-        <button class="section-link" onclick="navTo('alerts')">הכל</button>
+        <button class="section-link" onclick="showAIInsights('alerts')">הכל</button>
       </div>
       <div class="card mb-12" id="dash-alerts-list">
         <div class="empty-state">
@@ -157,7 +167,7 @@
       <!-- Recent Invoices -->
       <div class="section-header">
         <div class="section-title">חשבוניות אחרונות</div>
-        <button class="section-link" onclick="navTo('invoices')">הכל</button>
+        <button class="section-link" onclick="openInvoiceList()">הכל</button>
       </div>
       <div class="card" id="dash-recent-invoices">
         <div class="empty-state">
@@ -452,7 +462,15 @@
       <span>שוק</span>
     </button>
     <button class="nav-item" id="nav-product-tree" onclick="navTo('product-tree')">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <rect x="1" y="1" width="8" height="5" rx="1.5"/>
+        <rect x="13" y="1" width="8" height="5" rx="1.5"/>
+        <line x1="5" y1="6" x2="5" y2="9"/>
+        <line x1="17" y1="6" x2="17" y2="9"/>
+        <line x1="5" y1="9" x2="17" y2="9"/>
+        <line x1="11" y1="9" x2="11" y2="12"/>
+        <rect x="6" y="12" width="10" height="5" rx="1.5"/>
+      </svg>
       <span>עץ מוצר</span>
     </button>
   </nav>
