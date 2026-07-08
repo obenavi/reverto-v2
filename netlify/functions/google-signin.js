@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { sendWelcomeEmail } = require('./_shared/welcome-email');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -111,6 +112,9 @@ exports.handler = async (event) => {
     headers: { ...H, 'Prefer': 'return=minimal' },
     body: JSON.stringify({ code: personal_code, type: 'personal', duration_months: 0, user_id: user.id, is_active: true })
   });
+
+  // Send welcome email with personal code (fire and forget — don't block signup)
+  sendWelcomeEmail(email, name, personal_code).catch(() => {});
 
   const jwt = signJWT({ user_id: user.id, plan: 'free' });
   return {

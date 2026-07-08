@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { sendWelcomeEmail } = require('./_shared/welcome-email');
 
 function hashPassword(password) {
   return new Promise((resolve, reject) => {
@@ -173,8 +174,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({ code: personal_code, type: 'personal', duration_months: 0, user_id: user.id, is_active: true })
     });
 
-    // Send personal code to email (fire and forget — don't block registration)
-    sendCodeEmail(profile.email, profile.business_name, personal_code).catch(() => {});
+    // Send welcome email with personal code (fire and forget — don't block registration)
+    sendWelcomeEmail(profile.email, profile.business_name, personal_code).catch(() => {});
 
     const jwt = signJWT(
       { user_id: user.id, plan: 'pro', exp: Math.floor(Date.now() / 1000) + 86400 * 90 },
