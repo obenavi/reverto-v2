@@ -111,11 +111,25 @@ exports.handler = async (event) => {
     }
 
     // ── Send a preview of the welcome email (does not touch any user row) ──
+    // Always treated as a test send: bcc's revertoo.ino@gmail.com and tags the
+    // subject with a test marker (see project memory: test-email-review rule).
     if (action === 'send_test_welcome_email') {
       const { to_email, name } = parsed;
       if (!to_email) return { statusCode: 400, body: JSON.stringify({ error: 'Missing to_email' }) };
-      const sent = await sendWelcomeEmail(to_email, name || 'בדיקה', 'RV-XXXXXX');
-      return { statusCode: sent ? 200 : 502, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sent }) };
+
+      // Use the recipient's real personal code if they already have an account,
+      // so a preview to an existing user shows their actual code, not a placeholder.
+      let personalCode = 'RV-XXXXXX';
+      const lookup = await fetch(
+        `${SUPABASE_URL}/rest/v1/users?email=ilike.${encodeURIComponent(to_email)}&select=personal_code,business_name,contact_name&limit=1`,
+        { headers: H }
+      );
+      const found = lookup.ok ? await lookup.json() : [];
+      const displayName = name || found[0]?.contact_name || found[0]?.business_name || 'בדיקה';
+      if (found[0]?.personal_code) personalCode = found[0].personal_code;
+
+      const sent = await sendWelcomeEmail(to_email, displayName, personalCode, { isTest: true });
+      return { statusCode: sent ? 200 : 502, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sent, personal_code: personalCode }) };
     }
 
     // ── Toggle code active/inactive ───────────────────────────
