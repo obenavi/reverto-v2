@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { sendWelcomeEmail } = require('./_shared/welcome-email');
 
 function verifyJWT(token, secret) {
   const parts = (token || '').split('.');
@@ -107,6 +108,14 @@ exports.handler = async (event) => {
       });
       const result = await r.json();
       return { statusCode: r.ok ? 200 : 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result) };
+    }
+
+    // ── Send a preview of the welcome email (does not touch any user row) ──
+    if (action === 'send_test_welcome_email') {
+      const { to_email, name } = parsed;
+      if (!to_email) return { statusCode: 400, body: JSON.stringify({ error: 'Missing to_email' }) };
+      const sent = await sendWelcomeEmail(to_email, name || 'בדיקה', 'RV-XXXXXX');
+      return { statusCode: sent ? 200 : 502, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sent }) };
     }
 
     // ── Toggle code active/inactive ───────────────────────────
