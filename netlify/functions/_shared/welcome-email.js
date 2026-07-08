@@ -90,7 +90,7 @@ async function sendWelcomeEmail(toEmail, name, personalCode, opts = {}) {
         to: [toEmail],
         ...(bcc ? { bcc } : {}),
         reply_to: 'revertoo.ino@gmail.com',
-        subject: subjectPrefix + 'כך תדע אם אתה משלם יותר מדי — לפי כל התעשייה',
+        subject: subjectPrefix + 'Reverto — מהמחירון שלך לבנצ\'מארק המחירים של התעשייה',
         html: welcomeEmailHtml(name, personalCode, siteUrl)
       })
     });
