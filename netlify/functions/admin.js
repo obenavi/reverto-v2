@@ -132,6 +132,33 @@ exports.handler = async (event) => {
       return { statusCode: sent ? 200 : 502, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sent, personal_code: personalCode }) };
     }
 
+    // ── One-time bulk send of the welcome email to existing users ──────────
+    // Skips anyone who already has welcome_email_sent_at set (e.g. someone who
+    // signed up after the automatic send was fixed) to avoid double-sending.
+    if (action === 'send_welcome_to_all_users') {
+      const usersRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/users?select=id,email,business_name,contact_name,personal_code,welcome_email_sent_at&is_active=eq.true`,
+        { headers: H }
+      );
+      const allUsers = usersRes.ok ? await usersRes.json() : [];
+      const results = [];
+      for (const u of allUsers) {
+        if (u.welcome_email_sent_at) { results.push({ email: u.email, status: 'skipped_already_sent' }); continue; }
+        if (!u.email) { results.push({ email: null, status: 'skipped_no_email' }); continue; }
+        const name = u.contact_name || u.business_name || '';
+        const sent = await sendWelcomeEmail(u.email, name, u.personal_code);
+        if (sent) {
+          await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(u.id)}`, {
+            method: 'PATCH',
+            headers: { ...H, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ welcome_email_sent_at: new Date().toISOString() })
+          });
+        }
+        results.push({ email: u.email, status: sent ? 'sent' : 'failed' });
+      }
+      return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ results }) };
+    }
+
     // ── Toggle code active/inactive ───────────────────────────
     if (action === 'toggle_code') {
       const { code, is_active } = parsed;
