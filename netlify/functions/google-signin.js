@@ -113,18 +113,21 @@ exports.handler = async (event) => {
     body: JSON.stringify({ code: personal_code, type: 'personal', duration_months: 0, user_id: user.id, is_active: true })
   });
 
-  // Send welcome email (includes the personal code) — fire and forget, don't block signup
-  sendWelcomeEmail(email, name, personal_code)
-    .then(sent => {
-      if (sent) {
-        fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(user.id)}`, {
-          method: 'PATCH',
-          headers: { ...H, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ welcome_email_sent_at: new Date().toISOString() })
-        }).catch(() => {});
-      }
-    })
-    .catch(() => {});
+  // Send welcome email (includes the personal code). Awaited on purpose — on Netlify's
+  // Lambda-based runtime, un-awaited ("fire and forget") work can be abandoned the moment
+  // the response is returned, so this would otherwise silently never complete.
+  try {
+    const sent = await sendWelcomeEmail(email, name, personal_code);
+    if (sent) {
+      await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(user.id)}`, {
+        method: 'PATCH',
+        headers: { ...H, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ welcome_email_sent_at: new Date().toISOString() })
+      });
+    }
+  } catch (e) {
+    console.error('Welcome email step failed:', e.message);
+  }
 
   const jwt = signJWT({ user_id: user.id, plan: 'free' });
   return {

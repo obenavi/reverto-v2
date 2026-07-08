@@ -94,7 +94,9 @@ exports.handler = async (event) => {
       if (existing?.length) {
         const ex = existing[0];
         if (ex.personal_code) {
-          sendCodeEmail(profile.email, ex.business_name || profile.business_name, ex.personal_code).catch(() => {});
+          // Awaited — an un-awaited send here would very likely never complete, since the
+          // response returns immediately after (see the note on the welcome email below).
+          await sendCodeEmail(profile.email, ex.business_name || profile.business_name, ex.personal_code).catch(() => {});
         }
         // Do NOT return a JWT or personal_code here — anyone could submit a known/guessed
         // email through this public form and get an authenticated session for that account.
@@ -174,18 +176,21 @@ exports.handler = async (event) => {
       body: JSON.stringify({ code: personal_code, type: 'personal', duration_months: 0, user_id: user.id, is_active: true })
     });
 
-    // Send welcome email (includes the personal code) — fire and forget, don't block registration
-    sendWelcomeEmail(profile.email, profile.contact_name || profile.first_name || profile.business_name, personal_code)
-      .then(sent => {
-        if (sent) {
-          fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(user.id)}`, {
-            method: 'PATCH',
-            headers: { ...H, 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ welcome_email_sent_at: new Date().toISOString() })
-          }).catch(() => {});
-        }
-      })
-      .catch(() => {});
+    // Send welcome email (includes the personal code). Awaited on purpose — on Netlify's
+    // Lambda-based runtime, un-awaited ("fire and forget") work can be abandoned the moment
+    // the response is returned, so a truly fire-and-forget send here silently never completes.
+    try {
+      const sent = await sendWelcomeEmail(profile.email, profile.contact_name || profile.first_name || profile.business_name, personal_code);
+      if (sent) {
+        await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(user.id)}`, {
+          method: 'PATCH',
+          headers: { ...H, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ welcome_email_sent_at: new Date().toISOString() })
+        });
+      }
+    } catch (e) {
+      console.error('Welcome email step failed:', e.message);
+    }
 
     const jwt = signJWT(
       { user_id: user.id, plan: 'pro', exp: Math.floor(Date.now() / 1000) + 86400 * 90 },
