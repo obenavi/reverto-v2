@@ -113,8 +113,18 @@ exports.handler = async (event) => {
     body: JSON.stringify({ code: personal_code, type: 'personal', duration_months: 0, user_id: user.id, is_active: true })
   });
 
-  // Send welcome email with personal code (fire and forget — don't block signup)
-  sendWelcomeEmail(email, name, personal_code).catch(() => {});
+  // Send welcome email (includes the personal code) — fire and forget, don't block signup
+  sendWelcomeEmail(email, name, personal_code)
+    .then(sent => {
+      if (sent) {
+        fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(user.id)}`, {
+          method: 'PATCH',
+          headers: { ...H, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ welcome_email_sent_at: new Date().toISOString() })
+        }).catch(() => {});
+      }
+    })
+    .catch(() => {});
 
   const jwt = signJWT({ user_id: user.id, plan: 'free' });
   return {
