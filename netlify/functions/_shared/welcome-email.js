@@ -19,6 +19,8 @@ function welcomeEmailHtml(name, personalCode, siteUrl) {
   const scanUrl = `${siteUrl}/app?goto=scanner`;
   const waUrl = 'https://chat.whatsapp.com/FzCRKLJF8GR7arWNqjfoXD';
   const waIconUrl = `${siteUrl}/email-assets/whatsapp-icon.svg`;
+  const checkIconUrl = `${siteUrl}/email-assets/check-icon.svg`;
+  const checkIcon = `<img src="${checkIconUrl}" width="16" height="16" alt="" style="display:inline-block;vertical-align:middle;margin-left:8px">`;
 
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px">
@@ -42,9 +44,9 @@ function welcomeEmailHtml(name, personalCode, siteUrl) {
     <div style="background:#FAF8FF;border-radius:12px;padding:18px 20px;margin-bottom:24px">
       <div style="font-size:14px;font-weight:800;color:#6B35B8;margin-bottom:12px">כבר אחרי 2–3 חשבוניות תתחיל לראות:</div>
       <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;color:#555;line-height:1.6">
-        <tr><td style="padding:4px 0;text-align:right">• כמה אתה משלם על כל מוצר — ואיך זה משתנה לאורך זמן</td></tr>
-        <tr><td style="padding:4px 0;text-align:right">• השוואה למחירי השוק — איפה אתה משלם יותר מדי</td></tr>
-        <tr><td style="padding:4px 0;text-align:right">• השוואה אנונימית לעסקים דומים בקהילה</td></tr>
+        <tr><td style="padding:4px 0;text-align:right">${checkIcon}כמה אתה משלם על כל מוצר — ואיך זה משתנה לאורך זמן</td></tr>
+        <tr><td style="padding:4px 0;text-align:right">${checkIcon}השוואה למחירי השוק — איפה אתה משלם יותר מדי</td></tr>
+        <tr><td style="padding:4px 0;text-align:right">${checkIcon}השוואה אנונימית לעסקים דומים בקהילה</td></tr>
       </table>
     </div>
 
