@@ -7,9 +7,6 @@ const BRAND = '<span dir="ltr" style="unicode-bidi:isolate">Reverto</span>';
 const DOMAIN = '<span dir="ltr" style="unicode-bidi:isolate">revertoapp.com</span>';
 const FOOD_COST = '<span dir="ltr" style="unicode-bidi:isolate">FOOD COST</span>';
 const WHATSAPP = '<span dir="ltr" style="unicode-bidi:isolate">WhatsApp</span>';
-// Official WhatsApp glyph (simple-icons project), base64-encoded so it renders as an inline
-// image without depending on an external host — a real brand logo, not a decorative emoji.
-const WHATSAPP_LOGO_B64 = 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzI1RDM2NiI+PHBhdGggZD0iTTE3LjQ3MiAxNC4zODJjLS4yOTctLjE0OS0xLjc1OC0uODY3LTIuMDMtLjk2Ny0uMjczLS4wOTktLjQ3MS0uMTQ4LS42Ny4xNS0uMTk3LjI5Ny0uNzY3Ljk2Ni0uOTQgMS4xNjQtLjE3My4xOTktLjM0Ny4yMjMtLjY0NC4wNzUtLjI5Ny0uMTUtMS4yNTUtLjQ2My0yLjM5LTEuNDc1LS44ODMtLjc4OC0xLjQ4LTEuNzYxLTEuNjUzLTIuMDU5LS4xNzMtLjI5Ny0uMDE4LS40NTguMTMtLjYwNi4xMzQtLjEzMy4yOTgtLjM0Ny40NDYtLjUyLjE0OS0uMTc0LjE5OC0uMjk4LjI5OC0uNDk3LjA5OS0uMTk4LjA1LS4zNzEtLjAyNS0uNTItLjA3NS0uMTQ5LS42NjktMS42MTItLjkxNi0yLjIwNy0uMjQyLS41NzktLjQ4Ny0uNS0uNjY5LS41MS0uMTczLS4wMDgtLjM3MS0uMDEtLjU3LS4wMS0uMTk4IDAtLjUyLjA3NC0uNzkyLjM3Mi0uMjcyLjI5Ny0xLjA0IDEuMDE2LTEuMDQgMi40NzkgMCAxLjQ2MiAxLjA2NSAyLjg3NSAxLjIxMyAzLjA3NC4xNDkuMTk4IDIuMDk2IDMuMiA1LjA3NyA0LjQ4Ny43MDkuMzA2IDEuMjYyLjQ4OSAxLjY5NC42MjUuNzEyLjIyNyAxLjM2LjE5NSAxLjg3MS4xMTguNTcxLS4wODUgMS43NTgtLjcxOSAyLjAwNi0xLjQxMy4yNDgtLjY5NC4yNDgtMS4yODkuMTczLTEuNDEzLS4wNzQtLjEyNC0uMjcyLS4xOTgtLjU3LS4zNDdtLTUuNDIxIDcuNDAzaC0uMDA0YTkuODcgOS44NyAwIDAxLTUuMDMxLTEuMzc4bC0uMzYxLS4yMTQtMy43NDEuOTgyLjk5OC0zLjY0OC0uMjM1LS4zNzRhOS44NiA5Ljg2IDAgMDEtMS41MS01LjI2Yy4wMDEtNS40NSA0LjQzNi05Ljg4NCA5Ljg4OC05Ljg4NCAyLjY0IDAgNS4xMjIgMS4wMyA2Ljk4OCAyLjg5OGE5LjgyNSA5LjgyNSAwIDAxMi44OTMgNi45OTRjLS4wMDMgNS40NS00LjQzNyA5Ljg4NC05Ljg4NSA5Ljg4NG04LjQxMy0xOC4yOTdBMTEuODE1IDExLjgxNSAwIDAwMTIuMDUgMEM1LjQ5NSAwIC4xNiA1LjMzNS4xNTcgMTEuODkyYzAgMi4wOTYuNTQ3IDQuMTQyIDEuNTg4IDUuOTQ1TC4wNTcgMjRsNi4zMDUtMS42NTRhMTEuODgyIDExLjg4MiAwIDAwNS42ODMgMS40NDhoLjAwNWM2LjU1NCAwIDExLjg5LTUuMzM1IDExLjg5My0xMS44OTNhMTEuODIxIDExLjgyMSAwIDAwLTMuNDgtOC40MTNaIi8+PC9zdmc+';
 
 function welcomeEmailHtml(name, personalCode, siteUrl) {
   const codeBlock = personalCode ? `
@@ -21,6 +18,7 @@ function welcomeEmailHtml(name, personalCode, siteUrl) {
 
   const scanUrl = `${siteUrl}/app?goto=scanner`;
   const waUrl = 'https://chat.whatsapp.com/FzCRKLJF8GR7arWNqjfoXD';
+  const waIconUrl = `${siteUrl}/email-assets/whatsapp-icon.svg`;
 
   return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px">
@@ -61,9 +59,9 @@ function welcomeEmailHtml(name, personalCode, siteUrl) {
     <p style="font-size:12px;color:#aaa;margin-top:8px;text-align:center">לוקח פחות מ-30 שניות — צלם או העלה קובץ</p>
 
     <p style="font-size:13px;color:#555;line-height:1.7;margin:24px 0 6px">מזמינים אתכם להצטרף לקבוצת ה-${WHATSAPP} לתמיכה באפליקציה ולבניית המערכת לטובת כולנו:</p>
-    <a href="${waUrl}" style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;color:#25D366;font-weight:700;text-decoration:none">
-      <img src="data:image/svg+xml;base64,${WHATSAPP_LOGO_B64}" width="18" height="18" alt="" style="display:inline-block;vertical-align:middle">
-      <span>הצטרפות לקבוצת הוואטסאפ</span>
+    <a href="${waUrl}" style="display:inline-block;font-size:13px;color:#25D366;font-weight:700;text-decoration:none">
+      <img src="${waIconUrl}" width="18" height="18" alt="WhatsApp" style="display:inline-block;vertical-align:middle;margin-left:6px">
+      <span style="vertical-align:middle">הצטרפות לקבוצת הוואטסאפ</span>
     </a>
 
     <p style="font-size:13px;color:#777;margin-top:24px;text-align:center;border-top:1px solid #eee;padding-top:16px">
