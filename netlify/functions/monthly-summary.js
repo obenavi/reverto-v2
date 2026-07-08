@@ -78,7 +78,7 @@ exports.handler = async (event) => {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_KEY;
   const RESEND_KEY   = process.env.RESEND_API_KEY;
-  const SITE_URL     = process.env.SITE_URL || 'https://reverto.cloud';
+  const SITE_URL     = process.env.SITE_URL || 'https://revertoapp.com';
   const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
 
   const now = new Date();

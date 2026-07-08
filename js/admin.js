@@ -101,6 +101,9 @@ async function renderUsers(body) {
               <div style="font-size:10px;margin-top:2px;color:${u.gmail_consent ? 'var(--success)' : 'var(--on-surface-3)'};font-weight:${u.gmail_consent ? '700' : '400'}">
                 ${u.gmail_consent ? '✓ אישר חיבור Gmail' : 'לא אישר Gmail'}
               </div>
+              <div style="font-size:10px;margin-top:2px;color:${u.welcome_email_sent_at ? 'var(--success)' : 'var(--warning)'};font-weight:${u.welcome_email_sent_at ? '700' : '400'}">
+                ${u.welcome_email_sent_at ? '✓ נשלח מייל ברוכים הבאים' : '⚠ מייל ברוכים הבאים לא נשלח'}
+              </div>
             </div>
             <div style="text-align:left;flex-shrink:0">
               <div style="font-size:11px;font-weight:700;color:${isPro ? 'var(--success)' : 'var(--on-surface-3)'}">${proLabel}</div>

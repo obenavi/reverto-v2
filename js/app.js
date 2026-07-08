@@ -473,7 +473,7 @@ function showVision() {
 }
 
 function shareInvite() {
-  const url = 'https://reverto.cloud';
+  const url = 'https://revertoapp.com';
   const text = `גילית אפליקציה שמנהלת את הרכש של המסעדה שלי — Reverto. שווה לנסות!\n${url}\n\n📱 פתח בדפדפן והוסף לדף הבית`;
   if (navigator.share) {
     navigator.share({ title: 'Reverto', text, url }).catch(() => {});

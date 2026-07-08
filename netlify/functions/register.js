@@ -36,7 +36,7 @@ function codeEmailHtml(businessName, personalCode, siteUrl) {
 async function sendCodeEmail(toEmail, businessName, personalCode) {
   const key = process.env.RESEND_API_KEY;
   if (!key || !toEmail) return;
-  const siteUrl = process.env.SITE_URL || 'https://reverto-v2.netlify.app';
+  const siteUrl = process.env.SITE_URL || 'https://revertoapp.com';
   try {
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -50,6 +50,72 @@ async function sendCodeEmail(toEmail, businessName, personalCode) {
     });
   } catch (e) {
     console.error('Email send failed:', e.message);
+  }
+}
+
+function welcomeEmailHtml(name, siteUrl) {
+  const scanUrl = `${siteUrl}/app`;
+  const waUrl = 'https://chat.whatsapp.com/FzCRKLJF8GR7arWNqjfoXD';
+  return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px">
+<div style="max-width:520px;margin:0 auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1)">
+  <div style="background:linear-gradient(135deg,#5B0EA6,#8B21E8,#C026D3,#EC4899);padding:32px 28px;text-align:center">
+    <div style="font-size:28px;font-weight:800;color:white;letter-spacing:-1px">Reverto</div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.85);margin-top:4px">ניהול רכש חכם</div>
+  </div>
+  <div style="padding:28px;text-align:right">
+    <h2 style="font-size:21px;font-weight:800;color:#1C1428;margin:0 0 16px">ברוכים הבאים ל-Reverto</h2>
+    <p style="font-size:15px;color:#333;line-height:1.7;margin:0 0 14px">שלום ${name || ''},</p>
+    <p style="font-size:15px;color:#333;line-height:1.7;margin:0 0 14px">איזה כיף שהצטרפת ל-Reverto! 🎉</p>
+    <p style="font-size:14px;color:#555;line-height:1.7;margin:0 0 14px">מהיום, כל חשבונית ספק שנכנסת לעסק שלך היא מקור מידע — לא רק הוצאה.</p>
+    <p style="font-size:14px;color:#555;line-height:1.7;margin:0 0 20px">תוכל ללמוד ממנה על ה-FOOD COST שלך, על צפי ההוצאות, על שינויי המחירים וכמובן אם המחיר שאתה משלם הגיוני או שיש על מה לעבוד.</p>
+
+    <p style="font-size:15px;font-weight:800;color:#1C1428;margin:0 0 10px">איך מתחילים? פשוט מאוד:</p>
+    <div style="background:#F3EFFE;border-radius:12px;padding:16px;margin-bottom:20px">
+      <p style="font-size:14px;color:#333;line-height:1.7;margin:0"><strong>📸 סרוק את החשבונית הראשונה</strong> — צלם או העלה קובץ, וה-AI שלנו יחלץ את כל המוצרים והמחירים תוך שניות.</p>
+    </div>
+
+    <p style="font-size:14px;color:#555;line-height:1.7;margin:0 0 8px">כבר אחרי 2–3 חשבוניות תתחיל לראות:</p>
+    <ul style="font-size:14px;color:#555;line-height:1.9;margin:0 0 20px;padding-right:20px">
+      <li>📊 כמה אתה משלם על כל מוצר — ואיך זה משתנה לאורך זמן</li>
+      <li>💡 השוואה למחירי השוק — איפה אתה משלם יותר מדי</li>
+      <li>🤝 השוואה אנונימית לעסקים דומים בקהילה</li>
+    </ul>
+
+    <p style="font-size:14px;color:#555;line-height:1.7;margin:0 0 24px"><strong>וזה החלק החשוב:</strong> ככל שיותר עסקים סורקים, המידע של כולנו מדויק יותר. כל חשבונית שאתה סורק מחזקת את כוח המיקוח של כל הקהילה — וגם את שלך.</p>
+
+    <a href="${scanUrl}" style="display:block;background:linear-gradient(135deg,#8B21E8,#C026D3,#EC4899);color:white;text-decoration:none;text-align:center;padding:15px;border-radius:10px;font-size:15px;font-weight:700;margin-bottom:24px">👉 סרוק את החשבונית הראשונה שלך</a>
+
+    <p style="font-size:13px;color:#555;line-height:1.7;margin:0 0 8px">מזמינים אתכם להצטרף לקבוצת ה-WhatsApp לתמיכה באפליקציה ולבניית המערכת לטובת כולנו:</p>
+    <a href="${waUrl}" style="display:block;font-size:13px;color:#25D366;font-weight:700;text-decoration:none;margin-bottom:20px">💬 הצטרפות לקבוצת הוואטסאפ</a>
+
+    <p style="font-size:13px;color:#888;line-height:1.6;margin:0 0 4px">יש עוד שאלה? פשוט שלחו למייל הזה — אנחנו כאן.</p>
+    <p style="font-size:13px;color:#888;line-height:1.6;margin:0">בהצלחה,<br>צוות Reverto</p>
+  </div>
+  <div style="background:#faf5fc;padding:14px;text-align:center;font-size:11px;color:#aaa">revertoapp.com</div>
+</div>
+</body></html>`;
+}
+
+async function sendWelcomeEmail(toEmail, name) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || !toEmail) return;
+  const siteUrl = process.env.SITE_URL || 'https://revertoapp.com';
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Reverto <noreply@mail.reverto.cloud>',
+        to: [toEmail],
+        subject: 'ברוכים הבאים ל-Reverto',
+        html: welcomeEmailHtml(name, siteUrl)
+      })
+    });
+    return res.ok;
+  } catch (e) {
+    console.error('Welcome email send failed:', e.message);
+    return false;
   }
 }
 
@@ -174,8 +240,18 @@ exports.handler = async (event) => {
       body: JSON.stringify({ code: personal_code, type: 'personal', duration_months: 0, user_id: user.id, is_active: true })
     });
 
-    // Send welcome email with personal code (fire and forget — don't block registration)
-    sendWelcomeEmail(profile.email, profile.business_name, personal_code).catch(() => {});
+    // Send welcome email (includes the personal code) — fire and forget, don't block registration
+    sendWelcomeEmail(profile.email, profile.contact_name || profile.first_name || profile.business_name, personal_code)
+      .then(sent => {
+        if (sent) {
+          fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(user.id)}`, {
+            method: 'PATCH',
+            headers: { ...H, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ welcome_email_sent_at: new Date().toISOString() })
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {});
 
     const jwt = signJWT(
       { user_id: user.id, plan: 'pro', exp: Math.floor(Date.now() / 1000) + 86400 * 90 },

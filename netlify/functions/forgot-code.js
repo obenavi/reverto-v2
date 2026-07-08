@@ -49,7 +49,7 @@ exports.handler = async (event) => {
     // Always respond with the same message regardless of whether user was found
     if (users?.length && users[0].personal_code && users[0].is_active !== false && RESEND_KEY) {
       const user = users[0];
-      const siteUrl = process.env.SITE_URL || 'https://reverto-v2.netlify.app';
+      const siteUrl = process.env.SITE_URL || 'https://revertoapp.com';
       await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + RESEND_KEY, 'Content-Type': 'application/json' },

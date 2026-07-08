@@ -46,7 +46,7 @@ exports.handler = async (event) => {
           body: JSON.stringify({ reset_token: token, reset_token_exp: exp })
         });
 
-        const siteUrl = process.env.SITE_URL || 'https://reverto.cloud';
+        const siteUrl = process.env.SITE_URL || 'https://revertoapp.com';
         const resetUrl = `${siteUrl}/reset-password.html?token=${token}`;
 
         if (RESEND_KEY) {
