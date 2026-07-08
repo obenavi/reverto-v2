@@ -1,5 +1,32 @@
 const crypto = require('crypto');
 const { sendWelcomeEmail } = require('./_shared/welcome-email');
+const { sendCampaignEmail } = require('./_shared/campaign-email');
+const { SEGMENTS, getUsersWithStats, filterSegment } = require('./_shared/campaign-segments');
+
+async function sendCampaignNow(SUPABASE_URL, H, campaign) {
+  const users = await getUsersWithStats(SUPABASE_URL, H);
+  const audience = filterSegment(users, campaign.target_segment);
+  const results = [];
+  for (const u of audience) {
+    if (!u.email) { results.push({ user_id: u.id, status: 'skipped' }); continue; }
+    const name = u.contact_name || u.business_name || '';
+    const sent = await sendCampaignEmail(u.email, name, campaign.subject || campaign.title, campaign.body);
+    const sendStatus = sent ? 'sent' : 'failed';
+    results.push({ user_id: u.id, status: sendStatus });
+    await fetch(`${SUPABASE_URL}/rest/v1/marketing_campaign_sends`, {
+      method: 'POST',
+      headers: { ...H, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ campaign_id: campaign.id, user_id: u.id, channel: 'email', status: sendStatus, error: sent ? null : 'send_failed' })
+    });
+  }
+  const finalStatus = results.some(r => r.status === 'sent') ? 'sent' : 'failed';
+  await fetch(`${SUPABASE_URL}/rest/v1/marketing_campaigns?id=eq.${encodeURIComponent(campaign.id)}`, {
+    method: 'PATCH',
+    headers: { ...H, 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ status: finalStatus, sent_at: new Date().toISOString() })
+  });
+  return { campaign: { ...campaign, status: finalStatus }, results };
+}
 
 function verifyJWT(token, secret) {
   const parts = (token || '').split('.');
@@ -242,6 +269,68 @@ exports.handler = async (event) => {
         headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="reverto-users.csv"' },
         body: csv
       };
+    }
+
+    // ── Marketing: audience segment sizes (for the campaign composer) ──────
+    if (action === 'campaign_segment_counts') {
+      const users = await getUsersWithStats(SUPABASE_URL, H);
+      const counts = {};
+      SEGMENTS.forEach(seg => { counts[seg] = filterSegment(users, seg).length; });
+      return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(counts) };
+    }
+
+    // ── Marketing: campaign history with per-campaign send stats ───────────
+    if (action === 'campaign_list') {
+      const [campaigns, sends] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/marketing_campaigns?select=*&order=created_at.desc`, { headers: H }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/marketing_campaign_sends?select=campaign_id,status`, { headers: H }).then(r => r.json())
+      ]);
+      const statsByCampaign = {};
+      (sends || []).forEach(s => {
+        const rec = statsByCampaign[s.campaign_id] || (statsByCampaign[s.campaign_id] = { sent: 0, failed: 0, skipped: 0 });
+        rec[s.status] = (rec[s.status] || 0) + 1;
+      });
+      const withStats = (campaigns || []).map(c => ({ ...c, stats: statsByCampaign[c.id] || { sent: 0, failed: 0, skipped: 0 } }));
+      return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(withStats) };
+    }
+
+    // ── Marketing: send a one-off preview of a campaign draft ──────────────
+    // Always a test send: bcc's revertoo.ino@gmail.com and tags the subject
+    // (see project memory: test-email-review rule).
+    if (action === 'campaign_send_test') {
+      const { subject, body, to_email } = parsed;
+      if (!body) return { statusCode: 400, body: JSON.stringify({ error: 'חסר תוכן הקמפיין' }) };
+      const target = to_email || 'revertoo.ino@gmail.com';
+      const sent = await sendCampaignEmail(target, 'בדיקה', subject || 'קמפיין - בדיקה', body, { isTest: true });
+      return { statusCode: sent ? 200 : 502, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sent }) };
+    }
+
+    // ── Marketing: create a campaign — draft, scheduled, or send immediately ──
+    if (action === 'campaign_create') {
+      const { title, subject, body, channel = 'email', target_segment = 'all', send_now, scheduled_at } = parsed;
+      if (!title || !body) return { statusCode: 400, body: JSON.stringify({ error: 'חסר כותרת או תוכן' }) };
+      if (channel !== 'email') return { statusCode: 400, body: JSON.stringify({ error: 'כרגע רק ערוץ המייל פעיל — WhatsApp ידלק כשיתקבלו פרטי ה-API' }) };
+      if (!SEGMENTS.includes(target_segment)) return { statusCode: 400, body: JSON.stringify({ error: 'קהל יעד לא מוכר' }) };
+
+      let status = 'draft';
+      if (send_now) status = 'sending';
+      else if (scheduled_at) status = 'scheduled';
+
+      const createRes = await fetch(`${SUPABASE_URL}/rest/v1/marketing_campaigns`, {
+        method: 'POST',
+        headers: { ...H, 'Prefer': 'return=representation' },
+        body: JSON.stringify({ title, subject: subject || title, body, channel, target_segment, status, scheduled_at: scheduled_at || null })
+      });
+      const created = await createRes.json();
+      const campaign = Array.isArray(created) ? created[0] : created;
+      if (!campaign?.id) return { statusCode: 500, body: JSON.stringify({ error: 'יצירת הקמפיין נכשלה' }) };
+
+      if (send_now) {
+        const { campaign: sentCampaign, results } = await sendCampaignNow(SUPABASE_URL, H, campaign);
+        return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ campaign: sentCampaign, results }) };
+      }
+
+      return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ campaign }) };
     }
 
     return { statusCode: 400, body: JSON.stringify({ error: 'Unknown action' }) };

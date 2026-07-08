@@ -34,7 +34,8 @@ function renderAdminTabs() {
     { id: 'kpis', label: 'KPIs' },
     { id: 'users', label: 'לקוחות' },
     { id: 'codes', label: 'קודים' },
-    { id: 'prices', label: 'מחירי שוק' }
+    { id: 'prices', label: 'מחירי שוק' },
+    { id: 'marketing', label: 'שיווק' }
   ];
   document.getElementById('admin-tabs').innerHTML = tabs.map(t => `
     <button onclick="loadAdminTab('${t.id}')" id="atab-${t.id}"
@@ -54,6 +55,105 @@ async function loadAdminTab(tab) {
   if (tab === 'users') await renderUsers(body);
   if (tab === 'codes') await renderCodes(body);
   if (tab === 'prices') renderPricesUpload(body);
+  if (tab === 'marketing') await renderMarketing(body);
+}
+
+const SEGMENT_LABELS = {
+  all: 'כל המשתמשים הפעילים',
+  pro: 'לקוחות PRO',
+  free: 'לקוחות חינמיים',
+  zero_invoices: 'לא סרקו אף חשבונית (הפעלה)',
+  inactive_14d: 'לא סרקו מעל 14 יום (סיכון נטישה)',
+  active_scanners: 'סורקים פעילים (14 יום אחרונים)'
+};
+
+const CAMPAIGN_STATUS_LABELS = { draft: 'טיוטה', scheduled: 'מתוזמן', sending: 'נשלח כעת', sent: 'נשלח', failed: 'נכשל' };
+const CAMPAIGN_STATUS_COLORS = { draft: 'var(--on-surface-3)', scheduled: 'var(--warning)', sending: 'var(--warning)', sent: 'var(--success)', failed: 'var(--error)' };
+
+async function renderMarketing(body) {
+  const [counts, campaigns] = await Promise.all([
+    adminCall('campaign_segment_counts'),
+    adminCall('campaign_list')
+  ]);
+
+  body.innerHTML = `
+    <div class="card card-pad mb-12">
+      <div style="font-size:14px;font-weight:800;margin-bottom:12px">קמפיין חדש</div>
+      <input class="input mb-8" id="camp-title" type="text" placeholder="כותרת פנימית (למעקב)">
+      <input class="input mb-8" id="camp-subject" type="text" placeholder="נושא המייל (ריק = הכותרת הפנימית)">
+      <textarea class="input mb-8" id="camp-body" rows="6" placeholder="תוכן ההודעה... (שורה ריקה = פסקה חדשה)" style="resize:vertical;font-family:inherit;width:100%"></textarea>
+
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--on-surface-2)">קהל יעד</div>
+      <select class="input mb-8" id="camp-segment">
+        ${Object.entries(SEGMENT_LABELS).map(([id, label]) => `<option value="${id}">${label} (${counts?.[id] ?? 0})</option>`).join('')}
+      </select>
+
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--on-surface-2)">ערוץ</div>
+      <select class="input mb-8" id="camp-channel">
+        <option value="email">מייל</option>
+        <option value="whatsapp" disabled>WhatsApp (יופעל בהמשך)</option>
+      </select>
+
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--on-surface-2)">תזמון (אופציונלי — ריק = שליחה מיידית)</div>
+      <input class="input mb-8" id="camp-schedule" type="datetime-local">
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="sendCampaignTest()" class="btn-ghost" style="flex:1;min-width:120px">שלח בדיקה לעצמי</button>
+        <button onclick="createCampaign(false)" class="btn-ghost" style="flex:1;min-width:120px">שמור כטיוטה</button>
+        <button onclick="createCampaign(true)" class="btn-primary" style="flex:1;min-width:120px">שלח / תזמן</button>
+      </div>
+      <div id="camp-result" style="display:none;margin-top:10px;font-size:13px;font-weight:700"></div>
+    </div>
+
+    <div style="font-size:14px;font-weight:800;margin:16px 0 8px">היסטוריית קמפיינים</div>
+    <div class="card">
+      ${(campaigns || []).length ? campaigns.map(c => `
+        <div class="list-row">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700">${c.title}</div>
+            <div style="font-size:11px;color:var(--on-surface-3)">${SEGMENT_LABELS[c.target_segment] || c.target_segment} · ${(c.created_at || '').slice(0,16).replace('T',' ')}</div>
+            ${c.status === 'sent' || c.status === 'failed' ? `<div style="font-size:11px;color:var(--on-surface-3)">נשלח: ${c.stats.sent} · נכשל: ${c.stats.failed}</div>` : ''}
+          </div>
+          <div style="font-size:11px;font-weight:700;color:${CAMPAIGN_STATUS_COLORS[c.status] || 'var(--on-surface-3)'}">${CAMPAIGN_STATUS_LABELS[c.status] || c.status}</div>
+        </div>
+      `).join('') : '<div class="card-pad"><div style="color:var(--on-surface-3);font-size:13px">אין קמפיינים עדיין</div></div>'}
+    </div>
+  `;
+}
+
+async function sendCampaignTest() {
+  const subject = document.getElementById('camp-subject')?.value.trim();
+  const bodyText = document.getElementById('camp-body')?.value.trim();
+  if (!bodyText) { showToast('כתוב תוכן קודם'); return; }
+  const res = await adminCall('campaign_send_test', { subject, body: bodyText });
+  const result = document.getElementById('camp-result');
+  if (result) {
+    result.style.display = 'block';
+    result.textContent = res.sent ? 'נשלחה בדיקה למייל שלך' : 'שליחת הבדיקה נכשלה';
+    result.style.color = res.sent ? 'var(--success)' : 'var(--error)';
+  }
+}
+
+async function createCampaign(dispatch) {
+  const title = document.getElementById('camp-title')?.value.trim();
+  const subject = document.getElementById('camp-subject')?.value.trim();
+  const bodyText = document.getElementById('camp-body')?.value.trim();
+  const target_segment = document.getElementById('camp-segment')?.value;
+  const channel = document.getElementById('camp-channel')?.value;
+  const scheduleVal = document.getElementById('camp-schedule')?.value;
+
+  if (!title || !bodyText) { showToast('חסר כותרת או תוכן'); return; }
+
+  const payload = { title, subject, body: bodyText, channel, target_segment };
+  if (dispatch) {
+    if (scheduleVal) payload.scheduled_at = new Date(scheduleVal).toISOString();
+    else payload.send_now = true;
+  }
+
+  const res = await adminCall('campaign_create', payload);
+  if (res.error) { showToast(res.error); return; }
+  showToast(dispatch ? (scheduleVal ? 'הקמפיין תוזמן' : 'הקמפיין נשלח') : 'נשמר כטיוטה');
+  loadAdminTab('marketing');
 }
 
 async function renderKPIs(body) {
