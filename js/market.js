@@ -95,7 +95,10 @@ function displayMarket(prices) {
   const latest = Object.values(byName).filter(p => p.name && p.price != null && !isNaN(parseFloat(p.price)));
   latest.sort((a, b) => a.name.localeCompare(b.name, 'he'));
 
-  const latestDate = latest.length ? latest[0].date || latest[0].updated_at?.slice(0,10) : '';
+  const latestDate = latest.reduce((max, p) => {
+    const d = p.date || p.updated_at?.slice(0, 10) || '';
+    return d > max ? d : max;
+  }, '');
   const aboveCount = latest.filter(p => {
     const u = userPriceAvg[p.name];
     return u && ((u - parseFloat(p.price)) / parseFloat(p.price) * 100) > 5;
