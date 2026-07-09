@@ -189,6 +189,12 @@ async function renderUsers(body) {
         const proLabel = isPro
           ? (new Date(u.pro_until) > new Date('2090-01-01') ? 'PILOT' : 'PRO עד ' + u.pro_until?.slice(0,10))
           : 'חינמי';
+        const waDigits = u.phone ? u.phone.replace(/\D/g, '').replace(/^0/, '972') : '';
+        const waLink = waDigits ? `https://wa.me/${waDigits}` : '';
+        const daysSince = u.last_invoice_date ? Math.floor((now - new Date(u.last_invoice_date)) / 86400000) : null;
+        const activityLabel = u.invoice_count > 0
+          ? `${u.invoice_count} חשבוניות · ₪${(u.total_invoice_value || 0).toLocaleString('he-IL')} · לפני ${daysSince} ימים`
+          : 'עדיין לא סרק חשבונית';
         return `
           <div class="list-row" style="${u.is_active === false ? 'opacity:0.5' : ''}">
             <div class="list-avatar" style="background:${isPro ? 'linear-gradient(135deg,#FFD700,#FFA500)' : 'var(--surface-low)'}">
@@ -196,8 +202,13 @@ async function renderUsers(body) {
             </div>
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.business_name || '—'}</div>
-              <div style="font-size:11px;color:var(--on-surface-3)">${u.city || ''} · ${u.category || ''} · ${u.invoice_count} חשבוניות</div>
-              <div style="font-size:11px;color:var(--on-surface-3)">${u.personal_code || ''} · ${u.email || ''}</div>
+              ${u.contact_name ? `<div style="font-size:12px;font-weight:700;color:var(--primary)">${u.contact_name}</div>` : ''}
+              <div style="font-size:11px;color:var(--on-surface-3)">${u.city || ''} · ${u.category || ''}</div>
+              <div style="font-size:11px;color:var(--on-surface-3)">${activityLabel}</div>
+              <div style="font-size:11px;color:var(--on-surface-3)">
+                ${u.personal_code || ''} · ${u.email || ''}${u.phone ? ` · ${u.phone}` : ''}
+                ${waLink ? ` · <a href="${waLink}" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:none;font-weight:700">WhatsApp</a>` : ''}
+              </div>
               <div style="font-size:10px;margin-top:2px;color:${u.gmail_consent ? 'var(--success)' : 'var(--on-surface-3)'};font-weight:${u.gmail_consent ? '700' : '400'}">
                 ${u.gmail_consent ? '✓ אישר חיבור Gmail' : 'לא אישר Gmail'}
               </div>
@@ -352,6 +363,11 @@ async function exportUsers() {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'reverto-users.csv'; a.click();
-  URL.revokeObjectURL(url);
+  a.href = url; a.download = 'reverto-users.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoking immediately can abort the download before some browsers (notably
+  // Safari/older Firefox) finish reading the blob — delay it a beat.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

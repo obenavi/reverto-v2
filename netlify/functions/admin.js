@@ -99,19 +99,27 @@ exports.handler = async (event) => {
         { headers: H }
       ).then(r => r.json());
 
-      // Attach invoice count per user
+      // Attach invoice activity per user (count, total value, last invoice date)
       const invoices = await fetch(
-        `${SUPABASE_URL}/rest/v1/invoices?select=user_id`,
+        `${SUPABASE_URL}/rest/v1/invoices?select=user_id,date,total_amount`,
         { headers: H }
       ).then(r => r.json());
 
-      const countByUser = {};
-      invoices.forEach(i => { countByUser[i.user_id] = (countByUser[i.user_id] || 0) + 1; });
+      const statsByUser = {};
+      invoices.forEach(i => {
+        const rec = statsByUser[i.user_id] || (statsByUser[i.user_id] = { count: 0, total: 0, lastDate: null });
+        rec.count++;
+        rec.total += parseFloat(i.total_amount) || 0;
+        if (!rec.lastDate || i.date > rec.lastDate) rec.lastDate = i.date;
+      });
 
       return {
         statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(users.map(u => ({ ...u, invoice_count: countByUser[u.id] || 0 })))
+        body: JSON.stringify(users.map(u => {
+          const s = statsByUser[u.id] || { count: 0, total: 0, lastDate: null };
+          return { ...u, invoice_count: s.count, total_invoice_value: Math.round(s.total), last_invoice_date: s.lastDate };
+        }))
       };
     }
 
@@ -251,17 +259,29 @@ exports.handler = async (event) => {
 
     // ── Export users CSV ──────────────────────────────────────
     if (action === 'export_users') {
-      const users = await fetch(
-        `${SUPABASE_URL}/rest/v1/users?select=business_name,contact_name,phone,email,city,category,plan,pro_until,personal_code,created_at&order=created_at.desc`,
-        { headers: H }
-      ).then(r => r.json());
+      const [users, invoices] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/users?select=id,business_name,contact_name,phone,email,city,category,plan,pro_until,personal_code,created_at&order=created_at.desc`, { headers: H }).then(r => r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/invoices?select=user_id,date,total_amount`, { headers: H }).then(r => r.json())
+      ]);
 
-      const headers = ['שם עסק', 'איש קשר', 'טלפון', 'מייל', 'עיר', 'קטגוריה', 'תוכנית', 'PRO עד', 'קוד אישי', 'תאריך הצטרפות'];
-      const rows = users.map(u => [
-        u.business_name, u.contact_name, u.phone, u.email,
-        u.city, u.category, u.plan, u.pro_until?.slice(0, 10),
-        u.personal_code, u.created_at?.slice(0, 10)
-      ].map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(','));
+      const statsByUser = {};
+      (invoices || []).forEach(i => {
+        const rec = statsByUser[i.user_id] || (statsByUser[i.user_id] = { count: 0, total: 0, lastDate: null });
+        rec.count++;
+        rec.total += parseFloat(i.total_amount) || 0;
+        if (!rec.lastDate || i.date > rec.lastDate) rec.lastDate = i.date;
+      });
+
+      const headers = ['שם עסק', 'איש קשר', 'טלפון', 'מייל', 'עיר', 'קטגוריה', 'תוכנית', 'PRO עד', 'קוד אישי', 'תאריך הצטרפות', 'חשבוניות שנסרקו', 'שווי חשבוניות', 'חשבונית אחרונה'];
+      const rows = users.map(u => {
+        const s = statsByUser[u.id] || { count: 0, total: 0, lastDate: null };
+        return [
+          u.business_name, u.contact_name, u.phone, u.email,
+          u.city, u.category, u.plan, u.pro_until?.slice(0, 10),
+          u.personal_code, u.created_at?.slice(0, 10),
+          s.count, Math.round(s.total), s.lastDate
+        ].map(v => `"${(v ?? '').toString().replace(/"/g, '""')}"`).join(',');
+      });
 
       const csv = '﻿' + [headers.join(','), ...rows].join('\n');
       return {
