@@ -89,12 +89,14 @@ async function scannerHandleFile(file) {
 
 // Runs OCR (Azure) + AI line-item parsing (Claude) for one file and returns
 // { fields, items }. Shared by the single-invoice flow and the batch flow.
-async function scannerExtract(file, attempt = 1) {
+// `silent` skips the per-step status text (used in batch mode, where several
+// files run concurrently and would otherwise race to overwrite the same line).
+async function scannerExtract(file, attempt = 1, silent = false) {
   const isPDF = file.type === 'application/pdf';
   const base64 = await fileToBase64(file);
   const mimeType = isPDF ? 'application/pdf' : 'image/jpeg';
 
-  document.getElementById('scanner-loading-text').textContent = 'מנתח עם Azure OCR...';
+  if (!silent) document.getElementById('scanner-loading-text').textContent = 'מנתח עם Azure OCR...';
 
   const res = await fetch('/.netlify/functions/ocr', {
     method: 'POST',
@@ -105,13 +107,13 @@ async function scannerExtract(file, attempt = 1) {
   if (!res.ok) {
     if (attempt < 3) {
       await new Promise(r => setTimeout(r, 2000));
-      return scannerExtract(file, attempt + 1);
+      return scannerExtract(file, attempt + 1, silent);
     }
     throw new Error('שגיאת OCR — נסה שוב');
   }
 
   const data = await res.json();
-  document.getElementById('scanner-loading-text').textContent = 'מנתח עם AI...';
+  if (!silent) document.getElementById('scanner-loading-text').textContent = 'מנתח עם AI...';
 
   const fields = parseInvoiceFields(data);
   const azureItems = parseLineItems(data);
@@ -149,6 +151,12 @@ async function scannerExtract(file, attempt = 1) {
 }
 
 // ── Batch scanning (multiple invoices in one go) ────────────────
+// Processes up to BATCH_CONCURRENCY files in parallel instead of one at a time —
+// each file's OCR call spends most of its time waiting on Azure, so running a few
+// at once cuts total wall-clock time roughly by that factor instead of adding load
+// that scales with count.
+const BATCH_CONCURRENCY = 3;
+
 async function scannerRunBatch(files) {
   document.getElementById('scanner-idle').style.display = 'none';
   document.getElementById('scanner-error').style.display = 'none';
@@ -156,13 +164,16 @@ async function scannerRunBatch(files) {
   document.getElementById('scanner-loading').style.display = 'block';
 
   batchQueue = files.map(file => ({ file, status: 'pending', fields: null, items: [] }));
+  let completed = 0;
+  const updateProgress = () => {
+    document.getElementById('scanner-loading-text').textContent = `מעבד חשבוניות... (${completed} מתוך ${batchQueue.length} הושלמו)`;
+  };
+  updateProgress();
 
-  for (let i = 0; i < batchQueue.length; i++) {
-    const entry = batchQueue[i];
-    document.getElementById('scanner-loading-text').textContent = `מעבד חשבונית ${i + 1} מתוך ${batchQueue.length}...`;
+  async function processEntry(entry) {
     entry.status = 'processing';
     try {
-      const { fields, items } = await scannerExtract(entry.file);
+      const { fields, items } = await scannerExtract(entry.file, 1, true);
       entry.fields = fields;
       entry.items = items;
       // Only auto-save when extraction found enough to trust — a vendor name and at
@@ -179,7 +190,18 @@ async function scannerRunBatch(files) {
       entry.status = 'error';
       entry.errorMsg = e.message || 'שגיאת ניתוח';
     }
+    completed++;
+    updateProgress();
   }
+
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < batchQueue.length) {
+      const entry = batchQueue[nextIndex++];
+      await processEntry(entry);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, batchQueue.length) }, worker));
 
   showBatchSummary();
 }
