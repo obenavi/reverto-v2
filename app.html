@@ -202,12 +202,14 @@
           <div style="font-size:22px;font-weight:800;color:white;margin-bottom:8px;letter-spacing:-0.5px">סריקת חשבונית</div>
           <div style="font-size:14px;color:rgba(255,255,255,0.75);font-weight:500">מצלמה · גלריה · PDF</div>
         </div>
-        <!-- Camera (rear) — triggered by nav button auto-open -->
-        <input type="file" id="scan-file" accept="image/*" capture="environment" style="display:none" onchange="scannerHandleFile(this.files[0])">
-        <!-- Gallery (no capture — lets user pick from photos) -->
-        <input type="file" id="scan-file-gallery" accept="image/*" style="display:none" onchange="scannerHandleFile(this.files[0])">
+        <!-- Camera (rear) — triggered by nav button auto-open. `multiple` lets modern
+             mobile browsers (iOS 16+/Android Chrome) offer sequential multi-shot capture;
+             browsers without that support just return a single file, which still works. -->
+        <input type="file" id="scan-file" accept="image/*" capture="environment" multiple style="display:none" onchange="scannerHandleFiles(this.files)">
+        <!-- Gallery (no capture — lets user pick one or many photos) -->
+        <input type="file" id="scan-file-gallery" accept="image/*" multiple style="display:none" onchange="scannerHandleFiles(this.files)">
         <!-- PDF -->
-        <input type="file" id="scan-file-pdf" accept="application/pdf" style="display:none" onchange="scannerHandleFile(this.files[0])">
+        <input type="file" id="scan-file-pdf" accept="application/pdf" multiple style="display:none" onchange="scannerHandleFiles(this.files)">
         <div style="font-size:12px;color:var(--on-surface-3);text-align:center;margin-top:4px">לחץ על הכפתור לסריקה אוטומטית עם AI</div>
 
         <!-- Pending email invoices -->

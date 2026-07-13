@@ -4,6 +4,7 @@ const AZURE_ENDPOINT = 'https://reverto.cognitiveservices.azure.com/';
 const AZURE_KEY = ''; // יוגדר דרך Netlify Function
 
 let scannerData = null;
+let batchQueue = [];
 
 function scannerReset(autoOpen = false) {
   document.getElementById('scanner-idle').style.display = 'block';
@@ -16,6 +17,7 @@ function scannerReset(autoOpen = false) {
     if (f) f.value = '';
   });
   scannerData = null;
+  batchQueue = [];
   // Nav button auto-open → straight to rear camera
   if (autoOpen) setTimeout(() => document.getElementById('scan-file')?.click(), 100);
 }
@@ -31,21 +33,21 @@ function scannerShowActionSheet() {
         <span class="mi" style="font-size:26px;color:var(--primary,#6b35b8)">photo_camera</span>
         <div style="text-align:right">
           <div style="font-size:16px;font-weight:700;color:var(--on-surface,#111)">מצלמה</div>
-          <div style="font-size:12px;color:var(--on-surface-3,#888)">צלם את החשבונית עכשיו</div>
+          <div style="font-size:12px;color:var(--on-surface-3,#888)">אפשר לצלם כמה חשבוניות ברצף</div>
         </div>
       </button>
       <button onclick="_scanPick('scan-file-gallery')" style="display:flex;align-items:center;gap:14px;width:100%;background:none;border:none;padding:14px 8px;cursor:pointer;font-family:inherit;border-radius:var(--radius-md,12px);margin-bottom:4px" onmouseenter="this.style.background='var(--surface-low,#f5f5f5)'" onmouseleave="this.style.background='none'">
         <span class="mi" style="font-size:26px;color:var(--primary,#6b35b8)">image</span>
         <div style="text-align:right">
           <div style="font-size:16px;font-weight:700;color:var(--on-surface,#111)">גלריה</div>
-          <div style="font-size:12px;color:var(--on-surface-3,#888)">בחר תמונה מהאלבום</div>
+          <div style="font-size:12px;color:var(--on-surface-3,#888)">אפשר לבחור כמה תמונות ביחד</div>
         </div>
       </button>
       <button onclick="_scanPick('scan-file-pdf')" style="display:flex;align-items:center;gap:14px;width:100%;background:none;border:none;padding:14px 8px;cursor:pointer;font-family:inherit;border-radius:var(--radius-md,12px);margin-bottom:16px" onmouseenter="this.style.background='var(--surface-low,#f5f5f5)'" onmouseleave="this.style.background='none'">
         <span class="mi" style="font-size:26px;color:var(--primary,#6b35b8)">picture_as_pdf</span>
         <div style="text-align:right">
           <div style="font-size:16px;font-weight:700;color:var(--on-surface,#111)">PDF</div>
-          <div style="font-size:12px;color:var(--on-surface-3,#888)">העלה קובץ PDF</div>
+          <div style="font-size:12px;color:var(--on-surface-3,#888)">אפשר להעלות כמה קבצים ביחד</div>
         </div>
       </button>
       <button onclick="document.getElementById('scan-action-sheet')?.remove()" style="width:100%;background:none;border:1px solid var(--border,#e0e0e0);border-radius:var(--radius-md,12px);padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--on-surface-2,#555)">ביטול</button>
@@ -60,6 +62,15 @@ function _scanPick(inputId) {
   setTimeout(() => document.getElementById(inputId)?.click(), 80);
 }
 
+// Entry point for all three file inputs (camera/gallery/pdf). A single file keeps
+// the exact single-invoice review flow; more than one routes into the batch flow.
+async function scannerHandleFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  if (files.length === 1) return scannerHandleFile(files[0]);
+  await scannerRunBatch(files);
+}
+
 async function scannerHandleFile(file) {
   if (!file) return;
   document.getElementById('scanner-idle').style.display = 'none';
@@ -67,20 +78,24 @@ async function scannerHandleFile(file) {
   document.getElementById('scanner-loading-text').textContent = 'שולח לניתוח...';
 
   try {
-    await scannerRun(file, 1);
+    const { fields, items } = await scannerExtract(file, 1);
+    document.getElementById('scanner-loading-text').textContent = 'מוכן לעריכה';
+    scannerData = { fields, items, raw: null };
+    scannerShowResults(fields, items);
   } catch(e) {
     scannerShowError('שגיאה', e.message || 'שגיאה לא ידועה');
   }
 }
 
-async function scannerRun(file, attempt) {
+// Runs OCR (Azure) + AI line-item parsing (Claude) for one file and returns
+// { fields, items }. Shared by the single-invoice flow and the batch flow.
+async function scannerExtract(file, attempt = 1) {
   const isPDF = file.type === 'application/pdf';
   const base64 = await fileToBase64(file);
   const mimeType = isPDF ? 'application/pdf' : 'image/jpeg';
 
   document.getElementById('scanner-loading-text').textContent = 'מנתח עם Azure OCR...';
 
-  // Call via Netlify function to protect API key
   const res = await fetch('/.netlify/functions/ocr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -90,7 +105,7 @@ async function scannerRun(file, attempt) {
   if (!res.ok) {
     if (attempt < 3) {
       await new Promise(r => setTimeout(r, 2000));
-      return scannerRun(file, attempt + 1);
+      return scannerExtract(file, attempt + 1);
     }
     throw new Error('שגיאת OCR — נסה שוב');
   }
@@ -130,9 +145,92 @@ async function scannerRun(file, attempt) {
     console.log('Claude parse fallback to Azure:', e.message);
   }
 
-  document.getElementById('scanner-loading-text').textContent = 'מוכן לעריכה';
-  scannerData = { fields, items, raw: data };
-  scannerShowResults(fields, items);
+  return { fields, items };
+}
+
+// ── Batch scanning (multiple invoices in one go) ────────────────
+async function scannerRunBatch(files) {
+  document.getElementById('scanner-idle').style.display = 'none';
+  document.getElementById('scanner-error').style.display = 'none';
+  document.getElementById('scanner-results').style.display = 'none';
+  document.getElementById('scanner-loading').style.display = 'block';
+
+  batchQueue = files.map(file => ({ file, status: 'pending', fields: null, items: [] }));
+
+  for (let i = 0; i < batchQueue.length; i++) {
+    const entry = batchQueue[i];
+    document.getElementById('scanner-loading-text').textContent = `מעבד חשבונית ${i + 1} מתוך ${batchQueue.length}...`;
+    entry.status = 'processing';
+    try {
+      const { fields, items } = await scannerExtract(entry.file);
+      entry.fields = fields;
+      entry.items = items;
+      // Only auto-save when extraction found enough to trust — a vendor name and at
+      // least one item. Anything thinner goes to manual review rather than risk saving
+      // a near-empty/garbled invoice silently.
+      if (fields.vendorName && items.length) {
+        const result = await saveInvoiceData(fields.vendorName, fields.date, fields.invoiceNumber, fields.isCreditNote ? -Math.abs(fields.total) : fields.total, items, fields);
+        entry.status = result ? 'saved' : 'error';
+        if (!result) entry.errorMsg = 'שגיאה בשמירה';
+      } else {
+        entry.status = 'needs_review';
+      }
+    } catch (e) {
+      entry.status = 'error';
+      entry.errorMsg = e.message || 'שגיאת ניתוח';
+    }
+  }
+
+  showBatchSummary();
+}
+
+function showBatchSummary() {
+  document.getElementById('scanner-loading').style.display = 'none';
+  document.getElementById('scanner-results').style.display = 'block';
+
+  const savedCount = batchQueue.filter(e => e.status === 'saved').length;
+  const reviewCount = batchQueue.length - savedCount;
+  const statusLabels = { saved: 'נשמר', needs_review: 'דורש בדיקה', error: 'שגיאה' };
+  const statusColors = { saved: 'var(--success)', needs_review: 'var(--warning)', error: 'var(--error)' };
+
+  document.getElementById('scanner-results').innerHTML = `
+    <div class="card card-pad mb-12" style="text-align:center">
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px">${savedCount} מתוך ${batchQueue.length} חשבוניות נשמרו</div>
+      ${reviewCount
+        ? `<div style="font-size:13px;color:var(--warning);font-weight:700">${reviewCount} דורשות בדיקה ידנית — פרטים לא זוהו במלואם</div>`
+        : `<div style="font-size:13px;color:var(--success);font-weight:700">הכל תקין!</div>`}
+    </div>
+    <div class="card mb-12">
+      ${batchQueue.map((e, i) => {
+        const label = e.fields?.vendorName || e.file.name;
+        return `
+        <div class="list-row">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(label)}</div>
+            <div style="font-size:11px;color:var(--on-surface-3)">${e.fields?.date || ''}${e.fields?.total ? ' · ₪' + e.fields.total : ''}</div>
+          </div>
+          <div style="text-align:left;flex-shrink:0">
+            <div style="font-size:12px;font-weight:700;color:${statusColors[e.status] || 'var(--on-surface-3)'}">${statusLabels[e.status] || e.status}</div>
+            ${e.status !== 'saved' ? `<button onclick="reviewBatchItem(${i})" style="font-size:11px;border:none;background:none;color:var(--primary);font-weight:700;cursor:pointer;font-family:inherit;padding:2px 0">לבדיקה</button>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="btn-primary mb-12" onclick="scannerReset()">סיום</button>
+  `;
+}
+
+// Opens the standard single-invoice edit screen pre-filled with a batch item's
+// (possibly partial) extracted data, so the user can fix and save it manually.
+function reviewBatchItem(i) {
+  const entry = batchQueue[i];
+  if (!entry) return;
+  const fields = { vendorName: '', date: new Date().toISOString().slice(0, 10), invoiceNumber: '', total: 0, isCreditNote: false, ...(entry.fields || {}) };
+  scannerData = { fields, items: entry.items || [], raw: null, batchIndex: i };
+  document.getElementById('scanner-loading').style.display = 'none';
+  document.getElementById('scanner-error').style.display = 'none';
+  document.getElementById('scanner-results').style.display = 'block';
+  scannerShowResults(scannerData.fields, scannerData.items);
 }
 
 function parseInvoiceFields(data) {
@@ -334,8 +432,7 @@ function recalcItem(i) {
 }
 
 async function handleSaveInvoice() {
-  const userId = Auth.userId;
-  if (!userId) return;
+  if (!Auth.userId) return;
 
   const vendorName = document.getElementById('res-vendor').value.trim();
   const date = document.getElementById('res-date').value;
@@ -360,9 +457,37 @@ async function handleSaveInvoice() {
   const btn = document.querySelector('#scanner-results .btn-primary');
   if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
 
-  // Save invoice to Supabase
-  // Extract supplier contact info from invoice fields
   const invFields = scannerData?.fields || {};
+  const result = await saveInvoiceData(vendorName, date, invoiceNumber, total, items, invFields);
+
+  if (!result) {
+    showToast('שגיאה בשמירה — נסה שוב');
+    if (btn) { btn.textContent = 'שמור חשבונית'; btn.disabled = false; }
+    return;
+  }
+
+  // If this save came from the batch-review screen, go back to the batch summary
+  // instead of the normal single-invoice exit (dashboard / WhatsApp prompt).
+  if (scannerData?.batchIndex != null) {
+    batchQueue[scannerData.batchIndex].status = 'saved';
+    showToast('החשבונית נשמרה בהצלחה');
+    showBatchSummary();
+    return;
+  }
+
+  showToast('החשבונית נשמרה בהצלחה');
+  if (result.phone) {
+    setTimeout(() => showWhatsAppPrompt(vendorName, result.phone), 800);
+  } else {
+    setTimeout(() => { navTo('dashboard'); }, 1500);
+  }
+}
+
+// Persists one invoice + its items + supplier upsert. Returns { phone } on success,
+// null on failure. Shared by the single-invoice save and the batch auto-save loop.
+async function saveInvoiceData(vendorName, date, invoiceNumber, total, items, invFields = {}) {
+  const userId = Auth.userId;
+  if (!userId || !vendorName) return null;
 
   const activeLocation = getActiveLocation();
   const invoice = await DB.insert('invoices', {
@@ -376,13 +501,8 @@ async function handleSaveInvoice() {
     created_at: new Date().toISOString()
   });
 
-  if (!invoice) {
-    showToast('שגיאה בשמירה — נסה שוב');
-    if (btn) { btn.textContent = 'שמור חשבונית'; btn.disabled = false; }
-    return;
-  }
+  if (!invoice) return null;
 
-  // Save items to invoice_items
   if (items.length && invoice.id) {
     for (const item of items) {
       await DB.insert('invoice_items', {
@@ -398,19 +518,13 @@ async function handleSaveInvoice() {
     }
   }
 
-  // Update supplier in suppliers table
   const supplierPhone = await upsertSupplier(userId, vendorName, total, date, invFields.vendorPhone || '', {
     address: invFields.vendorAddress,
     email: invFields.vendorEmail,
     tax_id: invFields.vendorTaxId
   });
 
-  showToast('החשבונית נשמרה בהצלחה');
-  if (supplierPhone) {
-    setTimeout(() => showWhatsAppPrompt(vendorName, supplierPhone), 800);
-  } else {
-    setTimeout(() => { navTo('dashboard'); }, 1500);
-  }
+  return { invoice, phone: supplierPhone || '' };
 }
 
 async function upsertSupplier(userId, supplierName, amount, date, phone, extraInfo = {}) {
