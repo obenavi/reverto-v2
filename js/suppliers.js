@@ -4,6 +4,18 @@ let allSuppliers = [];
 let currentSupplier = null;
 let _newSupTerm = null;
 
+// Same category keys used by the market page tabs (js/market.js CAT_RULES) — tagging
+// a supplier's category here lets the market view use it as a hint when a product
+// name alone is ambiguous.
+const SUPPLIER_CATEGORIES = [
+  { val: '', label: 'לא מוגדר' },
+  { val: 'produce', label: 'ירקות ופירות' },
+  { val: 'animal', label: 'מן החי (בשר/דגים/עוף/מוצרי חלב)' },
+  { val: 'packaged', label: 'מזון ארוז' },
+  { val: 'cleaning', label: 'חומרי ניקוי' },
+  { val: 'other', label: 'אחר' }
+];
+
 async function renderSuppliersList() {
   const userId = Auth.userId;
   if (!userId) return;
@@ -112,7 +124,13 @@ async function viewSupplier(id) {
         חזרה לספקים
       </button>
 
-      <div style="font-size:22px;font-weight:800;margin-bottom:3px">${escHtml(sup.name)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:3px">
+        <div style="font-size:22px;font-weight:800">${escHtml(sup.name)}</div>
+        <button onclick="document.getElementById('sup-details-card')?.scrollIntoView({behavior:'smooth',block:'start'})"
+          style="flex-shrink:0;background:var(--surface-low);border:1.5px solid var(--border);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--primary);cursor:pointer;font-family:inherit;white-space:nowrap">
+          ערוך פרטי ספק
+        </button>
+      </div>
       <div style="font-size:12px;color:var(--on-surface-3);margin-bottom:18px">${sup.invoice_count || 0} חשבוניות · אחרונה ${formatDate(sup.last_invoice_date)}</div>
 
       <!-- 3 Stat Boxes -->
@@ -156,10 +174,15 @@ async function viewSupplier(id) {
       </div>
 
       <!-- Supplier Details -->
-      <div class="section-title mb-8">פרטי ספק</div>
+      <div class="section-title mb-8" id="sup-details-card">פרטי ספק</div>
       <div class="card card-pad mb-24">
         <label class="field-label">שם נציג / סוכן</label>
-        <input class="input mb-10" id="sup-agent-input" type="text" placeholder="שם הנציג או הסוכן" value="${escHtml(sup.agent_name || '')}">
+        <input class="input mb-10" id="sup-agent-input" type="text" placeholder="שם הנציג או הסוכן" value="${escHtml(sup.contact_name || '')}">
+
+        <label class="field-label">קטגוריה</label>
+        <select class="input mb-10" id="sup-category-input">
+          ${SUPPLIER_CATEGORIES.map(c => `<option value="${c.val}"${(sup.category || '') === c.val ? ' selected' : ''}>${c.label}</option>`).join('')}
+        </select>
 
         <label class="field-label">טלפון *</label>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
@@ -379,10 +402,11 @@ async function saveSupplierDetails() {
   const email    = document.getElementById('sup-email-input')?.value.trim();
   const delivery = document.getElementById('sup-delivery-days')?.value.trim();
   const agent    = document.getElementById('sup-agent-input')?.value.trim();
+  const category = document.getElementById('sup-category-input')?.value || '';
   if (!phone) { showToast('טלפון הוא שדה חובה'); return; }
   const btn = document.querySelector('#page-suppliers .card-pad .btn-primary');
   if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
-  const updates = { phone, email: email || null, delivery_days: delivery || null, agent_name: agent || null };
+  const updates = { phone, email: email || null, delivery_days: delivery || null, contact_name: agent || null, category: category || null };
   const ok = await DB.update('suppliers', `?id=eq.${currentSupplier.id}`, updates);
   if (ok) {
     Object.assign(currentSupplier, updates);

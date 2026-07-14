@@ -13,14 +13,22 @@ function verifyJWT(token, secret) {
   return payload;
 }
 
-const PRICE_PROMPT = `You are extracting a Hebrew produce/vegetable price list.
-Extract ALL products with their prices and units.
+const PRICE_PROMPT = `You are extracting a Hebrew produce/food price list.
+Extract ALL products with their prices, units, and category.
 Return ONLY a valid JSON array. No explanation, no markdown, no text before or after.
 Start your response with [ and end with ]
 
-Format: [{"name":"product name in Hebrew","price":8.50,"unit":"ק\\"ג"}]
+Format: [{"name":"product name in Hebrew","price":8.50,"unit":"ק\\"ג","category":"produce"}]
 
 Units to use: ק"ג, גרם, ליטר, מ"ל, יחידה, צרור, קרטון
+
+"category" must be exactly one of: "produce", "animal", "packaged", "cleaning", "other"
+Classification rules (this is the part that matters most — get it right, not just the price):
+- "produce": vegetables, fruits, fresh herbs — including FROZEN vegetables (e.g. ירקות קפואים, תרד קפוא, אפונה קפואה). Frozen vegetables are still produce, not packaged.
+- "animal": anything animal-derived — fish, seafood, poultry, beef, lamb, pork, dairy, eggs — this applies EVEN WHEN FROZEN (a frozen fish or frozen chicken breast is still "animal", never "packaged"). If the source says קפוא (frozen) or טרי (fresh), keep that word in the "name" field exactly as written, don't drop it.
+- "packaged": packaged/processed food that is not vegetables and not animal-derived — this includes frozen items like ice cream (גלידה), frozen dough/pastry (בצק קפוא), frozen desserts (קינוחים), canned goods, oils, grains, spices, snacks, bread
+- "cleaning": cleaning/hygiene supplies
+- "other": anything that doesn't clearly fit the above — don't force a guess if genuinely unclear
 Only include items that have a clear price number greater than 0.`;
 
 async function parseWithClaude(content, mimeType, apiKey) {
@@ -127,9 +135,15 @@ exports.handler = async (event) => {
       products = await parseWithClaude(base64, mimeType, ANTHROPIC_KEY);
     }
 
+    const VALID_CATEGORIES = ['produce', 'animal', 'packaged', 'cleaning', 'other'];
     const valid = products
       .filter(p => p.name && parseFloat(p.price) > 0)
-      .map(p => ({ name: String(p.name).trim(), price: parseFloat(p.price), unit: p.unit || 'ק"ג' }));
+      .map(p => ({
+        name: String(p.name).trim(),
+        price: parseFloat(p.price),
+        unit: p.unit || 'ק"ג',
+        category: VALID_CATEGORIES.includes(p.category) ? p.category : ''
+      }));
 
     return {
       statusCode: 200,

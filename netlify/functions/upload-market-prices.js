@@ -31,12 +31,14 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'prices array required' }) };
   }
 
+  const VALID_CATEGORIES = ['produce', 'animal', 'packaged', 'cleaning', 'other'];
   const today = new Date().toISOString().slice(0, 10);
   const rows = prices
     .map(p => ({
       name: (p.name || '').trim(),
       price: parseFloat(p.price),
       unit: (p.unit || 'ק"ג').trim(),
+      category: VALID_CATEGORIES.includes(p.category) ? p.category : '',
       date: today,
       updated_at: new Date().toISOString()
     }))
@@ -48,30 +50,42 @@ exports.handler = async (event) => {
   const SUPABASE_KEY = process.env.SUPABASE_KEY;
   const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' };
 
+  // Rows with a known category go through as-is. Rows without one (e.g. a plain CSV
+  // upload with no AI classification) must NOT include the category key at all in
+  // their upsert — otherwise they'd overwrite a category already set for that
+  // product (from an earlier AI-classified upload) with an empty value.
+  const withCat = rows.filter(r => r.category);
+  const withoutCat = rows.filter(r => !r.category).map(({ category, ...rest }) => rest);
+
   try {
     // market_prices holds exactly one row per product — upsert (replace in place)
     // so re-uploading never creates duplicates or leaves stale rows behind.
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/market_prices?on_conflict=name`, {
-      method: 'POST',
-      headers: { ...H, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(rows)
-    });
-
-    if (!r.ok) {
-      const err = await r.text();
-      return { statusCode: 500, body: JSON.stringify({ error: err }) };
+    for (const batch of [withCat, withoutCat]) {
+      if (!batch.length) continue;
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/market_prices?on_conflict=name`, {
+        method: 'POST',
+        headers: { ...H, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(batch)
+      });
+      if (!r.ok) {
+        const err = await r.text();
+        return { statusCode: 500, body: JSON.stringify({ error: err }) };
+      }
     }
 
     // market_price_history is an append-only log (one row per product per upload
     // date) — this is what powers "price history per product" and long-term admin
     // tracking, completely separate from the current-price table above so history
     // never clutters or bloats the "latest price" views.
-    const historyRows = rows.map(({ updated_at, ...r }) => r);
-    await fetch(`${SUPABASE_URL}/rest/v1/market_price_history?on_conflict=name,date`, {
-      method: 'POST',
-      headers: { ...H, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(historyRows)
-    });
+    for (const batch of [withCat, withoutCat]) {
+      if (!batch.length) continue;
+      const historyRows = batch.map(({ updated_at, ...r }) => r);
+      await fetch(`${SUPABASE_URL}/rest/v1/market_price_history?on_conflict=name,date`, {
+        method: 'POST',
+        headers: { ...H, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(historyRows)
+      });
+    }
 
     return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uploaded: rows.length }) };
   } catch (e) {

@@ -211,6 +211,7 @@ tr:hover td{background:rgba(139,92,246,.04)}
             <th style="background:rgba(139,92,246,.08);color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">שם מוצר</th>
             <th style="background:rgba(139,92,246,.08);color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">מחיר ₪</th>
             <th style="background:rgba(139,92,246,.08);color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">יחידה</th>
+            <th style="background:rgba(139,92,246,.08);color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)">קטגוריה</th>
             <th style="background:rgba(139,92,246,.08);padding:10px 12px;border-bottom:1px solid var(--border)"></th>
           </tr></thead>
           <tbody id="mkt-edit-tbody"></tbody>
@@ -692,9 +693,17 @@ function fileToBase64(file) {
 
 // ── Editor ────────────────────────────────────────────────────
 const MKT_UNITS = ['ק"ג','גרם','ליטר','מ"ל','יחידה','צרור','קרטון'];
+const MKT_CATEGORIES = [
+  { val: '', label: 'לא סווג' },
+  { val: 'produce', label: 'ירקות ופירות' },
+  { val: 'animal', label: 'מן החי' },
+  { val: 'packaged', label: 'מזון ארוז' },
+  { val: 'cleaning', label: 'חומרי ניקוי' },
+  { val: 'other', label: 'אחר' }
+];
 
 function loadToEditor(products) {
-  _mktEditRows = products.map(p => ({ name: p.name, price: p.price, unit: p.unit || 'ק"ג' }));
+  _mktEditRows = products.map(p => ({ name: p.name, price: p.price, unit: p.unit || 'ק"ג', category: p.category || '' }));
   renderMktEditor();
   document.getElementById('mkt-edit-section').style.display = 'block';
 }
@@ -702,7 +711,7 @@ function loadToEditor(products) {
 function renderMktEditor() {
   const tbody = document.getElementById('mkt-edit-tbody');
   const countEl = document.getElementById('mkt-edit-count');
-  if (countEl) countEl.textContent = `${_mktEditRows.length} מוצרים — ערוך לפני שמירה`;
+  if (countEl) countEl.textContent = `${_mktEditRows.length} מוצרים — ערוך לפני שמירה (כולל קטגוריה, לתצוגת "שוק" מדויקת)`;
 
   tbody.innerHTML = _mktEditRows.map((row, i) => `
     <tr id="mkt-row-${i}" style="border-bottom:1px solid rgba(255,255,255,.04)">
@@ -721,13 +730,19 @@ function renderMktEditor() {
         </select>
       </td>
       <td style="padding:8px 12px">
+        <select onchange="_mktEditRows[${i}].category=this.value"
+          style="background:var(--surface);border:1px solid ${row.category ? 'var(--border)' : '#fbbf24'};color:var(--text);padding:6px 10px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
+          ${MKT_CATEGORIES.map(c => `<option value="${c.val}"${c.val===row.category?' selected':''}>${c.label}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:8px 12px">
         <button onclick="deleteMktRow(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:18px;padding:0 4px">×</button>
       </td>
     </tr>`).join('');
 }
 
 function addMktRow() {
-  _mktEditRows.push({ name: '', price: 0, unit: 'ק"ג' });
+  _mktEditRows.push({ name: '', price: 0, unit: 'ק"ג', category: '' });
   renderMktEditor();
   // Focus the new row's name input
   const inputs = document.querySelectorAll('#mkt-edit-tbody input');

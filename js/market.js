@@ -6,15 +6,31 @@ let userPriceHistory = {}; // { productName: [{date, price}] }
 let currentMarketCat = 'all';
 
 // ── Category classification ──────────────────────────────────
+// Products uploaded via the AI-assisted price-list scan already carry a stored
+// category (classified once, correctly, at upload time — see parse-market-pdf.js).
+// This regex classifier is only a fallback for legacy rows uploaded before that
+// existed. Two prior bugs made vegetables leak into every category: a bare "ים"
+// (meant for "פירות ים"/seafood) matches almost any Hebrew plural noun, since ־ים
+// is the standard masculine plural suffix (e.g. "ירקות קפואים" was misclassified as
+// animal); and a bare "לבן" (meant for dairy/labneh) matches any "white X" product
+// (e.g. "בצל לבן"). Both are removed below in favor of more specific terms. "פרי"
+// also doesn't match its own plural "פירות" as a substring (Hebrew reorders the
+// letters in this word's plural form), so "פירות" is now listed explicitly.
 const CAT_RULES = {
-  produce:  /ירק|פרי|עגבני|פלפל|מלפפון|חסה|כרוב|בצל|שום|גזר|תפוח|לימון|אבוקד|עלה|עשב|נענע|פטרוזיל|כוסברה|בזיל|תות|ענב|אפרסק|שזיף|מנגו|אננס|בננ|ארטישוק|שומר|קולרבי|ברוקול|כרובית|תרד|חציל|דלע|קישו|מולוחי|לוביה|שעועית|אפונה|אבטיח|מלון|תמר|תאנ|רימון/,
-  animal:   /עוף|בשר|דג|סלמון|פרגית|כבד|ביצ|חלב|גבינ|שמנת|יוגורט|קוטג|לבן|מוצרל|פרמז|צ'דר|שרימפ|ים|אנטריקוט|סינטה|צלע|כתף|שוק|פרגי|הודו|ברווז|כבש|טלה|חזיר|בקר|עגל|חזה|פילה|שפונדרה|אסאדו|קבב|קציצ/,
-  packaged: /שמן|קמח|סוכר|מלח|אורז|פסטה|עדש|שעורה|כוסמת|קינואה|רוטב|קטשופ|חרדל|מיונז|אכסוס|שמר|אבקה|שוקולד|קפה|תה|קרקר|לחם|לחמניה|פיתה|בגט|טורטי|נאן|עוגי|ביסקוי|ריבה|דבש|סירופ|שוקו|ממרח|חומוס|טחינ|צנים|פיצוח|שוקולד|ממתק|גלידה|שימור|קופסא/,
+  produce:  /ירק|פרי|פירות|עגבני|פלפל|מלפפון|חסה|כרוב|בצל|שום|גזר|תפוח|לימון|אבוקד|עלה|עשב|נענע|פטרוזיל|כוסברה|בזיל|תות|ענב|אפרסק|שזיף|מנגו|אננס|בננ|ארטישוק|שומר|קולרבי|ברוקול|כרובית|תרד|חציל|דלע|קישו|מולוחי|לוביה|שעועית|אפונה|אבטיח|מלון|תמר|תאנ|רימון|פטרי/,
+  animal:   /עוף|בשר|דג|סלמון|פרגית|כבד|ביצ|חלב|גבינ|שמנת|יוגורט|קוטג|מוצרל|פרמז|צ'דר|שרימפ|פירות ים|רכיכות|קלמארי|טונה|אנטריקוט|סינטה|צלע|כתף|פרגי|הודו|ברווז|כבש|טלה|חזיר|בקר|עגל|חזה|פילה|שפונדרה|אסאדו|קבב|קציצ/,
+  packaged: /שמן|קמח|סוכר|מלח|אורז|פסטה|עדש|שעורה|כוסמת|קינואה|רוטב|קטשופ|חרדל|מיונז|אכסוס|שמר|אבקה|שוקולד|קפה|תה|קרקר|לחם|לחמניה|פיתה|בגט|טורטי|נאן|עוגי|ביסקוי|ריבה|דבש|סירופ|שוקו|ממרח|חומוס|טחינ|צנים|פיצוח|ממתק|גלידה|שימור|קופסא|בצק|קינוח/,
   cleaning: /ניקו|סבון|אבקת|שוטף|חיטו|חומר|מגב|ספוג|נייר|שקית|כפפ|ידית|פלסטיק|אלכוהול|כלי חד/
 };
 
-function getProductCat(name) {
-  const n = (name || '').toLowerCase();
+function getProductCat(product) {
+  // product may be a plain string (legacy call sites) or a row object with a
+  // stored category from the upload flow.
+  if (typeof product === 'object' && product) {
+    if (product.category) return product.category;
+    return getProductCat(product.name);
+  }
+  const n = (product || '').toLowerCase();
   for (const [cat, re] of Object.entries(CAT_RULES)) {
     if (re.test(n)) return cat;
   }
@@ -67,7 +83,7 @@ function filterMarket(q) {
 function applyMarketFilters(q) {
   let filtered = allMarketPrices;
   if (currentMarketCat !== 'all') {
-    filtered = filtered.filter(p => getProductCat(p.name) === currentMarketCat);
+    filtered = filtered.filter(p => getProductCat(p) === currentMarketCat);
   }
   if (q) {
     filtered = filtered.filter(p => (p.name || '').includes(q));
