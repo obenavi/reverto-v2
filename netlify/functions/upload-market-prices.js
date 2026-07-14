@@ -31,7 +31,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'prices array required' }) };
   }
 
-  const VALID_CATEGORIES = ['produce', 'animal', 'packaged', 'cleaning', 'other'];
+  const VALID_CATEGORIES = ['produce', 'animal', 'drinks', 'frozen', 'packaged', 'cleaning', 'other'];
   const today = new Date().toISOString().slice(0, 10);
   const rows = prices
     .map(p => ({

@@ -12,6 +12,8 @@ const SUPPLIER_CATEGORIES = [
   { val: 'produce', label: 'ירקות ופירות' },
   { val: 'animal', label: 'מן החי (בשר/דגים/עוף/מוצרי חלב)' },
   { val: 'packaged', label: 'מזון ארוז' },
+  { val: 'drinks', label: 'משקאות' },
+  { val: 'frozen', label: 'קפואים' },
   { val: 'cleaning', label: 'חומרי ניקוי' },
   { val: 'other', label: 'אחר' }
 ];

@@ -22,11 +22,13 @@ Format: [{"name":"product name in Hebrew","price":8.50,"unit":"ק\\"ג","categor
 
 Units to use: ק"ג, גרם, ליטר, מ"ל, יחידה, צרור, קרטון
 
-"category" must be exactly one of: "produce", "animal", "packaged", "cleaning", "other"
-Classification rules (this is the part that matters most — get it right, not just the price):
-- "produce": vegetables, fruits, fresh herbs — including FROZEN vegetables (e.g. ירקות קפואים, תרד קפוא, אפונה קפואה). Frozen vegetables are still produce, not packaged.
-- "animal": anything animal-derived — fish, seafood, poultry, beef, lamb, pork, dairy, eggs — this applies EVEN WHEN FROZEN (a frozen fish or frozen chicken breast is still "animal", never "packaged"). If the source says קפוא (frozen) or טרי (fresh), keep that word in the "name" field exactly as written, don't drop it.
-- "packaged": packaged/processed food that is not vegetables and not animal-derived — this includes frozen items like ice cream (גלידה), frozen dough/pastry (בצק קפוא), frozen desserts (קינוחים), canned goods, oils, grains, spices, snacks, bread
+"category" must be exactly one of: "produce", "animal", "drinks", "frozen", "packaged", "cleaning", "other"
+Classification rules (this is the part that matters most — get it right, not just the price). Check "animal" first — it always wins even when frozen:
+- "animal": anything animal-derived — fish, seafood, poultry, beef, lamb, pork, dairy, eggs — this applies EVEN WHEN FROZEN (a frozen fish or frozen chicken breast is still "animal", never "frozen" or "packaged"). If the source says קפוא (frozen) or טרי (fresh), keep that word in the "name" field exactly as written, don't drop it.
+- "drinks": beverages — wine, beer, spirits, soft drinks, juice, water, energy drinks
+- "frozen": frozen items that are NOT animal-derived — frozen vegetables (ירקות קפואים, תרד קפוא, אפונה קפואה), ice cream (גלידה), frozen dough/pastry (בצק קפוא), frozen desserts (קינוחים קפואים)
+- "produce": fresh (non-frozen) vegetables, fruits, fresh herbs
+- "packaged": packaged/processed food that isn't any of the above — canned goods, oils, grains, spices, snacks, bread, non-frozen desserts
 - "cleaning": cleaning/hygiene supplies
 - "other": anything that doesn't clearly fit the above — don't force a guess if genuinely unclear
 Only include items that have a clear price number greater than 0.`;
@@ -135,7 +137,7 @@ exports.handler = async (event) => {
       products = await parseWithClaude(base64, mimeType, ANTHROPIC_KEY);
     }
 
-    const VALID_CATEGORIES = ['produce', 'animal', 'packaged', 'cleaning', 'other'];
+    const VALID_CATEGORIES = ['produce', 'animal', 'drinks', 'frozen', 'packaged', 'cleaning', 'other'];
     const valid = products
       .filter(p => p.name && parseFloat(p.price) > 0)
       .map(p => ({
