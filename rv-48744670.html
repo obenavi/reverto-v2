@@ -259,7 +259,7 @@ tr:hover td{background:rgba(139,92,246,.04)}
   <div class="card">
     <div class="card-title"><span>ייצוא נתונים</span></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
-      ${[['👥 לקוחות','שם, עיר, קטגוריה, טלפון, מייל, סריקות, מחזור, דירוג','exportClients()'],
+      ${[['👥 לקוחות','שם, איש קשר, עיר, קטגוריה, טלפון, מייל, סריקות, מחזור, דירוג, מייל ברוכים הבאים','exportClients()'],
          ['🏢 ספקים','שם, לקוחות, מוצרים, מחזור, טווח מחירים, ערים','exportSuppliers()'],
          ['📦 מוצרים','מוצר, כמות, קונים, min/max/חציון, פיזור, ספקים','exportProducts()'],
          ['📈 מחירי שוק','מוצר, מחיר שוק, ממוצע לקוחות, הפרש','exportMarket()'],
@@ -426,7 +426,7 @@ function renderClients() {
   document.getElementById('clients-tbody').innerHTML = data.map((c,i)=>`
     <tr style="cursor:pointer" onclick="showClientDetail('${c.id}')">
       <td style="color:var(--muted)">${i+1}</td>
-      <td><strong>${c.business_name||'—'}</strong><br><span style="font-size:11px;color:var(--muted)">${c.email||''}</span></td>
+      <td><strong>${c.business_name||'—'}</strong><br><span style="font-size:11px;color:var(--muted)">${c.contact_name||'—'}</span><br><span style="font-size:10px;color:var(--sub)">${c.email||''}</span></td>
       <td>${c.city||'—'}</td><td>${c.category||'—'}</td>
       <td><div class="chip ${c.status}">${c.status==='active'?'פעיל':c.status==='new'?'חדש':'לא פעיל'}</div></td>
       <td><strong>${c.invoices.length}</strong><br><span style="font-size:11px;color:var(--muted)">${c.scansPerMonth}/חודש</span></td>
@@ -446,11 +446,16 @@ function showClientDetail(userId) {
   const c = CLIENTS.find(cl=>cl.id===userId); if(!c) return;
   document.getElementById('client-detail').style.display='block';
   document.getElementById('cd-name').textContent = c.business_name||'—';
+  const contactName = c.contact_name || [c.first_name,c.last_name].filter(Boolean).join(' ') || '—';
+  const welcomeStatus = c.welcome_email_sent_at
+    ? `<span style="color:#4ade80">✓ נשלח · ${new Date(c.welcome_email_sent_at).toLocaleDateString('he-IL')}</span>`
+    : `<span style="color:#fbbf24">⚠ לא נשלח</span>`;
   document.getElementById('cd-info').innerHTML = [
-    ['עיר',c.city||'—'],['קטגוריה',c.category||'—'],['טלפון',c.phone||'—'],
+    ['איש קשר',contactName],['עיר',c.city||'—'],['קטגוריה',c.category||'—'],['טלפון',c.phone||'—'],
     ['מייל',c.email||'—'],['כתובת',c.address||'—'],['קוד אישי',c.personal_code||'—'],
     ['הצטרף',c.joined],['סריקות',c.invoices.length],
     ['מחזור','₪'+c.totalRevenue.toLocaleString()],['דירוג',stars(c.score)],
+    ['מייל ברוכים הבאים',welcomeStatus],
   ].map(([l,v])=>`<div class="detail-item"><div class="detail-lbl">${l}</div><div class="detail-val">${v}</div></div>`).join('');
   document.getElementById('cd-suppliers').innerHTML = c.suppliers.length ? c.suppliers.map(s=>`<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">${s.name||'—'}</div>`).join('') : '<div style="color:var(--muted);font-size:12px">אין</div>';
   const pc={};c.items.forEach(i=>{if(i.product_name)pc[i.product_name]=(pc[i.product_name]||0)+1;});
@@ -606,7 +611,7 @@ function download(csv,name){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
 }
 function exportClients(){
-  const rows=CLIENTS.map(c=>({'שם_עסק':c.business_name||'','עיר':c.city||'','קטגוריה':c.category||'','טלפון':c.phone||'','מייל':c.email||'','כתובת':c.address||'','קוד_אישי':c.personal_code||'','סטטוס':c.status,'סריקות':c.invoices.length,'ספקים':c.suppliers.length,'מחזור':c.totalRevenue.toFixed(0),'דירוג':c.score,'הצטרף':c.joined}));
+  const rows=CLIENTS.map(c=>({'שם_עסק':c.business_name||'','איש_קשר':c.contact_name||[c.first_name,c.last_name].filter(Boolean).join(' ')||'','עיר':c.city||'','קטגוריה':c.category||'','טלפון':c.phone||'','מייל':c.email||'','כתובת':c.address||'','קוד_אישי':c.personal_code||'','סטטוס':c.status,'סריקות':c.invoices.length,'ספקים':c.suppliers.length,'מחזור':c.totalRevenue.toFixed(0),'דירוג':c.score,'הצטרף':c.joined,'מייל_ברוכים_הבאים':c.welcome_email_sent_at?'נשלח':'לא נשלח'}));
   if(!rows.length) return;
   download(toCSV(rows,Object.keys(rows[0])),'reverto-clients.csv');
 }
