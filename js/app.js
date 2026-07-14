@@ -869,6 +869,11 @@ function initProfile() {
     if (!profile.working_days) _openSection('ops');
   }
 
+  // ── תזכורות (Z יומי, סריקת חשבוניות, עדכון החזרות) ──
+  _profileNotifPrefs = { z_timing: 'same_day', z_hour: 21, scan_hour: 10, returns_hour: 14, ...(profile.notification_prefs || {}) };
+  const notifBody = document.getElementById('body-notif');
+  if (notifBody) notifBody.innerHTML = _renderNotifBody();
+
   loadLocations();
   loadPartnerCodes();
 
@@ -877,6 +882,69 @@ function initProfile() {
     document.getElementById('partner-card')?.style.setProperty('display', 'none');
     document.getElementById('manager-card')?.style.setProperty('display', 'none');
   }
+}
+
+// ── תזכורות (consolidated reminder settings, mirrors the onboarding step) ──
+let _profileNotifPrefs = null;
+
+function _renderNotifBody() {
+  const p = _profileNotifPrefs;
+  const zBtn = (val, label) => `
+    <button onclick="profSetZTiming('${val}')"
+      style="flex:1;padding:9px;border-radius:10px;border:2px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:${p.z_timing === val ? 'var(--primary)' : 'transparent'};color:${p.z_timing === val ? 'white' : 'var(--on-surface-2)'}">${label}</button>`;
+  const hourChips = (field, hours) => hours.map(h => `
+    <button onclick="profSetHour('${field}',${h})"
+      style="padding:6px 10px;border-radius:16px;border:2px solid var(--border);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;background:${p[field] === h ? 'var(--primary)' : 'transparent'};color:${p[field] === h ? 'white' : 'var(--on-surface-2)'}">${String(h).padStart(2, '0')}:00</button>`).join('');
+
+  return `
+    <div style="font-size:12px;color:var(--on-surface-3);margin-bottom:14px">תזכורות יישלחו בימי הפעילות בלבד</div>
+
+    <label class="field-label" style="margin-bottom:8px">Z יומי — מתי להזין?</label>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      ${zBtn('same_day', 'באותו יום')}
+      ${zBtn('next_day', 'ביום שלמחרת בבוקר')}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
+      ${hourChips('z_hour', [9, 10, 12, 14, 16, 18, 20, 21, 22])}
+    </div>
+
+    <label class="field-label" style="margin-bottom:8px">סריקת חשבוניות</label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
+      ${hourChips('scan_hour', [9, 10, 12, 14, 16, 18])}
+    </div>
+
+    <label class="field-label" style="margin-bottom:8px">עדכון החזרות לספק</label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
+      ${hourChips('returns_hour', [10, 12, 14, 16, 18, 20])}
+    </div>
+
+    <button class="btn-primary" onclick="saveNotifDetails()" style="width:100%">שמור תזכורות</button>`;
+}
+
+function profSetZTiming(val) {
+  _profileNotifPrefs.z_timing = val;
+  document.getElementById('body-notif').innerHTML = _renderNotifBody();
+}
+
+function profSetHour(field, h) {
+  _profileNotifPrefs[field] = h;
+  document.getElementById('body-notif').innerHTML = _renderNotifBody();
+}
+
+async function saveNotifDetails() {
+  const btn = document.querySelector('#body-notif .btn-primary');
+  if (btn) { btn.textContent = 'שומר...'; btn.disabled = true; }
+  const ok = await DB.update('users', '', { notification_prefs: _profileNotifPrefs });
+  if (ok) {
+    const profile = Auth.profile;
+    profile.notification_prefs = _profileNotifPrefs;
+    _store.set('rv_profile', JSON.stringify(profile));
+    showToast('תזכורות עודכנו ✓');
+    requestPushIfConfigured();
+  } else {
+    showToast('שגיאה בשמירה');
+  }
+  if (btn) { btn.textContent = 'שמור תזכורות'; btn.disabled = false; }
 }
 
 function _renderCodeRows(codes) {
