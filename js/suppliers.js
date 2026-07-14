@@ -731,8 +731,10 @@ async function supContactPicker() {
   try {
     const contacts = await navigator.contacts.select(['name', 'tel'], { multiple: false });
     if (contacts?.length) {
+      const name = contacts[0].name?.[0] || '';
       const phone = contacts[0].tel?.[0] || '';
       if (phone) document.getElementById('sup-phone-input').value = phone;
+      if (name) document.getElementById('sup-agent-input').value = name;
     }
   } catch { showToast('לא ניתן לגשת לאנשי הקשר'); }
 }
