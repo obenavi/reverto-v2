@@ -78,7 +78,20 @@ async function scannerHandleFile(file) {
   document.getElementById('scanner-loading-text').textContent = 'שולח לניתוח...';
 
   try {
-    const { fields, items } = await scannerExtract(file, 1);
+    const detected = await scannerExtract(file, 1);
+
+    if (detected.length > 1) {
+      // A single uploaded file (typically a multi-page scanned PDF) contained more
+      // than one invoice — route into the same per-invoice review flow as a batch
+      // upload instead of merging every supplier's items into one record.
+      document.getElementById('scanner-loading-text').textContent = `זוהו ${detected.length} חשבוניות בקובץ — מעבד...`;
+      batchQueue = [];
+      for (const inv of detected) await scannerQueueInvoice(file, inv.fields, inv.items);
+      showBatchSummary(1);
+      return;
+    }
+
+    const { fields, items } = detected[0] || { fields: {}, items: [] };
     document.getElementById('scanner-loading-text').textContent = 'מוכן לעריכה';
     scannerData = { fields, items, raw: null };
     scannerShowResults(fields, items);
@@ -87,8 +100,11 @@ async function scannerHandleFile(file) {
   }
 }
 
-// Runs OCR (Azure) + AI line-item parsing (Claude) for one file and returns
-// { fields, items }. Shared by the single-invoice flow and the batch flow.
+// Runs OCR (Azure) for one file and returns an array of { fields, items } — one
+// entry per invoice Azure's prebuilt-invoice model detected *within that file*.
+// Most uploads contain exactly one invoice, but a single multi-page PDF (e.g. a
+// stack of paper invoices run through an office scanner) can contain several,
+// each from a different supplier — those must stay separate, not merge into one.
 // `silent` skips the per-step status text (used in batch mode, where several
 // files run concurrently and would otherwise race to overwrite the same line).
 async function scannerExtract(file, attempt = 1, silent = false) {
@@ -115,39 +131,59 @@ async function scannerExtract(file, attempt = 1, silent = false) {
   const data = await res.json();
   if (!silent) document.getElementById('scanner-loading-text').textContent = 'מנתח עם AI...';
 
-  const fields = parseInvoiceFields(data);
-  const azureItems = parseLineItems(data);
+  const invoices = parseAllInvoices(data);
+  if (!invoices.length) return [];
 
-  // Try Claude-enhanced parsing for Israeli invoice logic (קר'×יח', הנחה%, etc.)
-  let items = azureItems;
-  try {
-    const rawText = data?.analyzeResult?.content || '';
-    if (rawText.length > 100 && Auth.jwt) {
-      const claudeRes = await fetch('/.netlify/functions/parse-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt },
-        body: JSON.stringify({ text: rawText })
-      });
-      if (claudeRes.ok) {
-        const claudeData = await claudeRes.json();
-        if (claudeData.items?.length > 0) {
-          // Claude's total_price already accounts for discount_pct, but unit_price is the
-          // pre-discount list price — recompute unit_price so it reflects the actual net
-          // price paid (used downstream for catalog/community pricing, not just this invoice).
-          items = claudeData.items.map(item => {
-            if (item.discount_pct > 0 && item.quantity > 0) {
-              return { ...item, unit_price: parseFloat((item.total_price / item.quantity).toFixed(2)) };
-            }
-            return item;
-          });
+  // Claude's Israeli-invoice-math enhancement (קר'×יח', הנחה%, etc.) reads the whole
+  // file's raw text in one shot. That's reliable when the file holds exactly one
+  // invoice, but would blend line items from different suppliers together when it
+  // holds several — so it's only applied in the single-invoice case; multi-invoice
+  // files rely on Azure's own per-document item extraction instead.
+  if (invoices.length === 1) {
+    try {
+      const rawText = data?.analyzeResult?.content || '';
+      if (rawText.length > 100 && Auth.jwt) {
+        const claudeRes = await fetch('/.netlify/functions/parse-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.jwt },
+          body: JSON.stringify({ text: rawText })
+        });
+        if (claudeRes.ok) {
+          const claudeData = await claudeRes.json();
+          if (claudeData.items?.length > 0) {
+            // Claude's total_price already accounts for discount_pct, but unit_price is the
+            // pre-discount list price — recompute unit_price so it reflects the actual net
+            // price paid (used downstream for catalog/community pricing, not just this invoice).
+            invoices[0].items = claudeData.items.map(item => {
+              if (item.discount_pct > 0 && item.quantity > 0) {
+                return { ...item, unit_price: parseFloat((item.total_price / item.quantity).toFixed(2)) };
+              }
+              return item;
+            });
+          }
         }
       }
+    } catch(e) {
+      console.log('Claude parse fallback to Azure:', e.message);
     }
-  } catch(e) {
-    console.log('Claude parse fallback to Azure:', e.message);
   }
 
-  return { fields, items };
+  return invoices;
+}
+
+// Adds one detected invoice to the batch queue and either auto-saves it (vendor
+// name + at least one item found) or marks it for manual review.
+async function scannerQueueInvoice(file, fields, items) {
+  const entry = { file, status: 'processing', fields, items };
+  batchQueue.push(entry);
+  if (fields.vendorName && items.length) {
+    const result = await saveInvoiceData(fields.vendorName, fields.date, fields.invoiceNumber, fields.isCreditNote ? -Math.abs(fields.total) : fields.total, items, fields);
+    entry.status = result ? 'saved' : 'error';
+    if (!result) entry.errorMsg = 'שגיאה בשמירה';
+  } else {
+    entry.status = 'needs_review';
+  }
+  return entry;
 }
 
 // ── Batch scanning (multiple invoices in one go) ────────────────
@@ -163,50 +199,44 @@ async function scannerRunBatch(files) {
   document.getElementById('scanner-results').style.display = 'none';
   document.getElementById('scanner-loading').style.display = 'block';
 
-  batchQueue = files.map(file => ({ file, status: 'pending', fields: null, items: [] }));
-  let completed = 0;
+  // batchQueue holds one entry per *detected invoice*, not per uploaded file — a
+  // single file (e.g. a multi-page scan) can expand into several entries, each
+  // reviewed/approved independently.
+  batchQueue = [];
+  let filesCompleted = 0;
   const updateProgress = () => {
-    document.getElementById('scanner-loading-text').textContent = `מעבד חשבוניות... (${completed} מתוך ${batchQueue.length} הושלמו)`;
+    document.getElementById('scanner-loading-text').textContent = `מעבד קבצים... (${filesCompleted} מתוך ${files.length} הושלמו)`;
   };
   updateProgress();
 
-  async function processEntry(entry) {
-    entry.status = 'processing';
+  async function processFile(file) {
     try {
-      const { fields, items } = await scannerExtract(entry.file, 1, true);
-      entry.fields = fields;
-      entry.items = items;
-      // Only auto-save when extraction found enough to trust — a vendor name and at
-      // least one item. Anything thinner goes to manual review rather than risk saving
-      // a near-empty/garbled invoice silently.
-      if (fields.vendorName && items.length) {
-        const result = await saveInvoiceData(fields.vendorName, fields.date, fields.invoiceNumber, fields.isCreditNote ? -Math.abs(fields.total) : fields.total, items, fields);
-        entry.status = result ? 'saved' : 'error';
-        if (!result) entry.errorMsg = 'שגיאה בשמירה';
+      const detected = await scannerExtract(file, 1, true);
+      if (!detected.length) {
+        batchQueue.push({ file, status: 'needs_review', fields: null, items: [] });
       } else {
-        entry.status = 'needs_review';
+        for (const inv of detected) await scannerQueueInvoice(file, inv.fields, inv.items);
       }
     } catch (e) {
-      entry.status = 'error';
-      entry.errorMsg = e.message || 'שגיאת ניתוח';
+      batchQueue.push({ file, status: 'error', fields: null, items: [], errorMsg: e.message || 'שגיאת ניתוח' });
     }
-    completed++;
+    filesCompleted++;
     updateProgress();
   }
 
   let nextIndex = 0;
   async function worker() {
-    while (nextIndex < batchQueue.length) {
-      const entry = batchQueue[nextIndex++];
-      await processEntry(entry);
+    while (nextIndex < files.length) {
+      const file = files[nextIndex++];
+      await processFile(file);
     }
   }
-  await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, batchQueue.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, files.length) }, worker));
 
-  showBatchSummary();
+  showBatchSummary(files.length);
 }
 
-function showBatchSummary() {
+function showBatchSummary(fileCount) {
   document.getElementById('scanner-loading').style.display = 'none';
   document.getElementById('scanner-results').style.display = 'block';
 
@@ -215,16 +245,30 @@ function showBatchSummary() {
   const statusLabels = { saved: 'נשמר', needs_review: 'דורש בדיקה', error: 'שגיאה' };
   const statusColors = { saved: 'var(--success)', needs_review: 'var(--warning)', error: 'var(--error)' };
 
+  // Multiple detected invoices can share the same uploaded file (a multi-invoice
+  // scan) — number them so it's clear they're distinct invoices, not duplicates.
+  const fileOccurrence = new Map();
+  const fileTotal = new Map();
+  batchQueue.forEach(e => fileTotal.set(e.file, (fileTotal.get(e.file) || 0) + 1));
+
+  const headerLine = (fileCount != null && batchQueue.length !== fileCount)
+    ? `הועלו ${fileCount === 1 ? 'קובץ אחד' : fileCount + ' קבצים'} · זוהו ${batchQueue.length} חשבוניות · ${savedCount} נשמרו`
+    : `${savedCount} מתוך ${batchQueue.length} חשבוניות נשמרו`;
+
   document.getElementById('scanner-results').innerHTML = `
     <div class="card card-pad mb-12" style="text-align:center">
-      <div style="font-size:16px;font-weight:800;margin-bottom:6px">${savedCount} מתוך ${batchQueue.length} חשבוניות נשמרו</div>
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px">${headerLine}</div>
       ${reviewCount
         ? `<div style="font-size:13px;color:var(--warning);font-weight:700">${reviewCount} דורשות בדיקה ידנית — פרטים לא זוהו במלואם</div>`
         : `<div style="font-size:13px;color:var(--success);font-weight:700">הכל תקין!</div>`}
     </div>
     <div class="card mb-12">
       ${batchQueue.map((e, i) => {
-        const label = e.fields?.vendorName || e.file.name;
+        const total = fileTotal.get(e.file) || 1;
+        const occ = (fileOccurrence.get(e.file) || 0) + 1;
+        fileOccurrence.set(e.file, occ);
+        const baseLabel = e.fields?.vendorName || e.file.name;
+        const label = total > 1 ? `${baseLabel} (חשבונית ${occ} מתוך ${total} בקובץ)` : baseLabel;
         return `
         <div class="list-row">
           <div style="flex:1;min-width:0">
@@ -255,16 +299,30 @@ function reviewBatchItem(i) {
   scannerShowResults(scannerData.fields, scannerData.items);
 }
 
-function parseInvoiceFields(data) {
+// Azure's prebuilt-invoice model can detect more than one invoice within a single
+// submitted file (e.g. a multi-page PDF from an office scanner holding several
+// suppliers' invoices) — analyzeResult.documents is an array, one entry per
+// detected invoice. Returns one { fields, items } per entry instead of assuming
+// there's only ever one.
+function parseAllInvoices(data) {
+  const docs = data?.analyzeResult?.documents || [];
+  return docs.map(doc => ({
+    fields: parseInvoiceFieldsForDoc(doc, data, docs.length === 1),
+    items: parseLineItemsForDoc(doc)
+  }));
+}
+
+function parseInvoiceFieldsForDoc(doc, data, useContentFallback) {
   const fields = {};
-  const doc = data?.analyzeResult?.documents?.[0];
   const docFields = doc?.fields || {};
 
-  // Vendor name
+  // Vendor name. The whole-file text fallback only makes sense when the file
+  // holds a single invoice — with several invoices in one file it would guess
+  // the same name for all of them.
   fields.vendorName = docFields.VendorName?.valueString
     || docFields.SupplierName?.valueString
     || docFields.vendor_name?.valueString
-    || extractVendorFromContent(data)
+    || (useContentFallback ? extractVendorFromContent(data) : '')
     || '';
 
   // Invoice number
@@ -318,9 +376,8 @@ function extractVendorFromContent(data) {
   return lines.find(looksLikeName) || '';
 }
 
-function parseLineItems(data) {
+function parseLineItemsForDoc(doc) {
   const items = [];
-  const doc = data?.analyzeResult?.documents?.[0];
   const rawItems = doc?.fields?.Items?.valueArray || [];
 
   rawItems.forEach(item => {
