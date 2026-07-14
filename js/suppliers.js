@@ -91,9 +91,10 @@ async function viewSupplier(id) {
   if (!sup) return;
   currentSupplier = sup;
 
-  const [invoices, items] = await Promise.all([
+  const [invoices, items, marketPrices] = await Promise.all([
     DB.get('invoices', `?supplier_name=eq.${encodeURIComponent(sup.name)}&select=*&order=date.desc`),
-    DB.get('invoice_items', `?supplier_name=eq.${encodeURIComponent(sup.name)}&select=*&order=date.desc`)
+    DB.get('invoice_items', `?supplier_name=eq.${encodeURIComponent(sup.name)}&select=*&order=date.desc`),
+    DB.get('market_prices', '?select=name,price,unit')
   ]);
 
   // Store globally for use in modals / filter
@@ -103,6 +104,12 @@ async function viewSupplier(id) {
     if (!item.product_name) return;
     if (!window._supProductHistory[item.product_name]) window._supProductHistory[item.product_name] = [];
     window._supProductHistory[item.product_name].push({ price: parseFloat(item.unit_price || 0), date: item.date });
+  });
+
+  // Reference market price per product, for the "מחיר שוק" column in the product list
+  window._marketPriceByName = {};
+  (marketPrices || []).forEach(m => {
+    if (m.name && m.price != null) window._marketPriceByName[m.name] = { price: parseFloat(m.price), unit: m.unit };
   });
 
   // Calculate stats
@@ -224,6 +231,26 @@ async function viewSupplier(id) {
 
 // ── Product rows renderer ─────────────────────────────────────
 
+// Looks up the reference market price for a product name — exact match first,
+// falling back to a word-overlap match since invoice product names rarely match
+// the uploaded price-list names character-for-character.
+function findMarketPrice(name) {
+  const map = window._marketPriceByName || {};
+  if (map[name]) return map[name];
+  const pn = (name || '').trim();
+  if (!pn) return null;
+  const pWords = pn.split(/[\s\/,]+/).filter(w => w.length > 1);
+  if (!pWords.length) return null;
+  let best = null, bestScore = 0;
+  for (const [mn, val] of Object.entries(map)) {
+    const mWords = mn.split(/[\s\/,]+/).filter(w => w.length > 1);
+    const shared = pWords.filter(w => mWords.some(mw => mw.includes(w) || w.includes(mw)));
+    const score = shared.length / Math.max(pWords.length, mWords.length);
+    if (score > bestScore && score >= 0.5) { bestScore = score; best = val; }
+  }
+  return best;
+}
+
 function renderSupProductRows(productHistory, filter = '') {
   const entries = Object.entries(productHistory || {})
     .filter(([name]) => !filter || name.includes(filter));
@@ -246,6 +273,8 @@ function renderSupProductRows(productHistory, filter = '') {
       ? `<div style="width:9px;height:9px;border-radius:50%;background:#10B981;flex-shrink:0;margin-top:2px"></div>`
       : `<div style="width:9px;height:9px;border-radius:50%;background:var(--border);flex-shrink:0;margin-top:2px"></div>`;
 
+    const mkt = findMarketPrice(name);
+
     return `
       <div onclick="showProductHistory('${safeId}')"
         style="display:grid;grid-template-columns:14px 1fr auto auto;gap:8px;align-items:start;padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer">
@@ -257,7 +286,7 @@ function renderSupProductRows(productHistory, filter = '') {
         </div>
         <div style="text-align:left;min-width:52px">
           <div style="font-size:9px;color:var(--on-surface-3);font-weight:600;margin-bottom:1px">מחיר שוק</div>
-          <div style="font-size:11px;color:var(--on-surface-3)">—</div>
+          ${mkt ? `<div style="font-size:11px;font-weight:700;color:var(--on-surface-2)">₪${mkt.price.toFixed(2)}</div>` : `<div style="font-size:11px;color:var(--on-surface-3)">—</div>`}
         </div>
       </div>`;
   }).join('');
