@@ -162,6 +162,16 @@ async function scannerExtract(file, attempt = 1, silent = false) {
               return item;
             });
           }
+          // Azure's structured VendorPhone/VendorEmail/VendorAddress fields often come
+          // up empty for less-standard invoice layouts — Claude reading the raw text
+          // is a more robust fallback, used only to fill in whatever Azure missed.
+          const v = claudeData.vendor;
+          if (v) {
+            const f = invoices[0].fields;
+            if (!f.vendorPhone && v.phone) f.vendorPhone = v.phone;
+            if (!f.vendorEmail && v.email) f.vendorEmail = v.email;
+            if (!f.vendorAddress && v.address) f.vendorAddress = v.address;
+          }
         }
       }
     } catch(e) {

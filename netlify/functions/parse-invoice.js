@@ -65,8 +65,10 @@ exports.handler = async (event) => {
 - התעלם משורות ריקות, כותרות, סיכומים, מע"מ
 - אל תכלול שורות עם מחיר 0 אלא אם זה פיקדון
 
-החזר JSON בלבד (ללא הסבר):
-[{"product_name":"...","quantity":N,"unit":"יח'","unit_price":N,"total_price":N,"discount_pct":N}]
+בנוסף לפריטים, חלץ גם פרטי קשר של המשרד/הספק עצמו (לא של סוכן מכירות מסוים) אם הם מופיעים בטקסט — בדרך כלל בכותרת/לוגו העליון של המסמך: טלפון, מייל, כתובת. אם שדה מסוים לא מופיע בבירור, השאר אותו ריק ("").
+
+החזר JSON בלבד (ללא הסבר), במבנה הבא בדיוק:
+{"items":[{"product_name":"...","quantity":N,"unit":"יח'","unit_price":N,"total_price":N,"discount_pct":N}],"vendor":{"phone":"","email":"","address":""}}
 
 טקסט החשבונית:
 ${text.slice(0, 12000)}`;
@@ -93,9 +95,13 @@ ${text.slice(0, 12000)}`;
     }
 
     const aiData = await res.json();
-    const rawText = aiData.content?.[0]?.text || '[]';
-    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-    const items = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+    const rawText = aiData.content?.[0]?.text || '{}';
+    // Expect {"items":[...],"vendor":{...}}, but fall back to a bare array in
+    // case the model doesn't follow the wrapping-object format.
+    const jsonMatch = rawText.match(/[\{\[][\s\S]*[\}\]]/);
+    let parsedResp = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+    const items = Array.isArray(parsedResp) ? parsedResp : (Array.isArray(parsedResp.items) ? parsedResp.items : []);
+    const vendor = Array.isArray(parsedResp) ? {} : (parsedResp.vendor || {});
 
     const validItems = items
       .filter(i => i.product_name && (i.total_price > 0 || i.product_name.includes('פיקדון')))
@@ -111,7 +117,14 @@ ${text.slice(0, 12000)}`;
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: validItems })
+      body: JSON.stringify({
+        items: validItems,
+        vendor: {
+          phone: (vendor.phone || '').trim(),
+          email: (vendor.email || '').trim(),
+          address: (vendor.address || '').trim()
+        }
+      })
     };
   } catch (e) {
     return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
