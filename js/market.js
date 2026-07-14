@@ -123,7 +123,6 @@ function displayMarket(prices) {
       const diff = userPrice ? ((userPrice - mktPrice) / mktPrice * 100) : null;
       const diffColor = diff === null ? 'var(--on-surface-3)' : diff > 10 ? 'var(--error)' : diff > 0 ? '#F59E0B' : 'var(--success)';
       const diffText = diff === null ? '' : (diff > 0 ? '+' : '') + diff.toFixed(0) + '%';
-      const hasHistory = userPriceHistory[p.name]?.length > 1 || allMarketPrices.filter(m => m.name === p.name).length > 1;
       return `
         <div onclick="showPriceHistory('${escHtml(p.name)}')"
           style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background 0.15s"
@@ -157,8 +156,9 @@ async function showPriceHistory(productName) {
 
   content.innerHTML = `<div style="text-align:center;padding:20px;color:var(--on-surface-3)">טוען...</div>`;
 
-  // Fetch all market price history for this product
-  const history = await DB.get('market_prices', `?name=eq.${encodeURIComponent(productName)}&order=date.asc&select=price,date`);
+  // Fetch all market price history for this product (market_prices only ever holds
+  // the current/latest price — the append-only history log is a separate table)
+  const history = await DB.get('market_price_history', `?name=eq.${encodeURIComponent(productName)}&order=date.asc&select=price,date`);
 
   const mktHistory = (history || [])
     .filter(h => h.date && h.price)

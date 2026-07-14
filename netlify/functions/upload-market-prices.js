@@ -49,15 +49,11 @@ exports.handler = async (event) => {
   const H = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' };
 
   try {
-    // Delete existing prices for the uploaded product names, then insert fresh
-    const names = rows.map(r => r.name).join(',');
-    await fetch(`${SUPABASE_URL}/rest/v1/market_prices?name=in.(${encodeURIComponent(names)})`, {
-      method: 'DELETE', headers: H
-    });
-
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/market_prices`, {
+    // market_prices holds exactly one row per product — upsert (replace in place)
+    // so re-uploading never creates duplicates or leaves stale rows behind.
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/market_prices?on_conflict=name`, {
       method: 'POST',
-      headers: { ...H, 'Prefer': 'return=minimal' },
+      headers: { ...H, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify(rows)
     });
 
@@ -65,6 +61,17 @@ exports.handler = async (event) => {
       const err = await r.text();
       return { statusCode: 500, body: JSON.stringify({ error: err }) };
     }
+
+    // market_price_history is an append-only log (one row per product per upload
+    // date) — this is what powers "price history per product" and long-term admin
+    // tracking, completely separate from the current-price table above so history
+    // never clutters or bloats the "latest price" views.
+    const historyRows = rows.map(({ updated_at, ...r }) => r);
+    await fetch(`${SUPABASE_URL}/rest/v1/market_price_history?on_conflict=name,date`, {
+      method: 'POST',
+      headers: { ...H, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(historyRows)
+    });
 
     return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uploaded: rows.length }) };
   } catch (e) {

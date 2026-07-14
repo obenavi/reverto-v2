@@ -131,8 +131,9 @@ async function scannerExtract(file, attempt = 1, silent = false) {
   const data = await res.json();
   if (!silent) document.getElementById('scanner-loading-text').textContent = 'מנתח עם AI...';
 
-  const invoices = parseAllInvoices(data);
-  if (!invoices.length) return [];
+  const rawInvoices = parseAllInvoices(data);
+  if (!rawInvoices.length) return [];
+  const invoices = mergeContinuationPages(rawInvoices);
 
   // Claude's Israeli-invoice-math enhancement (קר'×יח', הנחה%, etc.) reads the whole
   // file's raw text in one shot. That's reliable when the file holds exactly one
@@ -310,6 +311,36 @@ function parseAllInvoices(data) {
     fields: parseInvoiceFieldsForDoc(doc, data, docs.length === 1),
     items: parseLineItemsForDoc(doc)
   }));
+}
+
+// Some invoices span multiple pages — a continuation page usually has no letterhead
+// (so vendor name comes back blank) and repeats the same invoice/receipt number and
+// date as the page before it, sometimes with a "X מתוך Y" page marker. Azure's own
+// document splitting mostly handles this, but as a safety net: any detected "document"
+// that shares an invoice number with the previous one, or has a blank vendor name
+// while sharing the same date, is treated as a continuation of the same invoice and
+// folded into it — not saved as a second, mostly-empty invoice.
+function mergeContinuationPages(invoices) {
+  const merged = [];
+  for (const inv of invoices) {
+    const prev = merged[merged.length - 1];
+    const isContinuation = prev && (
+      (inv.fields.invoiceNumber && prev.fields.invoiceNumber && inv.fields.invoiceNumber === prev.fields.invoiceNumber) ||
+      (!inv.fields.vendorName && inv.fields.date && inv.fields.date === prev.fields.date)
+    );
+    if (isContinuation) {
+      prev.items = prev.items.concat(inv.items);
+      // The grand total often prints only on the last page, not the first — take
+      // whichever page actually has a nonzero total, preferring a later one.
+      if (inv.fields.total) prev.fields.total = inv.fields.total;
+      const fillFields = ['vendorName','invoiceNumber','vendorPhone','vendorAddress','vendorEmail','vendorTaxId','customerName','customerAddress'];
+      fillFields.forEach(k => { if (!prev.fields[k] && inv.fields[k]) prev.fields[k] = inv.fields[k]; });
+      prev.fields.isCreditNote = prev.fields.isCreditNote || inv.fields.isCreditNote;
+    } else {
+      merged.push(inv);
+    }
+  }
+  return merged;
 }
 
 function parseInvoiceFieldsForDoc(doc, data, useContentFallback) {

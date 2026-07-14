@@ -225,10 +225,23 @@ exports.handler = async (event) => {
         fetch(`${SUPABASE_URL}/rest/v1/invoices?select=*&order=created_at.desc`, { headers: H }).then(r => r.json()),
         fetch(`${SUPABASE_URL}/rest/v1/invoice_items?select=*`, { headers: H }).then(r => r.json()),
         fetch(`${SUPABASE_URL}/rest/v1/suppliers?select=*`, { headers: H }).then(r => r.json()),
-        fetch(`${SUPABASE_URL}/rest/v1/market_prices?select=*&order=updated_at.desc&limit=500`, { headers: H }).then(r => r.json()),
+        // market_prices now holds exactly one row per product (upserted on upload),
+        // so no ordering/limit is needed to avoid truncating or duplicating products.
+        fetch(`${SUPABASE_URL}/rest/v1/market_prices?select=*`, { headers: H }).then(r => r.json()),
         fetch(`${SUPABASE_URL}/rest/v1/waitlist?select=*&order=created_at.desc`, { headers: H }).then(r => r.json()),
       ]);
       return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ users: users||[], invoices: invoices||[], items: items||[], suppliers: suppliers||[], market: market||[], waitlist: waitlist||[] }) };
+    }
+
+    // ── Long-term price history for one product (admin market-history view) ────
+    if (action === 'market_price_history') {
+      const { product_name } = parsed;
+      if (!product_name) return { statusCode: 400, body: JSON.stringify({ error: 'Missing product_name' }) };
+      const history = await fetch(
+        `${SUPABASE_URL}/rest/v1/market_price_history?name=eq.${encodeURIComponent(product_name)}&order=date.asc&select=price,unit,date`,
+        { headers: H }
+      ).then(r => r.json());
+      return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(history || []) };
     }
 
     // ── Update user fields ─────────────────────────────────────

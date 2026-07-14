@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-const PUBLIC_TABLES = ['market_prices'];
+const PUBLIC_TABLES = ['market_prices', 'market_price_history'];
 const USER_TABLES = {
   users: 'id',
   invoices: 'user_id',

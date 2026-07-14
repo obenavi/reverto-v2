@@ -532,8 +532,35 @@ function renderMarket() {
     const prod=PROD_DATA.find(p=>p.name===name);
     const avgPrice=prod?.priceAvg||0;
     const diff=avgPrice>0&&mktPrice>0?((avgPrice-mktPrice)/mktPrice*100).toFixed(1):null;
-    return `<tr><td><strong>${name}</strong></td><td>₪${mktPrice.toFixed(2)}</td><td>${avgPrice?'₪'+avgPrice.toFixed(2):'—'}</td><td style="color:${diff===null?'var(--muted)':parseFloat(diff)>0?'#f87171':'#4ade80'}">${diff!==null?(parseFloat(diff)>0?'+':'')+diff+'%':'—'}</td><td style="font-size:11px;color:var(--muted)">${m.updated_at?new Date(m.updated_at).toLocaleDateString('he-IL'):'—'}</td></tr>`;
+    return `<tr style="cursor:pointer" onclick="showMarketHistory('${name.replace(/'/g,"\\'")}')"><td><strong>${name}</strong></td><td>₪${mktPrice.toFixed(2)}</td><td>${avgPrice?'₪'+avgPrice.toFixed(2):'—'}</td><td style="color:${diff===null?'var(--muted)':parseFloat(diff)>0?'#f87171':'#4ade80'}">${diff!==null?(parseFloat(diff)>0?'+':'')+diff+'%':'—'}</td><td style="font-size:11px;color:var(--muted)">${m.updated_at?new Date(m.updated_at).toLocaleDateString('he-IL'):'—'}</td></tr>`;
   }).join('') || '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted)">אין נתוני שוק</td></tr>';
+}
+
+// Long-term price history for one product — reads market_price_history, the
+// append-only log kept separate from market_prices (which holds only the
+// current/latest price per product, so it never bloats or duplicates).
+async function showMarketHistory(name) {
+  const modal = document.createElement('div');
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML=`
+    <div style="background:#1a1a24;border:1px solid #2a2a3a;border-radius:16px;padding:24px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:800">${name} — היסטוריית מחירים</div>
+        <button onclick="this.closest('[data-mkt-hist]').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px">×</button>
+      </div>
+      <div id="mkt-hist-body" style="font-size:13px;color:var(--muted)">טוען...</div>
+    </div>`;
+  modal.setAttribute('data-mkt-hist','');
+  document.body.appendChild(modal);
+
+  const rows = await adminCall('market_price_history', { product_name: name });
+  const body = document.getElementById('mkt-hist-body');
+  if (!Array.isArray(rows) || !rows.length) { body.innerHTML = '<div style="text-align:center;padding:20px">אין נתוני היסטוריה</div>'; return; }
+  body.innerHTML = rows.map(r => `
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text)">${new Date(r.date).toLocaleDateString('he-IL')}</span>
+      <span style="font-weight:700;color:var(--p2)">₪${parseFloat(r.price).toFixed(2)}${r.unit ? ' / ' + r.unit : ''}</span>
+    </div>`).join('');
 }
 
 function renderWaitlist() {
