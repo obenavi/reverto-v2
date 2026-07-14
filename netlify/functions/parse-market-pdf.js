@@ -31,6 +31,8 @@ Classification rules (this is the part that matters most — get it right, not j
 - "packaged": packaged/processed food that isn't any of the above — canned goods, oils, grains, spices, snacks, bread, non-frozen desserts
 - "cleaning": cleaning/hygiene supplies
 - "other": anything that doesn't clearly fit the above — don't force a guess if genuinely unclear
+
+Before assigning a category, sanity-check that you know what the actual product IS — don't pattern-match on a fragment of the name. Concretely: a watermelon (אבטיח) is produce, never "animal", even though nothing about that word should suggest otherwise — the point is don't let a superficial resemblance fool you. A nectarine (נקטרינה) is a fruit → "produce", NOT "drinks", even though it shares a root with "נקטר" (nectar drink) — the "-ינה" ending makes it a different word entirely. The same logic applies generally: if a product name contains what looks like a category-word as a sub-string or shared root, stop and ask whether the FULL word actually means that category, or whether it's a different, unrelated word that merely starts the same way. Only classify a drink as "drinks" if it's actually something you drink (e.g. "מיץ אבטיח" watermelon juice, or "נקטר מנגו" mango nectar — a fruit name preceded/followed by a clear drink word like מיץ/משקה/נקטר means the drink, not the fruit itself).
 Only include items that have a clear price number greater than 0.`;
 
 async function parseWithClaude(content, mimeType, apiKey) {
