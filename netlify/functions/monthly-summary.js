@@ -73,7 +73,12 @@ exports.handler = async (event) => {
   if (secret !== process.env.CRON_SECRET) return { statusCode: 401 };
 
   let testEmail = '';
-  try { testEmail = (JSON.parse(event.body || '{}').test_email || '').toLowerCase().trim(); } catch(_) {}
+  let targetMonth = '';
+  try {
+    const body = JSON.parse(event.body || '{}');
+    testEmail = (body.test_email || '').toLowerCase().trim();
+    targetMonth = (body.target_month || '').trim(); // "YYYY-MM", for re-sending a missed month
+  } catch(_) {}
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -86,10 +91,20 @@ exports.handler = async (event) => {
   if (dayUTC === 6) return { statusCode: 200, body: JSON.stringify({ skipped: 'Shabbat' }) };
   if (dayUTC === 5 && hourUTC >= 12) return { statusCode: 200, body: JSON.stringify({ skipped: 'Friday' }) };
 
-  const monthStart   = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const monthEnd     = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-  const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString().slice(0, 10);
-  const monthName    = now.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+  // Normally summarizes the current calendar month (this is meant to run on the
+  // last day of that month). target_month lets an admin safely re-send a specific
+  // past month's summary (e.g. after a missed automated run) instead of this
+  // silently defaulting to "whatever month it happens to be right now".
+  let summaryDate = now;
+  if (/^\d{4}-\d{2}$/.test(targetMonth)) {
+    const [y, m] = targetMonth.split('-').map(Number);
+    summaryDate = new Date(y, m - 1, 15); // mid-month, safely clear of month-boundary edge cases
+  }
+
+  const monthStart   = new Date(summaryDate.getFullYear(), summaryDate.getMonth(), 1).toISOString().slice(0, 10);
+  const monthEnd     = new Date(summaryDate.getFullYear(), summaryDate.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const threeMonthsAgo = new Date(summaryDate.getFullYear(), summaryDate.getMonth() - 3, 1).toISOString().slice(0, 10);
+  const monthName    = summaryDate.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
 
   try {
     // Fetch market prices once for all users
@@ -400,7 +415,7 @@ ${topSavings.slice(0,5).map(s => `${s.product}: משלם ₪${s.avgPaid} vs שו
 
     <!-- CTA -->
     <div style="text-align:center;margin:28px 0 8px">
-      <a href="${SITE_URL}/report?month=${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}" style="display:inline-block;background:linear-gradient(135deg,#3D1582,#6B35B8);color:white;text-decoration:none;padding:14px 36px;border-radius:30px;font-size:15px;font-weight:800;letter-spacing:-0.3px">
+      <a href="${SITE_URL}/report?month=${summaryDate.getFullYear()}-${String(summaryDate.getMonth()+1).padStart(2,'0')}" style="display:inline-block;background:linear-gradient(135deg,#3D1582,#6B35B8);color:white;text-decoration:none;padding:14px 36px;border-radius:30px;font-size:15px;font-weight:800;letter-spacing:-0.3px">
         לדוח המלא עם כל הנתונים ←
       </a>
     </div>
@@ -417,7 +432,7 @@ ${topSavings.slice(0,5).map(s => `${s.product}: משלם ₪${s.avgPaid} vs שו
           body: JSON.stringify({
             from: 'Reverto <noreply@mail.reverto.cloud>',
             to: [user.email],
-            subject: `📊 דוח חודשי ${monthName} — ${user.business_name}${totalSavingMonth > 0 ? ` | חיסכון פוטנציאלי ₪${fmt(totalSavingMonth)}/חודש` : ''}`,
+            subject: `דוח חודשי ${monthName} — ${user.business_name}${totalSavingMonth > 0 ? ` | חיסכון פוטנציאלי ₪${fmt(totalSavingMonth)}/חודש` : ''}`,
             html
           })
         });

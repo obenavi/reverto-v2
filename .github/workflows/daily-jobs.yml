@@ -13,6 +13,10 @@ on:
         description: 'שלח רק לכתובת מייל זו (ריק = כולם)'
         type: string
         default: ''
+      target_month:
+        description: 'איזה חודש לסכם (YYYY-MM, ריק = החודש הנוכחי) — לשימוש בשליחה מאוחרת של חודש שפוספס'
+        type: string
+        default: ''
 
 jobs:
 
@@ -34,14 +38,18 @@ jobs:
       - name: Check if last day of month
         id: check
         run: |
-          today=$(date +%d)
-          last=$(cal $(date +%m) $(date +%Y) | awk 'NF{f=$NF} END{print f}')
-          if [ "$today" = "$last" ]; then echo "is_last=true" >> $GITHUB_OUTPUT; fi
+          # Robust against cal's output-format quirks (locale/week-start differences
+          # silently broke the previous cal|awk parse — it was skipping every month
+          # end without erroring). If tomorrow's month differs from today's, today
+          # must be the last day of the month.
+          today_month=$(date +%m)
+          tomorrow_month=$(date -d "+1 day" +%m)
+          if [ "$today_month" != "$tomorrow_month" ]; then echo "is_last=true" >> $GITHUB_OUTPUT; fi
       - name: Trigger monthly summary
         if: steps.check.outputs.is_last == 'true' || github.event.inputs.force_monthly == 'true'
         run: |
           curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            -d '{"test_email":"${{ github.event.inputs.test_email }}"}' \
+            -d '{"test_email":"${{ github.event.inputs.test_email }}","target_month":"${{ github.event.inputs.target_month }}"}' \
             "${{ secrets.NETLIFY_URL }}/.netlify/functions/monthly-summary"
