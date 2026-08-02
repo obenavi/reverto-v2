@@ -570,7 +570,8 @@ async function handleSaveInvoice() {
       product_name: (document.getElementById('pn-'+i)?.value || item.product_name || '').trim(),
       quantity: parseFloat(document.getElementById('qty-'+i)?.value) || item.quantity || 0,
       unit_price: parseFloat(document.getElementById('up-'+i)?.value) || item.unit_price || 0,
-      total_price: parseFloat(document.getElementById('tp-'+i)?.value) || item.total_price || 0
+      total_price: parseFloat(document.getElementById('tp-'+i)?.value) || item.total_price || 0,
+      unit: item.unit || null
     }))
     .filter(item => item.product_name);
 
@@ -633,6 +634,7 @@ async function saveInvoiceData(vendorName, date, invoiceNumber, total, items, in
         quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.total_price,
+        unit: item.unit || null,
         date
       });
     }
