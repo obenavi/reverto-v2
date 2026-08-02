@@ -18,6 +18,84 @@ const SUPPLIER_CATEGORIES = [
   { val: 'other', label: 'אחר' }
 ];
 
+const CATEGORY_LABELS = {
+  produce: 'ירקות ופירות', animal: 'מן החי', packaged: 'מזון ארוז',
+  drinks: 'משקאות', frozen: 'קפואים', cleaning: 'חומרי ניקוי', other: 'אחר'
+};
+
+// A supplier's own category is a useful hint (a drinks wholesaler's products are
+// usually drinks) but it must never override an item that's clearly NOT a
+// consumable of that kind — glassware, coasters, packaging, deposits — even when
+// bought from that supplier. These are excluded from ever inheriting a supplier's
+// category; they stay unclassified until the user confirms one manually.
+const NON_CONSUMABLE_HINTS = /כוס|תחתית|מארז|כלי |קרטון ריק|אריזה|מגש|כפית|צלחת|פיקדון|מדבקה|שלט|תפריט|להצמדה/;
+
+// Classifies one product, using (in priority order): the user's own confirmed
+// category (product_catalog), a confident name-based match (js/market.js's
+// getProductCat — same regex classifier used on the שוק page), and finally the
+// supplier's own tagged category as a fallback guess — never applied to an item
+// that looks like merchandise rather than something actually sold in that category.
+function classifyProduct(name) {
+  const confirmed = window._productCatalogCatByName?.[name];
+  if (confirmed) return { category: confirmed, source: 'confirmed' };
+
+  // Check merchandise/packaging/deposits BEFORE any keyword match, not just as a
+  // filter on the supplier fallback — "כוס בירה" (a beer GLASS) contains "בירה"
+  // and would otherwise confidently (and wrongly) match drinks by name alone.
+  if (NON_CONSUMABLE_HINTS.test(name)) return { category: '', source: 'none' };
+
+  const nameCategory = typeof getProductCat === 'function' ? getProductCat(name) : 'other';
+  if (nameCategory && nameCategory !== 'other') return { category: nameCategory, source: 'name' };
+
+  const supplierCat = currentSupplier?.category;
+  if (supplierCat && supplierCat !== 'other') {
+    return { category: supplierCat, source: 'supplier' };
+  }
+  return { category: '', source: 'none' };
+}
+
+// Saves a category as the user's own confirmed choice for this product name,
+// reusing the existing product_catalog table (already used by the product-tree
+// page) rather than inventing a parallel place to store it.
+async function confirmProductCategory(safeId, category) {
+  const ph = window._supProductHistory || {};
+  const name = Object.keys(ph).find(k => k.replace(/[^a-zA-Z0-9]/g, '_') === safeId);
+  if (!name) return;
+  const existing = await DB.get('product_catalog', `?name=eq.${encodeURIComponent(name)}&select=id`);
+  if (existing?.[0]) {
+    await DB.update('product_catalog', `?id=eq.${existing[0].id}`, { category });
+  } else {
+    await DB.insert('product_catalog', { user_id: Auth.userId, name, category, unit: 'יח\'', price_per_unit: 0 });
+  }
+  window._productCatalogCatByName[name] = category;
+  const el = document.getElementById('sup-products-list');
+  if (el) el.innerHTML = renderSupProductRows(window._supProductHistory);
+}
+
+function pickProductCategory(safeId) {
+  const ph = window._supProductHistory || {};
+  const name = Object.keys(ph).find(k => k.replace(/[^a-zA-Z0-9]/g, '_') === safeId);
+  if (!name) return;
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:24px 24px 0 0;width:100%;max-width:480px;padding:20px 20px 32px">
+      <div style="font-size:15px;font-weight:800;margin-bottom:14px">קטגוריה עבור "${escHtml(name)}"</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${Object.entries(CATEGORY_LABELS).map(([val, label]) => `
+          <button onclick="confirmProductCategory('${safeId}','${val}');this.closest('[data-cat-modal]').remove()"
+            style="padding:9px 16px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface-low);color:var(--on-surface-2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+            ${label}
+          </button>`).join('')}
+      </div>
+      <button onclick="this.closest('[data-cat-modal]').remove()" class="btn-ghost mt-12" style="width:100%">ביטול</button>
+    </div>`;
+  modal.setAttribute('data-cat-modal', '');
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
 async function renderSuppliersList() {
   const userId = Auth.userId;
   if (!userId) return;
@@ -93,10 +171,11 @@ async function viewSupplier(id) {
   if (!sup) return;
   currentSupplier = sup;
 
-  const [invoices, items, marketPrices] = await Promise.all([
+  const [invoices, items, marketPrices, catalog] = await Promise.all([
     DB.get('invoices', `?supplier_name=eq.${encodeURIComponent(sup.name)}&select=*&order=date.desc`),
     DB.get('invoice_items', `?supplier_name=eq.${encodeURIComponent(sup.name)}&select=*&order=date.desc`),
-    DB.get('market_prices', '?select=name,price,unit')
+    DB.get('market_prices', '?select=name,price,unit'),
+    DB.get('product_catalog', '?select=name,category')
   ]);
 
   // Store globally for use in modals / filter
@@ -112,6 +191,13 @@ async function viewSupplier(id) {
   window._marketPriceByName = {};
   (marketPrices || []).forEach(m => {
     if (m.name && m.price != null) window._marketPriceByName[m.name] = { price: parseFloat(m.price), unit: m.unit };
+  });
+
+  // The user's own confirmed category per product (set via the category badge below,
+  // or already present from the product-tree page) — always wins over any guess.
+  window._productCatalogCatByName = {};
+  (catalog || []).forEach(p => {
+    if (p.name && p.category) window._productCatalogCatByName[p.name] = p.category;
   });
 
   // Calculate stats
@@ -276,12 +362,25 @@ function renderSupProductRows(productHistory, filter = '') {
       : `<div style="width:9px;height:9px;border-radius:50%;background:var(--border);flex-shrink:0;margin-top:2px"></div>`;
 
     const mkt = findMarketPrice(name);
+    const { category, source } = classifyProduct(name);
+
+    let catBadge;
+    if (category && (source === 'confirmed' || source === 'name')) {
+      catBadge = `<span onclick="event.stopPropagation();pickProductCategory('${safeId}')" style="font-size:9px;font-weight:700;color:var(--primary);background:var(--surface-low);border-radius:8px;padding:1px 6px;cursor:pointer">${CATEGORY_LABELS[category] || category}</span>`;
+    } else if (category && source === 'supplier') {
+      catBadge = `<span onclick="event.stopPropagation();pickProductCategory('${safeId}')" title="הצעה לפי קטגוריית הספק — לחץ לאישור/שינוי" style="font-size:9px;font-weight:700;color:var(--on-surface-3);border:1px dashed var(--border);border-radius:8px;padding:1px 6px;cursor:pointer">${CATEGORY_LABELS[category] || category}?</span>`;
+    } else {
+      catBadge = `<span onclick="event.stopPropagation();pickProductCategory('${safeId}')" style="font-size:9px;font-weight:600;color:var(--on-surface-3);cursor:pointer;text-decoration:underline">+ קטגוריה</span>`;
+    }
 
     return `
       <div onclick="showProductHistory('${safeId}')"
         style="display:grid;grid-template-columns:14px 1fr auto auto;gap:8px;align-items:start;padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer">
         ${dot}
-        <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(name)}</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(name)}</div>
+          <div style="margin-top:2px">${catBadge}</div>
+        </div>
         <div style="text-align:left;min-width:64px">
           <div style="font-size:14px;font-weight:800">₪${parseFloat(latest).toFixed(2)}</div>
           ${pct && pct !== '0' ? `<div style="font-size:10px;font-weight:700;color:${trend === 'up' ? '#EF4444' : '#10B981'}">${trend === 'up' ? '↑' : '↓'}${pct}%</div>` : ''}
