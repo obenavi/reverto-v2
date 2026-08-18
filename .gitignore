@@ -1,5 +1,41 @@
+# Dependencies
 node_modules/
 package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment
 .env
 .env.local
-.DS_Store
+.env.*.local
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Testing
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+*.DS_Store
+
+# OS
+Thumbs.db
+
+# Misc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.pem
+
+# Supabase
+.supabase/
+.env.supabase
