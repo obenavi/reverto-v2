@@ -1,0 +1,74 @@
+import { notFound } from 'next/navigation';
+import { supabaseAdmin } from '@/lib/supabase';
+import { Shell } from '@/components/ui';
+import BookingFlow from '@/components/BookingFlow';
+import type { GalleryPhoto, Review, Service, Slot, Subscriber } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: { operatorId: string } }) {
+  const { data } = await supabaseAdmin()
+    .from('subscribers')
+    .select('name, area')
+    .eq('id', params.operatorId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (!data) return { title: 'HelloNeighbor' };
+  return {
+    title: `Book ${data.name} · HelloNeighbor`,
+    description: `${data.name} takes bookings in ${data.area}.`,
+  };
+}
+
+export default async function PublicBookingPage({
+  params,
+}: {
+  params: { operatorId: string };
+}) {
+  const db = supabaseAdmin();
+
+  const { data: operator } = await db
+    .from('subscribers')
+    .select('*')
+    .eq('id', params.operatorId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (!operator) notFound();
+
+  const [servicesRes, slotsRes, galleryRes, reviewsRes] = await Promise.all([
+    db
+      .from('services')
+      .select('*')
+      .eq('operator_id', operator.id)
+      .eq('active', true)
+      .order('price_cents'),
+    db
+      .from('slots')
+      .select('*')
+      .eq('operator_id', operator.id)
+      .eq('status', 'open')
+      .gt('starts_at', new Date().toISOString())
+      .order('starts_at'),
+    db.from('gallery_photos').select('*').eq('operator_id', operator.id).order('sort_order'),
+    db
+      .from('reviews')
+      .select('id, created_at, operator_id, booking_id, rating, public_comment, operator_reply')
+      .eq('operator_id', operator.id)
+      .order('created_at', { ascending: false })
+      .limit(5),
+  ]);
+
+  return (
+    <Shell>
+      <BookingFlow
+        operator={operator as Subscriber}
+        services={(servicesRes.data as Service[]) ?? []}
+        slots={(slotsRes.data as Slot[]) ?? []}
+        gallery={(galleryRes.data as GalleryPhoto[]) ?? []}
+        reviews={(reviewsRes.data as Review[]) ?? []}
+      />
+    </Shell>
+  );
+}

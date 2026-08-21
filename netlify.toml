@@ -21,6 +21,13 @@
   [headers.values]
     Cache-Control = "no-cache, must-revalidate"
 
+# The helloneighbor/ subdirectory is a separate Next.js app that is not part of
+# the Reverto site. publish = "." would otherwise serve its source files.
+[[redirects]]
+  from = "/helloneighbor/*"
+  to = "/index.html"
+  status = 404
+
 [[redirects]]
   from = "https://reverto.cloud/*"
   to = "https://revertoapp.com/:splat"

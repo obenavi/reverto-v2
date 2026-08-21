@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 14px;
+  }
+
+  body {
+    @apply bg-white text-ink font-sans antialiased;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply w-full rounded-btn border border-line px-2 py-2 text-base outline-none;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    @apply border-brand ring-2 ring-brand/15;
+  }
+
+  label {
+    @apply mb-1 block text-[13px] font-semibold text-ink;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-btn px-4 py-[9px]
+           text-base font-semibold transition-colors disabled:cursor-not-allowed
+           disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-brand text-white hover:bg-brand-dark;
+  }
+
+  .btn-secondary {
+    @apply btn border border-line bg-white text-ink hover:bg-gray-50;
+  }
+
+  .btn-success {
+    @apply btn bg-success text-white hover:brightness-110;
+  }
+
+  .btn-danger {
+    @apply btn bg-danger text-white hover:brightness-110;
+  }
+
+  .card {
+    @apply rounded-card border border-line bg-white p-4;
+  }
+
+  .pill {
+    @apply inline-flex items-center rounded-full px-2 py-[2px] text-[12px] font-semibold;
+  }
+}
