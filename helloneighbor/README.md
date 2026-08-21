@@ -36,6 +36,7 @@ at all. Everything past that needs Supabase.
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | card payments | same page |
 | `STRIPE_WEBHOOK_SECRET` | payment status sync | `stripe listen`, or the endpoint's signing secret |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` | SMS | Twilio console |
+| `ANTHROPIC_API_KEY` | supervisor agent | console.anthropic.com |
 | `NEXT_PUBLIC_SITE_URL` | shareable booking links | your deployed URL |
 
 **Degrading gracefully is deliberate.** Without Twilio, messages are logged to
@@ -43,14 +44,65 @@ the server console and login codes are returned to the browser so you can still
 test the flow — that fallback is disabled in production. Without Stripe, card
 payments are refused with a clear message and cash-style bookings still work.
 
+## Safety model
+
+Three rules are enforced in code, not just written down:
+
+1. **Babysitting and other care work are banned.** Removed from the catalog, rejected
+   by a database check constraint, and called out in the guidelines. Migration 002
+   retypes and hides any listing that predates the ban.
+2. **All communication stays in the app.** A conversation opens automatically with
+   every booking and is seeded with the neighbor's introduction plus a payment poll,
+   so neither side ever needs to swap phone numbers. The thread is what an
+   administrator reads when a dispute is opened.
+3. **Both parties accept the guidelines.** Operators tick four acknowledgements at
+   signup; neighbors accept at the confirm step. Acceptance is stored with a
+   `TERMS_VERSION` on the subscriber and booking rows, so a dispute can be judged
+   against the text each party actually saw.
+
+⚠️ **A disclaimer is not legal protection.** `lib/guidelines.ts` contains a
+limitation-of-liability clause because you asked for one, but a platform putting
+minors in contact with strangers carries real exposure that no wording removes.
+Before launch, get this reviewed by a lawyer, and look into insurance, identity
+verification, and whether COPPA applies to your under-13 signups.
+
+## The supervisor agent
+
+`lib/supervisor.ts` reviews every signup, service listing, chat message, and
+booking note against the guidelines using Claude with a structured (Zod) verdict:
+`pass` / `review` / `block`, a 0–100 risk score, and categories. Flags land in the
+**Flags** tab of `/admin`.
+
+Where it runs, and why the timing differs:
+
+| Content | When | On `block` |
+|---|---|---|
+| Signup | inline | recorded; the application still goes to a human |
+| Service listing | inline | listing is hidden immediately — it is publicly bookable the moment it exists |
+| Booking note | background | recorded |
+| Chat message | background | recorded — holding a message behind a model call would make the thread feel broken |
+
+**On "make sure they're a real human":** the agent scores how machine-generated the
+*writing* looks (`automation_suspicion`) and escalates a `pass` to `review` above 70.
+That is a content signal, not identity verification — nothing reading a text field
+can prove a human sent it. Real bot defense is rate limiting plus a challenge
+(Cloudflare Turnstile or hCaptcha) in front of the signup and booking forms. That
+is not built yet and should be.
+
+Without `ANTHROPIC_API_KEY` the app still runs; content is recorded as `review`
+rather than silently passing.
+
 ## Database
 
-Run `supabase/migrations/001_init_schema.sql` once, either by pasting it into
+Run the migrations in `supabase/migrations/` in order, either by pasting them into
 the Supabase SQL Editor or with `supabase db push`.
 
-It creates 11 tables — `subscribers`, `services`, `slots`, `bookings`, `pings`,
+`001_init_schema.sql` creates 11 tables — `subscribers`, `services`, `slots`, `bookings`, `pings`,
 `reviews`, `gallery_photos`, `disputes`, `referrals`, `boosts`,
 `operator_profiles` — and enables RLS on all of them.
+
+`002_safety_chat_moderation.sql` adds the babysitting ban, terms-acceptance columns,
+`conversations` + `messages`, and `moderation_reviews`.
 
 **The access model matters:** the browser never writes. Every mutation goes
 through a route handler holding the service role key. RLS policies therefore
@@ -68,8 +120,13 @@ are unreadable without the service key.
 4. **`/dashboard`** — add a service, open a slot, then copy your link from
    **My link**.
 5. **`/b/<operatorId>`** — book yourself: service → time → details → confirm.
-6. Back in **`/dashboard` → Bookings**, mark it done. On a card booking that
-   captures the held payment.
+   Leaving the note blank prompts you before the booking goes through; accepting
+   the guidelines is required.
+6. You land straight in the chat thread, where the opening message and the
+   provider's payment poll are already waiting. Pick a method — it updates the
+   booking.
+7. Back in **`/dashboard`**, the thread is under **Messages** and the booking under
+   **Bookings**. Mark it done; on a card booking that captures the held payment.
 
 Stripe test card: `4242 4242 4242 4242`, any future expiry, any CVC.
 
@@ -98,6 +155,8 @@ tracks status without moving money.
 | `/login` | operator | Phone + SMS code |
 | `/dashboard` | operator | Bookings, schedule, pings, services, profile, link, gallery, reviews |
 | `/b/[operatorId]` | anyone | Public booking, four steps |
+| `/m/[token]` | neighbor | Their conversation thread; the token is the credential, so the page is noindex |
+| `/guidelines` | anyone | Community guidelines and terms |
 | `/admin/login` · `/admin` | admin | Approvals, all bookings, disputes |
 
 API routes live under `app/api/`: `auth/*`, `operators/*` (session-scoped),
@@ -126,6 +185,10 @@ npm run build       # production build
 
 - **No image uploads.** Profile photos and gallery entries take URLs. Wire up
   Supabase Storage to accept real uploads.
+- **No bot challenge on the signup or booking forms.** See the supervisor note above.
+- **No rate limiting anywhere.** Every public route (join, bookings, pings, messages,
+  request-code) can be hammered.
+- **Chat polls every 10 seconds** rather than using Supabase Realtime.
 - **Reviews have no submission page.** The schema, dashboard, and public
   display all exist; the neighbor-facing form does not.
 - **`referrals` and `boosts` are schema-only** — no UI reads or writes them.

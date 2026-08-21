@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { SERVICE_KINDS } from '@/lib/catalog';
+import { OPERATOR_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
 import { Notice, PageHeader, Shell } from '@/components/ui';
 
 export default function JoinPage() {
@@ -10,6 +11,11 @@ export default function JoinPage() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [interests, setInterests] = useState<string[]>([]);
+  const [accepted, setAccepted] = useState<boolean[]>(
+    OPERATOR_ACKNOWLEDGEMENTS.map(() => false)
+  );
+
+  const allAccepted = accepted.every(Boolean);
 
   function toggle(kind: string) {
     setInterests((prev) =>
@@ -33,6 +39,7 @@ export default function JoinPage() {
         age: Number(form.get('age')),
         bio: form.get('bio'),
         interests,
+        accepted_terms: allAccepted,
       }),
     });
 
@@ -145,11 +152,50 @@ export default function JoinPage() {
           />
         </div>
 
+        <fieldset className="rounded-card border border-line p-3">
+          <legend className="px-1 text-[13px] font-semibold">
+            Community guidelines
+          </legend>
+          <p className="mb-3 text-[13px] text-ink-muted">
+            Please read these before you tick them —{' '}
+            <Link href="/guidelines" target="_blank" className="font-semibold text-brand">
+              the full guidelines are here
+            </Link>
+            . Note that babysitting and other care work are not allowed on HelloNeighbor.
+          </p>
+          <div className="space-y-2">
+            {OPERATOR_ACKNOWLEDGEMENTS.map((text, i) => (
+              <label key={i} className="flex cursor-pointer items-start gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  className="!mt-0.5 !w-auto"
+                  checked={accepted[i]}
+                  onChange={(e) => {
+                    const next = [...accepted];
+                    next[i] = e.target.checked;
+                    setAccepted(next);
+                  }}
+                />
+                <span className="text-ink-muted">{text}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
         {error && <Notice tone="error">{error}</Notice>}
 
-        <button type="submit" className="btn-primary w-full" disabled={submitting}>
+        <button
+          type="submit"
+          className="btn-primary w-full"
+          disabled={submitting || !allAccepted}
+        >
           {submitting ? 'Sending…' : 'Submit application'}
         </button>
+        {!allAccepted && (
+          <p className="text-center text-[12px] text-ink-faint">
+            Tick all four to submit.
+          </p>
+        )}
       </form>
     </Shell>
   );

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 import { isAdmin } from '@/lib/session';
 import AdminDashboard from '@/components/AdminDashboard';
-import type { BookingRow, DisputeRow, Subscriber } from '@/lib/types';
+import type { BookingRow, DisputeRow, ModerationReview, Subscriber } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +11,7 @@ export default async function AdminPage() {
 
   const db = supabaseAdmin();
 
-  const [subscribersRes, bookingsRes, disputesRes] = await Promise.all([
+  const [subscribersRes, bookingsRes, disputesRes, moderationRes] = await Promise.all([
     db.from('subscribers').select('*').order('created_at', { ascending: false }),
     db
       .from('bookings')
@@ -22,6 +22,13 @@ export default async function AdminPage() {
       .from('disputes')
       .select('*, bookings (client_name, price_cents, payment_method, payment_status)')
       .order('created_at', { ascending: false }),
+    db
+      .from('moderation_reviews')
+      .select('*')
+      .is('resolved_at', null)
+      .neq('verdict', 'pass')
+      .order('created_at', { ascending: false })
+      .limit(100),
   ]);
 
   return (
@@ -29,6 +36,7 @@ export default async function AdminPage() {
       subscribers={(subscribersRes.data as Subscriber[]) ?? []}
       bookings={(bookingsRes.data as BookingRow[]) ?? []}
       disputes={(disputesRes.data as DisputeRow[]) ?? []}
+      flags={(moderationRes.data as ModerationReview[]) ?? []}
     />
   );
 }

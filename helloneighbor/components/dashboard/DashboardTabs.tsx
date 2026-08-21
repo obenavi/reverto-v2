@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Shell, StatusPill } from '@/components/ui';
 import type {
   BookingRow,
+  Conversation,
   GalleryPhoto,
   OperatorProfile,
   Ping,
@@ -21,9 +22,13 @@ import ProfilePanel from './ProfilePanel';
 import LinkPanel from './LinkPanel';
 import GalleryPanel from './GalleryPanel';
 import ReviewsPanel from './ReviewsPanel';
+import MessagesPanel from './MessagesPanel';
+
+type ConversationRow = Conversation & { bookings: { id: string; status: string } | null };
 
 type TabId =
   | 'bookings'
+  | 'messages'
   | 'schedule'
   | 'pings'
   | 'services'
@@ -41,8 +46,10 @@ export default function DashboardTabs(props: {
   pings: Ping[];
   reviews: Review[];
   gallery: GalleryPhoto[];
+  conversations: ConversationRow[];
 }) {
-  const { operator, profile, services, slots, bookings, pings, reviews, gallery } = props;
+  const { operator, profile, services, slots, bookings, pings, reviews, gallery, conversations } =
+    props;
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('bookings');
 
@@ -51,6 +58,7 @@ export default function DashboardTabs(props: {
 
   const tabs: { id: TabId; label: string; badge?: number }[] = [
     { id: 'bookings', label: 'Bookings', badge: upcoming },
+    { id: 'messages', label: 'Messages', badge: conversations.length },
     { id: 'schedule', label: 'Schedule' },
     { id: 'pings', label: 'Pings', badge: newPings },
     { id: 'services', label: 'Services' },
@@ -110,6 +118,7 @@ export default function DashboardTabs(props: {
 
       <Shell>
         {tab === 'bookings' && <BookingsPanel bookings={bookings} />}
+        {tab === 'messages' && <MessagesPanel conversations={conversations} />}
         {tab === 'schedule' && <SchedulePanel slots={slots} />}
         {tab === 'pings' && <PingsPanel pings={pings} />}
         {tab === 'services' && <ServicesPanel services={services} />}

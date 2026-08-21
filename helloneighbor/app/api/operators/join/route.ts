@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { normalizePhone } from '@/lib/format';
 import type { ServiceKind } from '@/lib/types';
 import { SERVICE_KINDS, serviceKind } from '@/lib/catalog';
+import { TERMS_VERSION } from '@/lib/guidelines';
+import { reviewContent } from '@/lib/supervisor';
 
 /** POST /api/operators/join — public self-registration. Creates a pending subscriber. */
 export async function POST(request: Request) {
@@ -23,6 +25,12 @@ export async function POST(request: Request) {
   if (!Number.isInteger(age) || age < 8 || age > 25) {
     return NextResponse.json({ error: 'Age must be between 8 and 25.' }, { status: 400 });
   }
+  if (body.accepted_terms !== true) {
+    return NextResponse.json(
+      { error: 'You need to accept the community guidelines to sign up.' },
+      { status: 400 }
+    );
+  }
 
   const known = new Set(SERVICE_KINDS.map((s) => s.kind));
   const interests: ServiceKind[] = Array.isArray(body.interests)
@@ -33,7 +41,16 @@ export async function POST(request: Request) {
 
   const { data: subscriber, error } = await db
     .from('subscribers')
-    .insert({ name, phone, area, age, bio, status: 'pending' })
+    .insert({
+      name,
+      phone,
+      area,
+      age,
+      bio,
+      status: 'pending',
+      accepted_terms_at: new Date().toISOString(),
+      accepted_terms_version: TERMS_VERSION,
+    })
     .select('id')
     .single();
 
@@ -65,6 +82,17 @@ export async function POST(request: Request) {
     const { error: serviceError } = await db.from('services').insert(drafts);
     if (serviceError) console.error('[join] draft services failed', serviceError);
   }
+
+  // Reviewed inline rather than in the background: an application that trips
+  // the supervisor should reach the admin already flagged, and the applicant is
+  // waiting on a screen anyway. Every application still lands as 'pending' —
+  // the supervisor annotates, a person decides.
+  await reviewContent({
+    subjectType: 'subscriber',
+    subjectId: subscriber.id,
+    label: 'application from someone who wants to offer services',
+    content: { name, area, age, bio, wants_to_offer: interests },
+  });
 
   return NextResponse.json({ ok: true, id: subscriber.id }, { status: 201 });
 }

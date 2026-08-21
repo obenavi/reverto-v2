@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireOperator } from '@/lib/guards';
 import { SERVICE_KINDS } from '@/lib/catalog';
+import { reviewContent } from '@/lib/supervisor';
 import type { ServiceKind } from '@/lib/types';
 
 const KINDS = new Set(SERVICE_KINDS.map((s) => s.kind));
@@ -46,6 +47,29 @@ export async function POST(request: Request) {
     console.error('[services:create]', error);
     return NextResponse.json({ error: 'Could not save that service.' }, { status: 500 });
   }
+
+  // A blocked listing is hidden immediately rather than waiting on an admin,
+  // since it is publicly bookable the moment it exists.
+  const { verdict, review } = await reviewContent({
+    subjectType: 'service',
+    subjectId: data.id,
+    label: 'service listing',
+    content: { kind, title, description: data.description, price_cents: priceCents },
+  });
+
+  if (verdict === 'block') {
+    await supabaseAdmin().from('services').update({ active: false }).eq('id', data.id);
+    return NextResponse.json(
+      {
+        error:
+          review?.rationale ??
+          'That listing does not fit the community guidelines, so it has been hidden.',
+        service: { ...data, active: false },
+      },
+      { status: 422 }
+    );
+  }
+
   return NextResponse.json({ service: data }, { status: 201 });
 }
 

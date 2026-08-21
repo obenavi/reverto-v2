@@ -1,0 +1,213 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { EmptyState, Notice } from '@/components/ui';
+import { formatPrice, relativeTime } from '@/lib/format';
+import { PAYMENT_METHODS, paymentLabel } from '@/lib/catalog';
+import type { Message, PaymentMethod } from '@/lib/types';
+
+type ConversationView = {
+  id: string;
+  client_name: string;
+  bookings: {
+    id: string;
+    price_cents: number;
+    payment_method: PaymentMethod;
+    payment_status: string;
+    status: string;
+  } | null;
+  subscribers: { name: string } | null;
+};
+
+/**
+ * One thread, used by both sides. `token` is present for the neighbor (their
+ * signed link); the operator passes `conversationId` and relies on their
+ * session cookie instead.
+ */
+export default function ChatThread({
+  token,
+  conversationId,
+}: {
+  token?: string;
+  conversationId?: string;
+}) {
+  const [conversation, setConversation] = useState<ConversationView | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [viewer, setViewer] = useState<'client' | 'operator'>('client');
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const query = token ? `token=${encodeURIComponent(token)}` : `conversation_id=${conversationId}`;
+
+  const load = useCallback(async () => {
+    const res = await fetch(`/api/messages?${query}`);
+    const body = await res.json();
+    if (!res.ok) {
+      setError(body.error ?? 'Could not load this conversation.');
+      setLoading(false);
+      return;
+    }
+    setConversation(body.conversation);
+    setMessages(body.messages);
+    setViewer(body.viewer);
+    setError(null);
+    setLoading(false);
+  }, [query]);
+
+  useEffect(() => {
+    load();
+    // No realtime channel here — a poll keeps the thread current without
+    // standing up a websocket for what is a low-traffic conversation.
+    const timer = setInterval(load, 10_000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length]);
+
+  async function send(event: React.FormEvent) {
+    event.preventDefault();
+    if (!draft.trim()) return;
+
+    setSending(true);
+    const res = await fetch(`/api/messages?${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: draft }),
+    });
+    setSending(false);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? 'Could not send that.');
+      return;
+    }
+    setDraft('');
+    await load();
+  }
+
+  async function choosePayment(method: PaymentMethod) {
+    setSending(true);
+    const res = await fetch(`/api/messages/payment-choice?${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method }),
+    });
+    setSending(false);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? 'Could not save that choice.');
+      return;
+    }
+    await load();
+  }
+
+  if (loading) return <p className="text-ink-muted">Loading…</p>;
+  if (error && !conversation) return <Notice tone="error">{error}</Notice>;
+
+  const booking = conversation?.bookings;
+  const answered = messages.some((m) => m.kind === 'payment_choice');
+  const otherName =
+    viewer === 'client' ? (conversation?.subscribers?.name ?? 'your provider') : conversation?.client_name;
+
+  return (
+    <div className="space-y-3">
+      {booking && (
+        <div className="card flex items-center justify-between">
+          <div>
+            <p className="font-bold">{otherName}</p>
+            <p className="text-[13px] text-ink-muted">
+              {formatPrice(booking.price_cents)} · {paymentLabel(booking.payment_method)} ·{' '}
+              {booking.status}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {error && <Notice tone="error">{error}</Notice>}
+
+      {messages.length === 0 ? (
+        <EmptyState title="No messages yet" />
+      ) : (
+        <ul className="space-y-2">
+          {messages.map((message) => {
+            if (message.kind === 'system') {
+              return (
+                <li key={message.id}>
+                  <Notice tone="warn">{message.body}</Notice>
+                </li>
+              );
+            }
+
+            const mine = message.sender === viewer;
+            const options = Array.isArray((message.metadata as { options?: unknown })?.options)
+              ? ((message.metadata as { options: PaymentMethod[] }).options)
+              : [];
+
+            return (
+              <li key={message.id} className={mine ? 'text-right' : 'text-left'}>
+                <div
+                  className={`inline-block max-w-[85%] rounded-card px-3 py-2 text-left ${
+                    mine ? 'bg-brand text-white' : 'bg-gray-100 text-ink'
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap">{message.body}</p>
+
+                  {message.kind === 'payment_poll' && (
+                    <div className="mt-2 space-y-1">
+                      {viewer === 'client' && !answered ? (
+                        options.map((option) => (
+                          <button
+                            key={option}
+                            disabled={sending}
+                            onClick={() => choosePayment(option)}
+                            className="block w-full rounded-btn bg-white px-3 py-2 text-left font-semibold text-brand hover:bg-brand-light disabled:opacity-50"
+                          >
+                            {paymentLabel(option)}
+                            <span className="block text-[12px] font-normal text-ink-muted">
+                              {PAYMENT_METHODS.find((m) => m.value === option)?.note}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className={`text-[12px] ${mine ? 'text-white/70' : 'text-ink-faint'}`}>
+                          {answered ? 'Answered' : 'Waiting for a reply'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <p className="mt-0.5 text-[11px] text-ink-faint">
+                  {relativeTime(message.created_at)}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <div ref={bottomRef} />
+
+      <form onSubmit={send} className="flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Write a message…"
+          maxLength={2000}
+        />
+        <button className="btn-primary shrink-0" disabled={sending || !draft.trim()}>
+          Send
+        </button>
+      </form>
+
+      <p className="text-center text-[12px] text-ink-faint">
+        Keep it here. This thread is what gets reviewed if a dispute is opened.
+      </p>
+    </div>
+  );
+}

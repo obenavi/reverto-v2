@@ -5,18 +5,20 @@ import { useRouter } from 'next/navigation';
 import { EmptyState, Notice, Shell, StatusPill } from '@/components/ui';
 import { formatPhone, formatPrice, formatSlot, relativeTime } from '@/lib/format';
 import { paymentLabel } from '@/lib/catalog';
-import type { BookingRow, DisputeRow, Subscriber } from '@/lib/types';
+import type { BookingRow, DisputeRow, ModerationReview, Subscriber } from '@/lib/types';
 
-type Tab = 'subscribers' | 'bookings' | 'disputes';
+type Tab = 'subscribers' | 'bookings' | 'disputes' | 'flags';
 
 export default function AdminDashboard({
   subscribers,
   bookings,
   disputes,
+  flags,
 }: {
   subscribers: Subscriber[];
   bookings: BookingRow[];
   disputes: DisputeRow[];
+  flags: ModerationReview[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('subscribers');
@@ -53,6 +55,7 @@ export default function AdminDashboard({
     { id: 'subscribers', label: 'Subscribers', badge: pending.length },
     { id: 'bookings', label: 'Bookings' },
     { id: 'disputes', label: 'Disputes', badge: openDisputes.length },
+    { id: 'flags', label: 'Flags', badge: flags.length },
   ];
 
   return (
@@ -189,6 +192,54 @@ export default function AdminDashboard({
                     <StatusPill status={b.payment_status} />
                   </div>
                 </div>
+              </article>
+            ))
+          ))}
+
+        {tab === 'flags' &&
+          (flags.length === 0 ? (
+            <EmptyState
+              title="Nothing flagged"
+              hint="The supervisor reviews every signup, listing, and message."
+            />
+          ) : (
+            flags.map((flag) => (
+              <article key={flag.id} className="card">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold">
+                      {flag.subject_type}
+                      <span className="ml-2 font-mono text-[12px] font-normal text-ink-faint">
+                        {flag.subject_id.slice(0, 8)}
+                      </span>
+                    </p>
+                    <p className="text-[12px] text-ink-faint">{relativeTime(flag.created_at)}</p>
+                  </div>
+                  <div className="text-right">
+                    <StatusPill status={flag.verdict === 'block' ? 'rejected' : flag.verdict} />
+                    <p className="mt-1 text-[12px] text-ink-faint">risk {flag.risk_score}/100</p>
+                  </div>
+                </div>
+
+                {flag.categories.length > 0 && (
+                  <p className="mt-2 flex flex-wrap gap-1">
+                    {flag.categories.map((category) => (
+                      <span key={category} className="pill bg-warning-light text-warning">
+                        {category.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </p>
+                )}
+
+                {flag.rationale && <p className="mt-2">{flag.rationale}</p>}
+
+                <button
+                  className="btn-secondary mt-3 w-full"
+                  disabled={busy}
+                  onClick={() => call('/api/admin/moderation', { id: flag.id })}
+                >
+                  Mark handled
+                </button>
               </article>
             ))
           ))}

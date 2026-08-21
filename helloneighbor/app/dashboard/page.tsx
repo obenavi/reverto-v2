@@ -5,6 +5,7 @@ import { Shell } from '@/components/ui';
 import DashboardTabs from '@/components/dashboard/DashboardTabs';
 import type {
   BookingRow,
+  Conversation,
   GalleryPhoto,
   OperatorProfile,
   Ping,
@@ -13,6 +14,8 @@ import type {
   Slot,
   Subscriber,
 } from '@/lib/types';
+
+type ConversationRow = Conversation & { bookings: { id: string; status: string } | null };
 
 // Always reflect the latest bookings; nothing here is cacheable.
 export const dynamic = 'force-dynamic';
@@ -32,6 +35,7 @@ export default async function DashboardPage() {
     reviewsRes,
     galleryRes,
     profileRes,
+    conversationsRes,
   ] = await Promise.all([
     db.from('subscribers').select('*').eq('id', operatorId).maybeSingle(),
     db.from('services').select('*').eq('operator_id', operatorId).order('kind'),
@@ -45,6 +49,11 @@ export default async function DashboardPage() {
     db.from('reviews').select('*').eq('operator_id', operatorId).order('created_at', { ascending: false }),
     db.from('gallery_photos').select('*').eq('operator_id', operatorId).order('sort_order'),
     db.from('operator_profiles').select('*').eq('operator_id', operatorId).maybeSingle(),
+    db
+      .from('conversations')
+      .select('*, bookings (id, status)')
+      .eq('operator_id', operatorId)
+      .order('last_message_at', { ascending: false }),
   ]);
 
   const operator = operatorRes.data as Subscriber | null;
@@ -76,6 +85,7 @@ export default async function DashboardPage() {
       pings={(pingsRes.data as Ping[]) ?? []}
       reviews={(reviewsRes.data as Review[]) ?? []}
       gallery={(galleryRes.data as GalleryPhoto[]) ?? []}
+      conversations={(conversationsRes.data as ConversationRow[]) ?? []}
     />
   );
 }

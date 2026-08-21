@@ -5,6 +5,9 @@ import { sendSms, smsTemplates } from '@/lib/sms';
 import { ensurePaymentIntent } from '@/lib/payments';
 import { isStripeConfigured } from '@/lib/stripe';
 import { PAYMENT_METHODS } from '@/lib/catalog';
+import { openConversationForBooking } from '@/lib/conversations';
+import { reviewInBackground } from '@/lib/supervisor';
+import { TERMS_VERSION } from '@/lib/guidelines';
 import type { PaymentMethod } from '@/lib/types';
 
 const METHODS = new Set(PAYMENT_METHODS.map((m) => m.value));
@@ -36,6 +39,14 @@ export async function POST(request: Request) {
   }
   if (paymentMethod === 'stripe' && !isStripeConfigured()) {
     return NextResponse.json({ error: 'Card payments are not available right now.' }, { status: 503 });
+  }
+  // Both parties agree to the same terms; the neighbor's acceptance is recorded
+  // on the booking so a dispute can be judged against the text they saw.
+  if (body.accepted_terms !== true) {
+    return NextResponse.json(
+      { error: 'You need to accept the community guidelines to book.' },
+      { status: 400 }
+    );
   }
 
   const db = supabaseAdmin();
@@ -99,6 +110,8 @@ export async function POST(request: Request) {
       payment_method: paymentMethod,
       payment_status: 'pending',
       status: 'confirmed',
+      accepted_terms_at: new Date().toISOString(),
+      accepted_terms_version: TERMS_VERSION,
     })
     .select('*')
     .single();
@@ -122,11 +135,38 @@ export async function POST(request: Request) {
     }
   }
 
+  // Open the thread before replying: the client is sent straight into it, so
+  // it has to exist by the time they land.
+  const conversation = await openConversationForBooking({
+    bookingId: booking.id,
+    operatorId,
+    operatorName: operator.name,
+    operatorMethods: operator.payment_methods,
+    clientName,
+    clientPhone,
+    serviceTitle: service.title,
+    startsAt: slot.starts_at,
+    endsAt: slot.ends_at,
+    note: booking.notes,
+  });
+
+  if (booking.notes) {
+    reviewInBackground({
+      subjectType: 'booking',
+      subjectId: booking.id,
+      label: 'note a neighbor left for their service provider',
+      content: { note: booking.notes, service: service.title },
+    });
+  }
+
   const when = formatSlot(slot.starts_at, slot.ends_at);
   await Promise.all([
     sendSms(operator.phone, smsTemplates.newBooking(clientName, service.title, when)),
     sendSms(clientPhone, smsTemplates.bookingConfirmed(operator.name, service.title, when)),
   ]);
 
-  return NextResponse.json({ booking, clientSecret }, { status: 201 });
+  return NextResponse.json(
+    { booking, clientSecret, chatPath: conversation?.path ?? null },
+    { status: 201 }
+  );
 }

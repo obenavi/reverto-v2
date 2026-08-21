@@ -1,14 +1,8 @@
 /** Shared domain types. These mirror supabase/migrations/001_init_schema.sql. */
 
 export type SubscriberStatus = 'pending' | 'active' | 'suspended' | 'rejected';
-export type ServiceKind =
-  | 'trash'
-  | 'car'
-  | 'dog'
-  | 'baby'
-  | 'tutor'
-  | 'lawn'
-  | 'other';
+// 'baby' was removed when babysitting was banned; see migration 002.
+export type ServiceKind = 'trash' | 'car' | 'dog' | 'tutor' | 'lawn' | 'other';
 export type SlotStatus = 'open' | 'held' | 'booked';
 export type PaymentMethod = 'stripe' | 'cash' | 'venmo' | 'cashapp' | 'zelle';
 export type PaymentStatus =
@@ -35,6 +29,8 @@ export interface Subscriber {
   photo_url: string | null;
   payment_methods: PaymentMethod[];
   approved_at: string | null;
+  accepted_terms_at: string | null;
+  accepted_terms_version: string | null;
 }
 
 export interface Service {
@@ -71,6 +67,8 @@ export interface Booking {
   payment_status: PaymentStatus;
   stripe_payment_intent_id: string | null;
   status: BookingStatus;
+  accepted_terms_at: string | null;
+  accepted_terms_version: string | null;
 }
 
 export interface Ping {
@@ -158,3 +156,45 @@ export type DisputeRow = Dispute & {
     payment_status: PaymentStatus;
   } | null;
 };
+
+export type MessageSender = 'client' | 'operator' | 'system';
+export type MessageKind = 'text' | 'payment_poll' | 'payment_choice' | 'system';
+
+export interface Conversation {
+  id: string;
+  created_at: string;
+  booking_id: string;
+  operator_id: string;
+  client_name: string;
+  client_phone: string;
+  last_message_at: string;
+}
+
+export interface Message {
+  id: string;
+  created_at: string;
+  conversation_id: string;
+  sender: MessageSender;
+  kind: MessageKind;
+  body: string;
+  /** payment_poll carries { options: PaymentMethod[] }. */
+  metadata: Record<string, unknown>;
+  read_at: string | null;
+}
+
+export type ModerationVerdict = 'pass' | 'review' | 'block' | 'error';
+export type ModerationSubject = 'subscriber' | 'service' | 'booking' | 'message';
+
+export interface ModerationReview {
+  id: string;
+  created_at: string;
+  subject_type: ModerationSubject;
+  subject_id: string;
+  verdict: ModerationVerdict;
+  risk_score: number;
+  categories: string[];
+  rationale: string | null;
+  model: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}

@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { EmptyState, Notice } from '@/components/ui';
+import { CLIENT_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
 import { PAYMENT_METHODS, serviceKind } from '@/lib/catalog';
 import { formatPrice, formatSlot } from '@/lib/format';
 import type {
@@ -31,6 +34,7 @@ export default function BookingFlow({
   gallery: GalleryPhoto[];
   reviews: Review[];
 }) {
+  const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [service, setService] = useState<Service | null>(null);
   const [slot, setSlot] = useState<Slot | null>(null);
@@ -40,9 +44,13 @@ export default function BookingFlow({
   const [notes, setNotes] = useState('');
   const [method, setMethod] = useState<PaymentMethod>(operator.payment_methods[0] ?? 'cash');
 
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [noteConfirmed, setNoteConfirmed] = useState(false);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [chatPath, setChatPath] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   const acceptedMethods = PAYMENT_METHODS.filter((m) =>
@@ -66,6 +74,7 @@ export default function BookingFlow({
         client_address: address,
         notes,
         payment_method: method,
+        accepted_terms: acceptedTerms,
       }),
     });
     const body = await res.json();
@@ -76,10 +85,25 @@ export default function BookingFlow({
       return;
     }
 
+    setChatPath(body.chatPath ?? null);
+
     if (body.clientSecret) {
       // Card: the booking exists but the hold isn't placed until the neighbor
       // confirms below.
       setClientSecret(body.clientSecret);
+      return;
+    }
+    finish(body.chatPath ?? null);
+  }
+
+  /**
+   * Sends the neighbor straight into the thread, where the opening message and
+   * the provider's payment options are already waiting. The success card is a
+   * fallback for when the thread could not be opened.
+   */
+  function finish(path: string | null) {
+    if (path) {
+      router.push(path);
       return;
     }
     setDone(true);
@@ -245,13 +269,23 @@ export default function BookingFlow({
             <input id="caddr" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
           <div>
-            <label htmlFor="cnotes">Anything they should know?</label>
+            <label htmlFor="cnotes">
+              A note for {operator.name} <span className="font-normal text-ink-faint">(optional)</span>
+            </label>
             <textarea
               id="cnotes"
-              rows={2}
+              rows={3}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                setNoteConfirmed(false);
+              }}
+              placeholder={'Gate code is 4417. The bins are behind the side fence — the grey one goes out this week, not the green.'}
             />
+            <p className="mt-1 text-[12px] text-ink-faint">
+              Anything that helps them do the job right: where things are, a gate code, a
+              pet in the yard, how you like it done.
+            </p>
           </div>
           <div className="flex gap-2">
             <button type="button" className="btn-secondary" onClick={() => setStep(2)}>
@@ -302,18 +336,67 @@ export default function BookingFlow({
             <CardPayment
               clientSecret={clientSecret}
               amountCents={service.price_cents}
-              onSuccess={() => setDone(true)}
+              onSuccess={() => finish(chatPath)}
               onError={setError}
             />
           ) : (
-            <div className="flex gap-2">
-              <button className="btn-secondary" onClick={() => setStep(3)} disabled={busy}>
-                Back
-              </button>
-              <button className="btn-primary flex-1" onClick={confirmBooking} disabled={busy}>
-                {busy ? 'Booking…' : 'Confirm booking'}
-              </button>
-            </div>
+            <>
+              {!notes.trim() && !noteConfirmed && (
+                <div className="card border-warning bg-warning-light">
+                  <p className="font-bold text-warning">One last thing</p>
+                  <p className="mt-1 text-[13px] text-warning">
+                    You haven&apos;t left a note. Is there anything {operator.name} needs to
+                    know before they show up — a gate code, where something is kept, a dog
+                    in the yard, how you want it done?
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button className="btn-secondary flex-1" onClick={() => setStep(3)}>
+                      Add a note
+                    </button>
+                    <button
+                      className="btn-secondary flex-1"
+                      onClick={() => setNoteConfirmed(true)}
+                    >
+                      Nothing to add
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <fieldset className="card">
+                <legend className="mb-2 block text-[13px] font-semibold">
+                  Before you book
+                </legend>
+                <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+                  <input
+                    type="checkbox"
+                    className="!mt-0.5 !w-auto"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  />
+                  <span className="text-ink-muted">
+                    {CLIENT_ACKNOWLEDGEMENTS.join(' ')}{' '}
+                    <Link href="/guidelines" target="_blank" className="font-semibold text-brand">
+                      Read the community guidelines
+                    </Link>
+                    .
+                  </span>
+                </label>
+              </fieldset>
+
+              <div className="flex gap-2">
+                <button className="btn-secondary" onClick={() => setStep(3)} disabled={busy}>
+                  Back
+                </button>
+                <button
+                  className="btn-primary flex-1"
+                  onClick={confirmBooking}
+                  disabled={busy || !acceptedTerms || (!notes.trim() && !noteConfirmed)}
+                >
+                  {busy ? 'Booking…' : 'Confirm booking'}
+                </button>
+              </div>
+            </>
           )}
         </section>
       )}
