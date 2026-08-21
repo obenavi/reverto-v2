@@ -4,7 +4,12 @@ export type SubscriberStatus = 'pending' | 'active' | 'suspended' | 'rejected';
 // 'baby' was removed when babysitting was banned; see migration 002.
 export type ServiceKind = 'trash' | 'car' | 'dog' | 'tutor' | 'lawn' | 'other';
 export type SlotStatus = 'open' | 'held' | 'booked';
-export type PaymentMethod = 'stripe' | 'cash' | 'venmo' | 'cashapp' | 'zelle';
+// 'stripe' is retained so the card code path still compiles; it is not
+// currently offerable — see PAYMENT_METHODS in lib/catalog.ts.
+export type PaymentMethod = 'stripe' | 'cash' | 'venmo' | 'cashapp' | 'zelle' | 'paypal';
+
+/** Whether money moves before the job or after it. */
+export type PaymentTiming = 'advance' | 'on_completion';
 export type PaymentStatus =
   | 'pending'
   | 'held'
@@ -31,6 +36,7 @@ export interface Subscriber {
   approved_at: string | null;
   accepted_terms_at: string | null;
   accepted_terms_version: string | null;
+  prefers_advance_payment: boolean;
 }
 
 export interface Service {
@@ -65,6 +71,7 @@ export interface Booking {
   price_cents: number;
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
+  payment_timing: PaymentTiming | null;
   stripe_payment_intent_id: string | null;
   status: BookingStatus;
   accepted_terms_at: string | null;
@@ -158,7 +165,14 @@ export type DisputeRow = Dispute & {
 };
 
 export type MessageSender = 'client' | 'operator' | 'system';
-export type MessageKind = 'text' | 'payment_poll' | 'payment_choice' | 'system';
+export type MessageKind =
+  | 'text'
+  | 'payment_poll'
+  | 'payment_choice'
+  | 'timing_poll'
+  | 'timing_choice'
+  | 'payment_memo'
+  | 'system';
 
 export interface Conversation {
   id: string;

@@ -5,6 +5,22 @@ import { paymentLabel } from './catalog';
 import type { PaymentMethod } from './types';
 
 /**
+ * The reference a neighbor pastes into the note field of a Venmo, Cash App,
+ * Zelle or PayPal transfer. It is what ties an otherwise anonymous transfer to
+ * a specific booking, which is the whole point when a dispute is opened.
+ */
+export function paymentMemo(args: {
+  clientName: string;
+  serviceTitle: string;
+  startsAt: string;
+}): string {
+  const start = new Date(args.startsAt);
+  const date = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const time = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${args.clientName} paid for ${args.serviceTitle} on ${date} at ${time}. See you there!`;
+}
+
+/**
  * Conversations are how the "keep everything in the app" rule is enforced in
  * practice: one thread per booking, opened automatically the moment a booking
  * is made, so neither side ever needs to swap phone numbers.
@@ -47,6 +63,8 @@ export async function openConversationForBooking(args: {
   operatorId: string;
   operatorName: string;
   operatorMethods: PaymentMethod[];
+  operatorPrefersAdvance: boolean;
+  operatorHandles: Record<string, string>;
   clientName: string;
   clientPhone: string;
   serviceTitle: string;
@@ -73,9 +91,15 @@ export async function openConversationForBooking(args: {
   }
 
   const when = formatSlot(args.startsAt, args.endsAt);
+  const memo = paymentMemo({
+    clientName: args.clientName,
+    serviceTitle: args.serviceTitle,
+    startsAt: args.startsAt,
+  });
+
   const seed: {
     sender: 'client' | 'operator' | 'system';
-    kind: 'text' | 'payment_poll' | 'system';
+    kind: 'text' | 'payment_poll' | 'timing_poll' | 'timing_choice' | 'payment_memo' | 'system';
     body: string;
     metadata?: Record<string, unknown>;
   }[] = [
@@ -87,7 +111,7 @@ export async function openConversationForBooking(args: {
     {
       sender: 'client',
       kind: 'text',
-      body: `Hi! My name is ${args.clientName} and I booked you for ${args.serviceTitle} on ${when}. How would you like to get paid?`,
+      body: `Hi! My name is ${args.clientName} and I booked you for ${args.serviceTitle} on ${when}. How would you like to get paid — in advance, or cash on the spot?`,
     },
   ];
 
@@ -102,20 +126,59 @@ export async function openConversationForBooking(args: {
       args.operatorMethods.length === 1
         ? `${args.operatorName} takes ${paymentLabel(args.operatorMethods[0])}. Tap to confirm.`
         : `${args.operatorName} accepts these. Pick whichever works for you:`,
-    metadata: { options: args.operatorMethods },
+    metadata: { options: args.operatorMethods, handles: args.operatorHandles },
   });
 
+  if (args.operatorPrefersAdvance) {
+    // The operator has already said, once, in their profile that they want
+    // paying up front — so answer for them rather than making them tap it
+    // again on every booking, and put the memo up immediately.
+    seed.push({
+      sender: 'operator',
+      kind: 'timing_choice',
+      body: `I'd rather be paid in advance, before I come out.`,
+      metadata: { timing: 'advance', from_profile: true },
+    });
+    seed.push({
+      sender: 'operator',
+      kind: 'payment_memo',
+      body: memo,
+      metadata: { memo },
+    });
+  } else {
+    seed.push({
+      sender: 'client',
+      kind: 'timing_poll',
+      body: 'And when would you like it?',
+      metadata: { options: ['advance', 'on_completion'] },
+    });
+  }
+
+  // Stamp each seeded message a millisecond apart. Inserting them in one batch
+  // gives them all the same default now(), and the thread is ordered by
+  // created_at — without this the opening exchange can render out of order.
+  const base = Date.now();
   const { error: seedError } = await db.from('messages').insert(
-    seed.map((message) => ({
+    seed.map((message, i) => ({
       conversation_id: conversation.id,
       sender: message.sender,
       kind: message.kind,
       body: message.body,
       metadata: message.metadata ?? {},
+      created_at: new Date(base + i).toISOString(),
     }))
   );
 
   if (seedError) console.error('[conversations] could not seed thread', seedError);
+
+  // Keep the booking in step when the operator's profile already answered.
+  if (args.operatorPrefersAdvance) {
+    const { error: timingError } = await db
+      .from('bookings')
+      .update({ payment_timing: 'advance' })
+      .eq('id', args.bookingId);
+    if (timingError) console.error('[conversations] could not set timing', timingError);
+  }
 
   return {
     conversationId: conversation.id,

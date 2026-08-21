@@ -136,15 +136,36 @@ For webhooks locally:
 stripe listen --forward-to localhost:3000/api/stripe/webhook
 ```
 
-## How payment holds work
+## How payment works
 
-Card bookings use a **manual-capture PaymentIntent**. Booking authorizes the
-card without charging it (`payment_status: held`); the operator marking the job
-done captures it (`captured`); cancelling releases it (`released`). Admin
-dispute resolution captures, releases, or refunds depending on who wins.
+**Card payments are off.** Stripe Connect requires account holders to be 18+ and
+most operators here are minors, so that question is unresolved. The code path is
+still in the repo — `lib/stripe.ts`, `lib/payments.ts`, the two `/api/stripe/*`
+routes — and putting `'stripe'` back into `PAYMENT_METHODS` in `lib/catalog.ts`
+re-enables it. `/api/bookings` rejects it independently of the UI.
 
-Cash, Venmo, Cash App, and Zelle are recorded but settled in person — the app
-tracks status without moving money.
+What operators offer today: **cash**, **Venmo**, **Cash App**, **Zelle**, and
+**PayPal**. Money never touches the platform; HelloNeighbor records what was
+agreed and keeps the conversation as evidence.
+
+**Timing is negotiated in the thread.** The neighbor's opening message asks how
+the provider wants paying — in advance, or cash on the spot:
+
+- An operator who ticks **"I'd rather be paid in advance"** in their profile has
+  it answered for them on every booking, and the payment note posts immediately.
+- Everyone else gets a two-option poll in the thread and answers per booking.
+
+When the answer is *advance*, the thread posts a copy-and-paste payment note:
+
+> Sarah paid for Car wash on Aug 23 at 2:00 PM. See you there!
+
+The neighbor pastes that into the note field of their Venmo/Cash App/Zelle/PayPal
+transfer. It is what ties an otherwise anonymous transfer to a specific booking
+when a dispute is opened — the payment apps give the platform no visibility of
+their own.
+
+Handles come from the operator's profile and appear on the payment options
+themselves, so the neighbor knows where to send it.
 
 ## Routes
 
@@ -192,6 +213,9 @@ npm run build       # production build
 - **Reviews have no submission page.** The schema, dashboard, and public
   display all exist; the neighbor-facing form does not.
 - **`referrals` and `boosts` are schema-only** — no UI reads or writes them.
+- **Nothing verifies a P2P payment actually arrived.** The memo makes a transfer
+  traceable by hand; the app cannot see Venmo or Zelle, so `payment_status` for
+  these is a claim, not a fact.
 - **No automatic capture deadline.** The build summary describes a 48-hour
   auto-release; that would be a scheduled job, not part of this app.
 - **`npm audit` flags PostCSS** inside Next's own dependency tree. It is

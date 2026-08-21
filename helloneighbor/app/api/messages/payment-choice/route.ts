@@ -66,9 +66,11 @@ export async function POST(request: Request) {
     .limit(1)
     .maybeSingle();
 
-  const offered = Array.isArray((poll?.metadata as { options?: unknown })?.options)
-    ? ((poll!.metadata as { options: PaymentMethod[] }).options)
-    : [];
+  const pollMeta = (poll?.metadata ?? {}) as {
+    options?: PaymentMethod[];
+    handles?: Record<string, string>;
+  };
+  const offered = Array.isArray(pollMeta.options) ? pollMeta.options : [];
 
   if (!offered.includes(choice)) {
     return NextResponse.json({ error: 'That option was not offered.' }, { status: 400 });
@@ -84,12 +86,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Could not record that choice.' }, { status: 500 });
   }
 
+  const handle = pollMeta.handles?.[choice];
   await db.from('messages').insert({
     conversation_id: conversationId,
     sender: 'client',
     kind: 'payment_choice',
-    body: `Let's do ${paymentLabel(choice)}.`,
-    metadata: { method: choice },
+    body: handle
+      ? `Let's do ${paymentLabel(choice)} — sending to ${handle}.`
+      : `Let's do ${paymentLabel(choice)}.`,
+    metadata: { method: choice, handle: handle ?? null },
   });
 
   await touchConversation(conversationId);

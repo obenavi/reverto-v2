@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, Notice } from '@/components/ui';
 import { formatPrice, relativeTime } from '@/lib/format';
-import { PAYMENT_METHODS, paymentLabel } from '@/lib/catalog';
-import type { Message, PaymentMethod } from '@/lib/types';
+import { PAYMENT_TIMINGS, paymentNote, paymentLabel } from '@/lib/catalog';
+import type { Message, PaymentMethod, PaymentTiming } from '@/lib/types';
 
 type ConversationView = {
   id: string;
@@ -38,6 +38,7 @@ export default function ChatThread({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [copied, setCopied] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const query = token ? `token=${encodeURIComponent(token)}` : `conversation_id=${conversationId}`;
@@ -107,11 +108,39 @@ export default function ChatThread({
     await load();
   }
 
+  async function chooseTiming(timing: PaymentTiming) {
+    setSending(true);
+    const res = await fetch('/api/messages/timing-choice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation_id: conversationId, timing }),
+    });
+    setSending(false);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? 'Could not save that.');
+      return;
+    }
+    await load();
+  }
+
+  async function copyMemo(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   if (loading) return <p className="text-ink-muted">Loading…</p>;
   if (error && !conversation) return <Notice tone="error">{error}</Notice>;
 
   const booking = conversation?.bookings;
   const answered = messages.some((m) => m.kind === 'payment_choice');
+  const timingAnswered = messages.some((m) => m.kind === 'timing_choice');
   const otherName =
     viewer === 'client' ? (conversation?.subscribers?.name ?? 'your provider') : conversation?.client_name;
 
@@ -144,10 +173,41 @@ export default function ChatThread({
               );
             }
 
+            if (message.kind === 'payment_memo') {
+              const memo = String((message.metadata as { memo?: unknown })?.memo ?? message.body);
+              return (
+                <li key={message.id}>
+                  <div className="rounded-card border border-brand bg-brand-light p-3">
+                    <p className="text-[13px] font-bold text-brand">
+                      Paste this as the payment note
+                    </p>
+                    <p className="mt-1 text-[12px] text-ink-muted">
+                      Put it in the note or description field of the transfer. It is what
+                      links the money to this booking if anything is ever disputed.
+                    </p>
+                    <p className="mt-2 select-all rounded-btn bg-white px-3 py-2 font-mono text-[13px]">
+                      {memo}
+                    </p>
+                    <button
+                      className="btn-primary mt-2 w-full"
+                      onClick={() => copyMemo(memo)}
+                    >
+                      {copied ? 'Copied!' : 'Copy note'}
+                    </button>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-ink-faint">
+                    {relativeTime(message.created_at)}
+                  </p>
+                </li>
+              );
+            }
+
             const mine = message.sender === viewer;
-            const options = Array.isArray((message.metadata as { options?: unknown })?.options)
-              ? ((message.metadata as { options: PaymentMethod[] }).options)
-              : [];
+            const meta = (message.metadata ?? {}) as {
+              options?: (PaymentMethod | PaymentTiming)[];
+              handles?: Record<string, string>;
+            };
+            const options = Array.isArray(meta.options) ? meta.options : [];
 
             return (
               <li key={message.id} className={mine ? 'text-right' : 'text-left'}>
@@ -158,10 +218,34 @@ export default function ChatThread({
                 >
                   <p className="whitespace-pre-wrap">{message.body}</p>
 
+                  {message.kind === 'timing_poll' && (
+                    <div className="mt-2 space-y-1">
+                      {viewer === 'operator' && !timingAnswered ? (
+                        PAYMENT_TIMINGS.map((option) => (
+                          <button
+                            key={option.value}
+                            disabled={sending}
+                            onClick={() => chooseTiming(option.value)}
+                            className="block w-full rounded-btn bg-white px-3 py-2 text-left font-semibold text-brand hover:bg-brand-light disabled:opacity-50"
+                          >
+                            {option.label}
+                            <span className="block text-[12px] font-normal text-ink-muted">
+                              {option.note}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className={`text-[12px] ${mine ? 'text-white/70' : 'text-ink-faint'}`}>
+                          {timingAnswered ? 'Answered' : 'Waiting for a reply'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   {message.kind === 'payment_poll' && (
                     <div className="mt-2 space-y-1">
                       {viewer === 'client' && !answered ? (
-                        options.map((option) => (
+                        (options as PaymentMethod[]).map((option) => (
                           <button
                             key={option}
                             disabled={sending}
@@ -170,7 +254,9 @@ export default function ChatThread({
                           >
                             {paymentLabel(option)}
                             <span className="block text-[12px] font-normal text-ink-muted">
-                              {PAYMENT_METHODS.find((m) => m.value === option)?.note}
+                              {meta.handles?.[option]
+                                ? `${paymentNote(option)} — ${meta.handles[option]}`
+                                : paymentNote(option)}
                             </span>
                           </button>
                         ))

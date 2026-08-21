@@ -3,14 +3,15 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { normalizePhone, formatSlot } from '@/lib/format';
 import { sendSms, smsTemplates } from '@/lib/sms';
 import { ensurePaymentIntent } from '@/lib/payments';
-import { isStripeConfigured } from '@/lib/stripe';
-import { PAYMENT_METHODS } from '@/lib/catalog';
+import { ALL_PAYMENT_METHODS, PAYMENT_METHODS } from '@/lib/catalog';
 import { openConversationForBooking } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
 import { TERMS_VERSION } from '@/lib/guidelines';
 import type { PaymentMethod } from '@/lib/types';
 
-const METHODS = new Set(PAYMENT_METHODS.map((m) => m.value));
+/** Every method the schema accepts, vs. the subset offerable today. */
+const KNOWN_METHODS = new Set(ALL_PAYMENT_METHODS.map((m) => m.value));
+const OFFERABLE_METHODS = new Set(PAYMENT_METHODS.map((m) => m.value));
 
 /**
  * POST /api/bookings — public, no login. Claims a slot, records the booking,
@@ -34,11 +35,21 @@ export async function POST(request: Request) {
   if (!clientPhone) {
     return NextResponse.json({ error: 'That phone number does not look right.' }, { status: 400 });
   }
-  if (!METHODS.has(paymentMethod)) {
+  if (!KNOWN_METHODS.has(paymentMethod)) {
     return NextResponse.json({ error: 'Choose how you want to pay.' }, { status: 400 });
   }
-  if (paymentMethod === 'stripe' && !isStripeConfigured()) {
-    return NextResponse.json({ error: 'Card payments are not available right now.' }, { status: 503 });
+  // Enforced here as well as in the UI — the offerable list is a presentation
+  // concern and this route is public.
+  if (!OFFERABLE_METHODS.has(paymentMethod)) {
+    return NextResponse.json(
+      {
+        error:
+          paymentMethod === 'stripe'
+            ? 'Card payments are paused. Pick cash or a payment app.'
+            : 'That payment method is not available right now.',
+      },
+      { status: 400 }
+    );
   }
   // Both parties agree to the same terms; the neighbor's acceptance is recorded
   // on the booking so a dispute can be judged against the text they saw.
@@ -53,7 +64,7 @@ export async function POST(request: Request) {
 
   const { data: operator } = await db
     .from('subscribers')
-    .select('id, name, phone, status, payment_methods')
+    .select('id, name, phone, status, payment_methods, prefers_advance_payment')
     .eq('id', operatorId)
     .maybeSingle();
 
@@ -63,6 +74,13 @@ export async function POST(request: Request) {
   if (!operator.payment_methods.includes(paymentMethod)) {
     return NextResponse.json({ error: 'That payment method is not accepted.' }, { status: 400 });
   }
+
+  // Handles live on the extended profile; a neighbor paying by app needs them.
+  const { data: operatorProfile } = await db
+    .from('operator_profiles')
+    .select('payment_handles')
+    .eq('operator_id', operatorId)
+    .maybeSingle();
 
   const { data: service } = await db
     .from('services')
@@ -142,6 +160,8 @@ export async function POST(request: Request) {
     operatorId,
     operatorName: operator.name,
     operatorMethods: operator.payment_methods,
+    operatorPrefersAdvance: Boolean(operator.prefers_advance_payment),
+    operatorHandles: (operatorProfile?.payment_handles as Record<string, string>) ?? {},
     clientName,
     clientPhone,
     serviceTitle: service.title,

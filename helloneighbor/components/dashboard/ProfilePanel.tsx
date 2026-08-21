@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import { Notice } from '@/components/ui';
-import { PAYMENT_METHODS } from '@/lib/catalog';
+import { PAYMENT_METHODS, HANDLE_METHODS, paymentNote } from '@/lib/catalog';
 import type { OperatorProfile, PaymentMethod, Subscriber } from '@/lib/types';
 import { useMutate } from './useMutate';
 
-const HANDLE_METHODS: PaymentMethod[] = ['venmo', 'cashapp', 'zelle'];
 
 export default function ProfilePanel({
   operator,
@@ -25,6 +24,7 @@ export default function ProfilePanel({
   const [methods, setMethods] = useState<PaymentMethod[]>(operator.payment_methods);
   const [headline, setHeadline] = useState(profile?.headline ?? '');
   const [handles, setHandles] = useState<Record<string, string>>(profile?.payment_handles ?? {});
+  const [prefersAdvance, setPrefersAdvance] = useState(operator.prefers_advance_payment);
 
   function toggleMethod(value: PaymentMethod) {
     setMethods((prev) =>
@@ -43,6 +43,7 @@ export default function ProfilePanel({
         bio,
         photo_url: photoUrl,
         payment_methods: methods,
+        prefers_advance_payment: prefersAdvance,
         headline,
         payment_handles: handles,
       },
@@ -90,6 +91,9 @@ export default function ProfilePanel({
 
       <fieldset>
         <legend className="mb-1 block text-[13px] font-semibold">How you get paid</legend>
+        <p className="mb-2 text-[12px] text-ink-faint">
+          Card payments are paused for now. Pick cash and any apps you use.
+        </p>
         <div className="flex flex-wrap gap-2">
           {PAYMENT_METHODS.map((m) => {
             const on = methods.includes(m.value);
@@ -99,6 +103,7 @@ export default function ProfilePanel({
                 type="button"
                 aria-pressed={on}
                 onClick={() => toggleMethod(m.value)}
+                title={paymentNote(m.value)}
                 className={`rounded-btn border px-3 py-[9px] font-semibold ${
                   on ? 'border-brand bg-brand-light text-brand' : 'border-line text-ink-muted'
                 }`}
@@ -117,12 +122,35 @@ export default function ProfilePanel({
           </label>
           <input
             id={`handle-${m}`}
-            placeholder="@your-handle"
+            placeholder={m === 'cashapp' ? '$yourcashtag' : '@your-handle'}
             value={handles[m] ?? ''}
             onChange={(e) => setHandles({ ...handles, [m]: e.target.value })}
           />
+          <p className="mt-1 text-[12px] text-ink-faint">
+            Neighbors see this when they pay you.
+          </p>
         </div>
       ))}
+
+      <fieldset className="rounded-card border border-line p-3">
+        <legend className="px-1 text-[13px] font-semibold">When you get paid</legend>
+        <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+          <input
+            type="checkbox"
+            className="!mt-0.5 !w-auto"
+            checked={prefersAdvance}
+            onChange={(e) => setPrefersAdvance(e.target.checked)}
+          />
+          <span className="text-ink-muted">
+            I&apos;d rather be paid in advance.
+            <span className="mt-1 block text-[12px] text-ink-faint">
+              Turn this on and every new booking&apos;s conversation says so for you, with
+              a ready-made payment note for the neighbor to paste into their transfer.
+              Leave it off and you&apos;ll be asked on each booking.
+            </span>
+          </span>
+        </label>
+      </fieldset>
 
       {error && <Notice tone="error">{error}</Notice>}
       {saved && !error && <Notice tone="success">Saved.</Notice>}
