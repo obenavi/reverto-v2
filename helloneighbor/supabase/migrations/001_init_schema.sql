@@ -249,14 +249,34 @@ create policy "public reads operator profiles" on operator_profiles
     )
   );
 
--- The subscribers policy above would expose otp_code to anon. Revoke the
--- sensitive columns and hand the browser a view with only public fields.
-revoke select (otp_code, otp_expires_at, phone) on subscribers from anon, authenticated;
+-- Supabase grants anon and authenticated full table privileges by default and
+-- leans on RLS to restrict which ROWS come back. But a table-level SELECT grant
+-- covers every COLUMN, which makes a column-level REVOKE silently ineffective
+-- while that grant stands. Since the policy above deliberately exposes active
+-- operators to anon, otp_code would be readable — enough to log in as someone.
+-- So: drop the table grant, then re-grant only the public columns.
+revoke all on subscribers from anon, authenticated;
+grant select (
+  id, created_at, name, area, age, status, bio, photo_url, payment_methods, approved_at
+) on subscribers to anon, authenticated;
 
--- Same idea for reviews: private_comment is not public.
-revoke select (private_comment) on reviews from anon, authenticated;
+-- Same reasoning for reviews: private_comment is for the operator and admin.
+revoke all on reviews from anon, authenticated;
+grant select (
+  id, created_at, booking_id, operator_id, rating, public_comment, operator_reply
+) on reviews to anon, authenticated;
 
-create or replace view public_operators as
+-- The browser never writes. Every mutation goes through a route handler using
+-- the service role key, so anon and authenticated need read access only.
+revoke insert, update, delete on
+  services, slots, bookings, pings, gallery_photos,
+  disputes, referrals, boosts, operator_profiles
+  from anon, authenticated;
+
+-- security_invoker makes the view run under the querying role, so it inherits
+-- the RLS policies and column grants above instead of the owner's privileges.
+create or replace view public_operators
+  with (security_invoker = on) as
   select id, created_at, name, area, age, bio, photo_url, payment_methods
   from subscribers
   where status = 'active';
