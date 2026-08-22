@@ -82,6 +82,52 @@ verification, and whether COPPA applies to your under-13 signups.
 Two thresholds, deliberately different: `CONSENT_AGE_LIMIT` (16) and
 `MINOR_BADGE_LIMIT` (18) in `lib/guardian.ts`.
 
+## The age check
+
+Facial **age estimation** — a photo in, a number out — used as a signal that a
+declared age is plausible.
+
+**What it is not.** It does not look for individual "teenage" features, and
+specifically not acne: that affects most 12–24 year olds *and* plenty of adults,
+and clear skin proves nothing. A classifier keyed on it would be confidently
+wrong in both directions, which is worse than no check because a wrong answer
+gets trusted. Purpose-built estimation models work on overall facial geometry
+learned from large labelled datasets, and publish per-band error figures —
+roughly 1.0–1.5 years mean error for 13–19 year olds.
+
+**No image is ever stored.** The photo lives in memory for one provider call
+and is dropped. Only the number is kept. There is no column in the schema that
+can hold a face, and `/api/age-verification` performs no write of the buffer —
+that is a property of the code, not a policy, and it should stay that way.
+
+This matters because a retained face image or template is a biometric
+identifier under **Illinois BIPA** — private right of action, per-violation
+statutory damages — plus Texas CUBI, Washington's equivalent, and GDPR Article
+9. Collecting one from a 13-year-old is exactly the fact pattern that draws a
+class action. Consent is a separate, explicit step before the camera opens,
+because BIPA wants notice and agreement *before* capture, not implied by it.
+
+**It decides nothing on its own.** The decision table (`judge()` in
+`lib/ageverify.ts`, pinned by `npm test`):
+
+| Situation | Outcome |
+|---|---|
+| Estimate materially below 13 | **failed** |
+| Estimate within 3 years of the floor | **review** — the error bar straddles the line |
+| Estimate more than 4 years from declared | **review** |
+| Agrees, but confidence under 50% | **review** |
+| Agrees with margin and confidence | **passed** |
+| Provider errors or times out | **review** — fails to a human, never to a pass |
+
+An estimate of exactly 13 for a declared 13 goes to review. A machine does not
+get to be the thing that decides a child may work.
+
+**It does not replace guardian consent.** Under-16s still need a guardian, pass
+or not — `stillNeedsGuardian()`, also pinned by the tests.
+
+Set `AGE_PROVIDER_URL` and `AGE_PROVIDER_API_KEY` to switch it on. Left blank,
+the feature is off and applications go to manual review, which still works.
+
 ## Guardian consent
 
 Operators under 16 give a parent or guardian's name and **email** at signup, plus
@@ -361,8 +407,12 @@ optional controls sit in front of the password:
   Supabase Storage to accept real uploads.
 - **Email is only used for guardian consent.** No booking receipts, no password
   reset (there are no passwords), no marketing.
-- **Age is self-declared.** Nothing verifies it, and nothing verifies that the
-  guardian email belongs to an adult — only that it differs from the applicant's.
+- **The age check is optional and estimative.** An applicant can decline it, and
+  it is an estimate rather than proof — for real assurance you need document
+  verification, which the schema supports (`method = 'document'`) but no
+  provider is wired to.
+- **Nothing verifies the guardian email belongs to an adult** — only that it
+  differs from the applicant's.
 - **Chat polls every 10 seconds** rather than using Supabase Realtime.
 - **`referrals` and `boosts` are schema-only** — no UI reads or writes them.
 - **Nothing verifies a P2P payment actually arrived.** The memo makes a transfer

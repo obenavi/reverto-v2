@@ -6,6 +6,7 @@ import { EmptyState, Notice } from '@/components/ui';
 import { formatPhone, formatPrice } from '@/lib/format';
 import type { BookingRow, Subscriber } from '@/lib/types';
 import { useMutate } from './useMutate';
+import AgeCheck from '@/components/AgeCheck';
 
 /**
  * Earnings, blocked contacts, and account deletion — the three things an
@@ -56,6 +57,11 @@ export default function AccountPanel({
 
   return (
     <div className="space-y-4">
+      <AgeCheck
+        alreadyConsented={Boolean(operator.biometric_consent_at)}
+        status={operator.age_verification_status}
+      />
+
       <section className="card">
         <p className="font-bold">Earnings</p>
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">

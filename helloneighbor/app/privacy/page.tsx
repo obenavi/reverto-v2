@@ -36,6 +36,15 @@ const SECTIONS: { title: string; body: (string | string[])[] }[] = [
     ],
   },
   {
+    title: 'The face check',
+    body: [
+      'People offering services may be asked to take a photo so an age-estimation service can check that their stated age is roughly right. Agreeing to it is a separate, explicit step, and you can decline — your application then goes to a person instead.',
+      'We do not keep the photo. It is sent to the age-estimation provider, which returns a number, and only that number and the date are stored. We never create or hold a faceprint or any other biometric template, and the photo is not written to our database, our servers, or our logs.',
+      'The estimate is a signal, not a decision. It can send an application to a human for review; it cannot approve or reject anyone on its own.',
+      'If you would like the estimate removed from your record, email safety@helloneighbor.app.',
+    ],
+  },
+  {
     title: 'Young people',
     body: [
       'People under 18 cannot be approved to offer services until a parent or guardian follows a link we send them and gives permission.',

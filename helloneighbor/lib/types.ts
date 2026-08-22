@@ -45,6 +45,11 @@ export interface Subscriber {
   guardian_consent_at: string | null;
   guardian_consent_name: string | null;
   guardian_consent_ip: string | null;
+  /** Age check. No image or biometric template is ever stored — see lib/ageverify.ts. */
+  age_verification_status: 'unverified' | 'pending' | 'passed' | 'review' | 'failed' | null;
+  age_verified_at: string | null;
+  age_estimated: number | null;
+  biometric_consent_at: string | null;
 }
 
 export interface Service {
@@ -258,4 +263,21 @@ export interface Block {
   client_phone: string;
   initiated_by: 'operator' | 'neighbor' | 'admin';
   reason: string | null;
+}
+
+export interface AgeVerification {
+  id: string;
+  created_at: string;
+  subscriber_id: string;
+  method: 'estimate' | 'document' | 'manual';
+  provider: string | null;
+  estimated_age: number | null;
+  confidence: number | null;
+  declared_age: number;
+  consistent: boolean | null;
+  meets_minimum: boolean | null;
+  status: 'pending' | 'passed' | 'review' | 'failed' | 'error';
+  detail: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
 }

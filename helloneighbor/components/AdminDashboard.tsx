@@ -231,6 +231,30 @@ export default function AdminDashboard({
 
                 {s.bio && <p className="mt-2 text-[13px] text-ink-muted">{s.bio}</p>}
 
+                {s.age_verification_status &&
+                  s.age_verification_status !== 'unverified' && (
+                    <div
+                      className={`mt-2 rounded-btn px-3 py-2 text-[13px] ${
+                        s.age_verification_status === 'passed'
+                          ? 'bg-success-light text-success'
+                          : s.age_verification_status === 'failed'
+                            ? 'bg-danger-light text-danger'
+                            : 'bg-warning-light text-warning'
+                      }`}
+                    >
+                      <span className="font-bold">Age check: {s.age_verification_status}</span>
+                      {s.age_estimated != null && (
+                        <> — estimated {s.age_estimated}, declared {s.age}</>
+                      )}
+                      {s.age_verification_status === 'review' && (
+                        <p className="mt-1 text-[12px]">
+                          No photo is kept — judge this against the application and the
+                          guardian record, or ask for a document.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                 {s.age < 18 && (
                   <div
                     className={`mt-2 rounded-btn px-3 py-2 text-[13px] ${

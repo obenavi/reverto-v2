@@ -42,6 +42,7 @@ these for **Production, Preview and Development**. Get the Supabase values from
 | `RESEND_API_KEY` / `EMAIL_FROM` | resend.com — **required**, guardian consent is emailed |
 | `ADMIN_ACCESS_KEY` | a long random string; the admin login 404s without it |
 | `ADMIN_ALLOWED_IPS` | optional comma-separated IP allowlist for the admin area |
+| `AGE_PROVIDER_URL` / `AGE_PROVIDER_API_KEY` | optional facial age estimation (Yoti, Persona, Incode, Veriff) |
 
 Redeploy after adding them: `vercel --prod`.
 
@@ -115,6 +116,11 @@ sequence is both cheaper and much likelier to pass review.
 
 ## Before any of this is a real product
 
+- **Have your lawyer look specifically at the age check.** Biometrics is the
+  highest-risk thing in this codebase. Even storing no image, Illinois BIPA
+  wants written notice and consent before capture and a published retention
+  schedule; some operators avoid Illinois entirely rather than take it on. Ask
+  whether you should ship the check at all, or lean on guardian consent alone.
 - **Get a lawyer to read `/guidelines` and `/privacy`.** The liability clause is
   wording, not protection, and a platform connecting minors with strangers
   carries exposure that wording does not remove.
