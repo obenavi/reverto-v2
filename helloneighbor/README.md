@@ -236,6 +236,12 @@ supabase/     the schema migration
 docs/         the original setup guide and build summary
 ```
 
+## Deploying
+
+See [DEPLOY.md](./DEPLOY.md) — Vercel steps, the full environment variable
+table, the post-deploy checklist, and an honest read on what an App Store
+submission would actually involve.
+
 ## Checks
 
 ```bash
