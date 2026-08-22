@@ -26,8 +26,8 @@ export default function LandingPage() {
             The neighborhood runs on kids with a hustle.
           </h1>
           <p className="mx-auto mt-3 max-w-md text-base text-ink-muted">
-            Trash cans, car washes, dog walks, babysitting. Set your prices, share one
-            link, get booked.
+            Trash cans, car washes, dog walks, tutoring, yard work. Set your prices,
+            share one link, get booked.
           </p>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Link href="/join" className="btn-primary">

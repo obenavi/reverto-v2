@@ -86,7 +86,7 @@ export const OPERATOR_ACKNOWLEDGEMENTS = [
   'I have read the community guidelines and agree to follow them.',
   'I understand HelloNeighbor is not responsible for any harm, injury, or damage to people or property arising from a booking.',
   'I will keep all communication with neighbors inside the app.',
-  'If I am under 18, a parent or guardian knows I am signing up and will know about my bookings.',
+  'If I am under 18, my parent or guardian will be asked to approve this account before it goes live, and will know about my bookings.',
 ];
 
 export const CLIENT_ACKNOWLEDGEMENTS = [
