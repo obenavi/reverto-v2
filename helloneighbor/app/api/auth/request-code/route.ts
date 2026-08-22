@@ -3,6 +3,7 @@ import { randomInt } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase';
 import { normalizePhone } from '@/lib/format';
 import { sendSms, smsTemplates } from '@/lib/sms';
+import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 
 const CODE_TTL_MINUTES = 10;
 
@@ -13,6 +14,13 @@ export async function POST(request: Request) {
   if (!phone) {
     return NextResponse.json({ error: 'That phone number does not look right.' }, { status: 400 });
   }
+
+  // Both buckets matter: per-IP stops one host enumerating numbers, per-phone
+  // stops anyone using the app to spam SMS at someone else's handset.
+  const limited =
+    (await enforceRateLimit('requestCode', [clientIp(request)])) ??
+    (await enforceRateLimit('requestCode', [phone]));
+  if (limited) return limited;
 
   const db = supabaseAdmin();
   const { data: subscriber } = await db

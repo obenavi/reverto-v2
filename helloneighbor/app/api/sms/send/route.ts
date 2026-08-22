@@ -3,6 +3,7 @@ import { sendSms } from '@/lib/sms';
 import { normalizePhone } from '@/lib/format';
 import { requireOperator } from '@/lib/guards';
 import { isAdmin } from '@/lib/session';
+import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 
 /**
  * POST /api/sms/send — send an ad-hoc message.
@@ -15,6 +16,9 @@ export async function POST(request: Request) {
   if (!operatorId && !isAdmin()) {
     return NextResponse.json({ error: 'Not authorized.' }, { status: 401 });
   }
+
+  const limited = await enforceRateLimit('sms', [operatorId ?? 'admin', clientIp(request)]);
+  if (limited) return limited;
 
   const body = await request.json().catch(() => null);
   const to = normalizePhone(String(body?.to ?? ''));

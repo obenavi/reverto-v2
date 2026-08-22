@@ -37,6 +37,14 @@ export interface Subscriber {
   accepted_terms_at: string | null;
   accepted_terms_version: string | null;
   prefers_advance_payment: boolean;
+  /** Guardian details, required and populated only for operators under 18. */
+  guardian_name: string | null;
+  guardian_phone: string | null;
+  guardian_email: string | null;
+  guardian_relationship: string | null;
+  guardian_consent_at: string | null;
+  guardian_consent_name: string | null;
+  guardian_consent_ip: string | null;
 }
 
 export interface Service {

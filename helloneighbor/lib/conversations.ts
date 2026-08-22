@@ -1,5 +1,5 @@
 import { supabaseAdmin } from './supabase';
-import { createToken, readToken } from './session';
+import { createToken, readToken } from './tokens';
 import { formatSlot } from './format';
 import { paymentLabel } from './catalog';
 import type { PaymentMethod } from './types';

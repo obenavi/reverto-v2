@@ -7,6 +7,8 @@ import { ALL_PAYMENT_METHODS, PAYMENT_METHODS } from '@/lib/catalog';
 import { openConversationForBooking } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
 import { TERMS_VERSION } from '@/lib/guidelines';
+import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
+import { verifyTurnstile } from '@/lib/turnstile';
 import type { PaymentMethod } from '@/lib/types';
 
 /** Every method the schema accepts, vs. the subset offerable today. */
@@ -18,8 +20,19 @@ const OFFERABLE_METHODS = new Set(PAYMENT_METHODS.map((m) => m.value));
  * texts both sides, and for card payments returns a client secret to confirm.
  */
 export async function POST(request: Request) {
+  const ip = clientIp(request);
+  const limited = await enforceRateLimit('booking', [ip]);
+  if (limited) return limited;
+
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+
+  if (!(await verifyTurnstile(body.turnstile_token, ip))) {
+    return NextResponse.json(
+      { error: 'Could not verify you are human. Reload and try again.' },
+      { status: 403 }
+    );
+  }
 
   const operatorId = String(body.operator_id ?? '');
   const serviceId = String(body.service_id ?? '');

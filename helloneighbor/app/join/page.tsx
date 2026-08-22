@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { SERVICE_KINDS } from '@/lib/catalog';
 import { OPERATOR_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
 import { Notice, PageHeader, Shell } from '@/components/ui';
+import Turnstile from '@/components/Turnstile';
 
 export default function JoinPage() {
   const [submitting, setSubmitting] = useState(false);
@@ -16,6 +17,11 @@ export default function JoinPage() {
   );
 
   const allAccepted = accepted.every(Boolean);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [age, setAge] = useState('');
+
+  // Under-18s need a guardian on record before the account can be approved.
+  const isMinor = age !== '' && Number(age) < 18;
 
   function toggle(kind: string) {
     setInterests((prev) =>
@@ -37,6 +43,11 @@ export default function JoinPage() {
         phone: form.get('phone'),
         area: form.get('area'),
         age: Number(form.get('age')),
+        guardian_name: form.get('guardian_name'),
+        guardian_phone: form.get('guardian_phone'),
+        guardian_email: form.get('guardian_email'),
+        guardian_relationship: form.get('guardian_relationship'),
+        turnstile_token: turnstileToken,
         bio: form.get('bio'),
         interests,
         accepted_terms: allAccepted,
@@ -62,9 +73,9 @@ export default function JoinPage() {
           </p>
           <h1 className="mt-2 text-2xl font-extrabold">You&apos;re on the list!</h1>
           <p className="mt-2 text-ink-muted">
-            Someone on our team reviews every application, usually within a day. We&apos;ll
-            text you the moment you&apos;re approved — then you can log in and set up your
-            services.
+            {isMinor
+              ? 'We just texted your parent or guardian a link to approve. Once they do, someone on our team reviews your application — usually within a day.'
+              : 'Someone on our team reviews every application, usually within a day. We\u2019ll text you the moment you\u2019re approved — then you can log in and set up your services.'}
           </p>
           <Link href="/" className="btn-secondary mt-5">
             Back home
@@ -110,8 +121,61 @@ export default function JoinPage() {
 
         <div>
           <label htmlFor="age">Age</label>
-          <input id="age" name="age" required type="number" min={8} max={25} placeholder="16" />
+          <input
+            id="age"
+            name="age"
+            required
+            type="number"
+            min={8}
+            max={25}
+            placeholder="16"
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+          />
         </div>
+
+        {isMinor && (
+          <fieldset className="rounded-card border border-brand bg-brand-light p-3">
+            <legend className="px-1 text-[13px] font-semibold text-brand">
+              Your parent or guardian
+            </legend>
+            <p className="mb-3 text-[13px] text-ink-muted">
+              You&apos;re under 18, so we need a grown-up&apos;s permission first. We&apos;ll
+              text them a link to approve — your account stays on hold until they do.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="guardian_name">Their name</label>
+                <input id="guardian_name" name="guardian_name" required={isMinor} />
+              </div>
+              <div>
+                <label htmlFor="guardian_phone">Their phone</label>
+                <input
+                  id="guardian_phone"
+                  name="guardian_phone"
+                  type="tel"
+                  required={isMinor}
+                  placeholder="(555) 987-6543"
+                />
+              </div>
+              <div>
+                <label htmlFor="guardian_email">
+                  Their email <span className="font-normal text-ink-faint">(optional)</span>
+                </label>
+                <input id="guardian_email" name="guardian_email" type="email" />
+              </div>
+              <div>
+                <label htmlFor="guardian_relationship">They are your…</label>
+                <select id="guardian_relationship" name="guardian_relationship" defaultValue="parent">
+                  <option value="parent">Parent</option>
+                  <option value="guardian">Legal guardian</option>
+                  <option value="grandparent">Grandparent</option>
+                  <option value="other">Other adult responsible for me</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
+        )}
 
         <fieldset>
           <legend className="mb-1 block text-[13px] font-semibold">
@@ -181,6 +245,8 @@ export default function JoinPage() {
             ))}
           </div>
         </fieldset>
+
+        <Turnstile onToken={setTurnstileToken} />
 
         {error && <Notice tone="error">{error}</Notice>}
 

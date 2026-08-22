@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { normalizePhone } from '@/lib/format';
 import { OPERATOR_COOKIE, cookieOptions, createToken } from '@/lib/session';
+import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 
 /** POST /api/auth/verify-code — exchanges a valid code for an operator session. */
 export async function POST(request: Request) {
@@ -12,6 +13,12 @@ export async function POST(request: Request) {
   if (!phone || !/^\d{6}$/.test(code)) {
     return NextResponse.json({ error: 'Enter the six-digit code.' }, { status: 400 });
   }
+
+  // A six-digit code is 10^6 guesses; without this it is walkable.
+  const limited =
+    (await enforceRateLimit('verifyCode', [clientIp(request)])) ??
+    (await enforceRateLimit('verifyCode', [phone]));
+  if (limited) return limited;
 
   const db = supabaseAdmin();
   const { data: subscriber } = await db

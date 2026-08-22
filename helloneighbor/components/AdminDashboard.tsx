@@ -28,11 +28,11 @@ export default function AdminDashboard({
   const pending = subscribers.filter((s) => s.status === 'pending');
   const openDisputes = disputes.filter((d) => d.status === 'open');
 
-  async function call(url: string, body: unknown) {
+  async function call(url: string, body: unknown, method: 'PATCH' | 'POST' = 'PATCH') {
     setBusy(true);
     setError(null);
     const res = await fetch(url, {
-      method: 'PATCH',
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -121,12 +121,49 @@ export default function AdminDashboard({
 
                 {s.bio && <p className="mt-2 text-[13px] text-ink-muted">{s.bio}</p>}
 
+                {s.age < 18 && (
+                  <div
+                    className={`mt-2 rounded-btn px-3 py-2 text-[13px] ${
+                      s.guardian_consent_at
+                        ? 'bg-success-light text-success'
+                        : 'bg-warning-light text-warning'
+                    }`}
+                  >
+                    {s.guardian_consent_at ? (
+                      <>
+                        <span className="font-bold">Guardian approved</span> —{' '}
+                        {s.guardian_consent_name ?? s.guardian_name} on{' '}
+                        {new Date(s.guardian_consent_at).toLocaleDateString()}
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-bold">Waiting on a guardian.</span> Under 18;
+                        cannot be approved until {s.guardian_name ?? 'their guardian'}
+                        {s.guardian_phone ? ` (${formatPhone(s.guardian_phone)})` : ''} gives
+                        permission.
+                        <button
+                          className="mt-2 block w-full rounded-btn bg-white px-3 py-1 font-semibold text-warning disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() => call('/api/admin/subscribers', { id: s.id }, 'POST')}
+                        >
+                          Re-send the link
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 <div className="mt-3 flex gap-2">
                   {s.status === 'pending' && (
                     <>
                       <button
                         className="btn-success flex-1"
-                        disabled={busy}
+                        disabled={busy || (s.age < 18 && !s.guardian_consent_at)}
+                        title={
+                          s.age < 18 && !s.guardian_consent_at
+                            ? 'Waiting on guardian permission'
+                            : undefined
+                        }
                         onClick={() => call('/api/admin/subscribers', { id: s.id, status: 'active' })}
                       >
                         Approve

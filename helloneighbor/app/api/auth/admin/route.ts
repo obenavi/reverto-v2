@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { ADMIN_COOKIE, cookieOptions, createToken } from '@/lib/session';
+import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 
 /** POST /api/auth/admin — password login for the admin dashboard. */
 export async function POST(request: Request) {
+  const limited = await enforceRateLimit('adminLogin', [clientIp(request)]);
+  if (limited) return limited;
+
   const body = await request.json().catch(() => null);
   const provided = String(body?.password ?? '');
   const expected = process.env.ADMIN_PASSWORD;

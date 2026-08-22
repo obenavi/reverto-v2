@@ -93,3 +93,15 @@ export const CLIENT_ACKNOWLEDGEMENTS = [
   'I understand HelloNeighbor is not responsible for any harm, injury, or damage to people or property arising from this booking.',
   'I will keep all communication with this provider inside the app, and I understand a dispute about off-app arrangements cannot be reviewed.',
 ];
+
+/**
+ * What a parent or guardian confirms before an under-18 account can be
+ * approved. Lives here rather than in lib/guardian.ts so the consent form,
+ * a client component, can import it without pulling in server-only code.
+ */
+export const GUARDIAN_ACKNOWLEDGEMENTS = [
+  'I am the parent or legal guardian of this person, and I am over 18.',
+  'I give permission for them to offer services and accept bookings on HelloNeighbor.',
+  'I understand HelloNeighbor does not run background checks on anyone, does not supervise any work, and is not responsible for any injury, harm, or damage to people or property arising from a booking.',
+  'I understand I am responsible for knowing where they are and what bookings they accept.',
+];

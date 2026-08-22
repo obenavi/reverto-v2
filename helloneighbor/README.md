@@ -37,6 +37,8 @@ at all. Everything past that needs Supabase.
 | `STRIPE_WEBHOOK_SECRET` | payment status sync | `stripe listen`, or the endpoint's signing secret |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` | SMS | Twilio console |
 | `ANTHROPIC_API_KEY` | supervisor agent | console.anthropic.com |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | bot challenge | dash.cloudflare.com → Turnstile (free) |
+| `CRON_SECRET` | nightly sweep | set by Vercel when you add the cron |
 | `NEXT_PUBLIC_SITE_URL` | shareable booking links | your deployed URL |
 
 **Degrading gracefully is deliberate.** Without Twilio, messages are logged to
@@ -65,6 +67,46 @@ limitation-of-liability clause because you asked for one, but a platform putting
 minors in contact with strangers carries real exposure that no wording removes.
 Before launch, get this reviewed by a lawyer, and look into insurance, identity
 verification, and whether COPPA applies to your under-13 signups.
+
+## Guardian consent
+
+Operators under 18 give a parent or guardian's name and phone at signup. That
+guardian gets an SMS with a signed link to `/consent/<token>`, where they read
+what the app is, tick four acknowledgements, and type their name to sign. Name,
+timestamp, and IP are recorded.
+
+**An under-18 account cannot be approved until that happens.** The Approve
+button is disabled in the admin UI and `/api/admin/subscribers` returns 409
+independently, so the gate does not depend on the UI. Admins can re-send the
+link. Adults skip all of this.
+
+## Rate limiting and the bot challenge
+
+Two independent layers in front of every public route.
+
+**Rate limits** are counted in Postgres (`rate_limit_hit()`), not in process —
+serverless instances share no memory, so an in-process counter resets on every
+cold start. Budgets live in `LIMITS` in `lib/ratelimit.ts`:
+
+| Route | Limit |
+|---|---|
+| join, guardian consent | 3 / hour / IP |
+| request login code | 5 / 15 min, per IP **and** per phone |
+| verify login code | 10 / 15 min, per IP **and** per phone |
+| admin login | 10 / 15 min / IP |
+| booking, ping | 10 / hour / IP |
+| chat message | 20 / min / conversation |
+| ad-hoc SMS | 20 / hour / sender |
+
+Login routes are limited per phone as well as per IP: per-IP alone would let
+someone walk a six-digit code from a botnet, or use the app to spam SMS at
+someone else's handset. The limiter fails **open** — an outage must not take
+signups down — which is why the challenge below is the other half.
+
+**Cloudflare Turnstile** guards join, booking, and ping. Free, no account
+needed to develop against. With the keys unset the challenge is skipped and the
+server does not verify, so local development works untouched; **set them before
+launch.**
 
 ## The supervisor agent
 
@@ -202,13 +244,17 @@ npm run lint        # next lint
 npm run build       # production build
 ```
 
+## Installing it on a phone
+
+The app is a PWA: `/manifest.webmanifest`, icons, standalone display, theme
+color. On Android Chrome offers an install prompt; on iOS it is Share → Add to
+Home Screen. Once installed it opens without browser chrome and behaves like an
+app. This works the moment the site is deployed — no app store involved.
+
 ## Known gaps
 
 - **No image uploads.** Profile photos and gallery entries take URLs. Wire up
   Supabase Storage to accept real uploads.
-- **No bot challenge on the signup or booking forms.** See the supervisor note above.
-- **No rate limiting anywhere.** Every public route (join, bookings, pings, messages,
-  request-code) can be hammered.
 - **Chat polls every 10 seconds** rather than using Supabase Realtime.
 - **Reviews have no submission page.** The schema, dashboard, and public
   display all exist; the neighbor-facing form does not.

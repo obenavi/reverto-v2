@@ -2,10 +2,22 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { normalizePhone } from '@/lib/format';
 import { sendSms, smsTemplates } from '@/lib/sms';
+import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
+import { verifyTurnstile } from '@/lib/turnstile';
 
 /** POST /api/pings — public "are you around?" inquiry, no slot required. */
 export async function POST(request: Request) {
+  const ip = clientIp(request);
+  const limited = await enforceRateLimit('ping', [ip]);
+  if (limited) return limited;
+
   const body = await request.json().catch(() => null);
+  if (body && !(await verifyTurnstile(body.turnstile_token, ip))) {
+    return NextResponse.json(
+      { error: 'Could not verify you are human. Reload and try again.' },
+      { status: 403 }
+    );
+  }
   const operatorId = String(body?.operator_id ?? '');
   const clientName = String(body?.client_name ?? '').trim();
   const clientPhone = normalizePhone(String(body?.client_phone ?? ''));

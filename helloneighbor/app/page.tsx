@@ -82,7 +82,13 @@ export default function LandingPage() {
           </Link>
         </section>
 
-        <footer className="mt-10 border-t border-line pt-4 text-center text-[13px] text-ink-faint">
+        <footer className="mt-10 flex justify-center gap-4 border-t border-line pt-4 text-center text-[13px] text-ink-faint">
+          <Link href="/guidelines" className="hover:text-ink-muted">
+            Guidelines
+          </Link>
+          <Link href="/privacy" className="hover:text-ink-muted">
+            Privacy
+          </Link>
           <Link href="/admin/login" className="hover:text-ink-muted">
             Admin
           </Link>

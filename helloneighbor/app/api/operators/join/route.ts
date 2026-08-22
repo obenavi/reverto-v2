@@ -5,11 +5,26 @@ import type { ServiceKind } from '@/lib/types';
 import { SERVICE_KINDS, serviceKind } from '@/lib/catalog';
 import { TERMS_VERSION } from '@/lib/guidelines';
 import { reviewContent } from '@/lib/supervisor';
+import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
+import { verifyTurnstile } from '@/lib/turnstile';
+import { guardianConsentUrl, isMinor } from '@/lib/guardian';
+import { sendSms } from '@/lib/sms';
 
 /** POST /api/operators/join — public self-registration. Creates a pending subscriber. */
 export async function POST(request: Request) {
+  const ip = clientIp(request);
+  const limited = await enforceRateLimit('join', [ip]);
+  if (limited) return limited;
+
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+
+  if (!(await verifyTurnstile(body.turnstile_token, ip))) {
+    return NextResponse.json(
+      { error: 'Could not verify you are human. Reload and try again.' },
+      { status: 403 }
+    );
+  }
 
   const name = String(body.name ?? '').trim();
   const area = String(body.area ?? '').trim();
@@ -32,6 +47,35 @@ export async function POST(request: Request) {
     );
   }
 
+  // An under-18 cannot be approved without a guardian, so capture one now
+  // rather than chasing it later.
+  const minor = isMinor(age);
+  const guardianName = String(body.guardian_name ?? '').trim();
+  const guardianPhone = normalizePhone(String(body.guardian_phone ?? ''));
+  const guardianEmail = String(body.guardian_email ?? '').trim() || null;
+  const guardianRelationship = String(body.guardian_relationship ?? '').trim() || null;
+
+  if (minor) {
+    if (!guardianName) {
+      return NextResponse.json(
+        { error: "Your parent or guardian's name is required." },
+        { status: 400 }
+      );
+    }
+    if (!guardianPhone) {
+      return NextResponse.json(
+        { error: "Your parent or guardian's phone number does not look right." },
+        { status: 400 }
+      );
+    }
+    if (guardianPhone === phone) {
+      return NextResponse.json(
+        { error: "That is your own number — we need your parent or guardian's." },
+        { status: 400 }
+      );
+    }
+  }
+
   const known = new Set(SERVICE_KINDS.map((s) => s.kind));
   const interests: ServiceKind[] = Array.isArray(body.interests)
     ? body.interests.filter((k: unknown): k is ServiceKind => typeof k === 'string' && known.has(k as ServiceKind))
@@ -50,6 +94,10 @@ export async function POST(request: Request) {
       status: 'pending',
       accepted_terms_at: new Date().toISOString(),
       accepted_terms_version: TERMS_VERSION,
+      guardian_name: minor ? guardianName : null,
+      guardian_phone: minor ? guardianPhone : null,
+      guardian_email: minor ? guardianEmail : null,
+      guardian_relationship: minor ? guardianRelationship : null,
     })
     .select('id')
     .single();
@@ -94,5 +142,15 @@ export async function POST(request: Request) {
     content: { name, area, age, bio, wants_to_offer: interests },
   });
 
-  return NextResponse.json({ ok: true, id: subscriber.id }, { status: 201 });
+  if (minor && guardianPhone) {
+    await sendSms(
+      guardianPhone,
+      `${name} signed up for HelloNeighbor, a neighborhood odd-jobs app, and listed you as their parent or guardian. Nothing goes live until you approve: ${guardianConsentUrl(subscriber.id)}`
+    );
+  }
+
+  return NextResponse.json(
+    { ok: true, id: subscriber.id, awaitingGuardian: minor },
+    { status: 201 }
+  );
 }

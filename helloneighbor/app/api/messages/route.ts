@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { currentOperatorId } from '@/lib/session';
 import { readConversationToken, touchConversation } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
+import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 
 /**
  * Both sides of a conversation read and write here. A neighbor authenticates
@@ -67,6 +68,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await authorize(request);
   if (!auth) return NextResponse.json({ error: 'Not authorized.' }, { status: 401 });
+
+  const limited = await enforceRateLimit('message', [auth.conversationId, clientIp(request)]);
+  if (limited) return limited;
 
   const body = await request.json().catch(() => null);
   const text = String(body?.body ?? '').trim();
