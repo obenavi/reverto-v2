@@ -60,6 +60,8 @@ export default function AccountPanel({
       <AgeCheck
         alreadyConsented={Boolean(operator.biometric_consent_at)}
         status={operator.age_verification_status}
+        guardianEmailOnFile={operator.guardian_email}
+        guardianNameOnFile={operator.guardian_name}
       />
 
       <section className="card">

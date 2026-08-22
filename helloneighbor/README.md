@@ -125,6 +125,38 @@ get to be the thing that decides a child may work.
 **It does not replace guardian consent.** Under-16s still need a guardian, pass
 or not — `stillNeedsGuardian()`, also pinned by the tests.
 
+### When the face check cannot settle it
+
+Anything short of a pass — failed, review, provider outage, no camera, or the
+applicant simply declining — offers a second route: a named adult settles it
+instead.
+
+The two are different kinds of evidence, and it is worth being precise about
+which is which:
+
+| | Face check | Guardian attestation |
+|---|---|---|
+| Kind | a measurement | a statement |
+| Proves | age, within an error bar | nothing, on its own |
+| Gives you | nobody's word | an accountable named adult |
+| Fails when | camera, lighting, edge cases | the guardian lies |
+
+Neither is proof. Together they cover each other's gap: the scan is hard to
+talk your way past, and the attestation puts someone on the hook when the scan
+cannot run. **This is a liability mechanism, not a verification one** — anyone
+with an email address can click a link, so its value is entirely in who is
+accountable afterwards, not in what it establishes beforehand.
+
+The guardian is asked to confirm the age as a number (pre-filled with what the
+applicant claimed, so they are correcting rather than recalling), and to tick
+that they are the legal guardian and take **full responsibility for the
+account's activity**. Both the permission and the responsibility statement are
+stored with the signer's name, time, and IP — separately, because the
+responsibility line is the part that carries weight.
+
+The verification chain is kept in full: `estimate/review -> guardian/passed`
+reads as what actually happened.
+
 Set `AGE_PROVIDER_URL` and `AGE_PROVIDER_API_KEY` to switch it on. Left blank,
 the feature is off and applications go to manual review, which still works.
 

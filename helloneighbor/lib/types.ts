@@ -50,6 +50,9 @@ export interface Subscriber {
   age_verified_at: string | null;
   age_estimated: number | null;
   biometric_consent_at: string | null;
+  guardian_responsibility_at: string | null;
+  guardian_confirmed_age: number | null;
+  guardian_age_check_sent_at: string | null;
 }
 
 export interface Service {
@@ -269,7 +272,7 @@ export interface AgeVerification {
   id: string;
   created_at: string;
   subscriber_id: string;
-  method: 'estimate' | 'document' | 'manual';
+  method: 'estimate' | 'document' | 'manual' | 'guardian';
   provider: string | null;
   estimated_age: number | null;
   confidence: number | null;

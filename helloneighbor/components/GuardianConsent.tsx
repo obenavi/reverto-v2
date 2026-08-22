@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Notice } from '@/components/ui';
-import { GUARDIAN_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
+import { GUARDIAN_ACKNOWLEDGEMENTS, GUARDIAN_AGE_ATTESTATION } from '@/lib/guidelines';
 
 type Operator = {
   name: string;
@@ -12,6 +12,8 @@ type Operator = {
   guardianName: string | null;
   relationship: string | null;
   consentedAt: string | null;
+  /** True when this link is also standing in for a failed face check. */
+  confirmingAge: boolean;
 };
 
 export default function GuardianConsent({ token }: { token: string }) {
@@ -19,12 +21,16 @@ export default function GuardianConsent({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ticked, setTicked] = useState(GUARDIAN_ACKNOWLEDGEMENTS.map(() => false));
+  const [ageTicked, setAgeTicked] = useState(false);
+  const [confirmedAge, setConfirmedAge] = useState('');
   const [signature, setSignature] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
   const query = `token=${encodeURIComponent(token)}`;
-  const allTicked = ticked.every(Boolean);
+  const confirmingAge = Boolean(operator?.confirmingAge);
+  const allTicked =
+    ticked.every(Boolean) && (!confirmingAge || (ageTicked && confirmedAge !== ''));
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/consent?${query}`);
@@ -42,6 +48,12 @@ export default function GuardianConsent({ token }: { token: string }) {
     load();
   }, [load]);
 
+  // Pre-fill with what they told us, so the guardian is correcting rather than
+  // recalling — but they have to actively tick that it is right.
+  useEffect(() => {
+    if (operator && confirmedAge === '') setConfirmedAge(String(operator.age));
+  }, [operator, confirmedAge]);
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -50,7 +62,11 @@ export default function GuardianConsent({ token }: { token: string }) {
     const res = await fetch(`/api/consent?${query}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accepted: allTicked, name: signature }),
+      body: JSON.stringify({
+        accepted: allTicked,
+        name: signature,
+        confirmed_age: confirmingAge ? Number(confirmedAge) : undefined,
+      }),
     });
     const body = await res.json().catch(() => ({}));
     setBusy(false);
@@ -110,6 +126,44 @@ export default function GuardianConsent({ token }: { token: string }) {
         </Link>
       </div>
 
+      {confirmingAge && (
+        <fieldset className="card border-brand">
+          <legend className="px-1 text-[13px] font-semibold text-brand">
+            Please confirm their age
+          </legend>
+          <p className="text-[13px] text-ink-muted">
+            Our automatic check could not confirm this, so we are asking you.
+          </p>
+
+          <label htmlFor="confirmed-age" className="mt-3">
+            How old are they?
+          </label>
+          <input
+            id="confirmed-age"
+            type="number"
+            min={13}
+            max={120}
+            required
+            value={confirmedAge}
+            onChange={(e) => setConfirmedAge(e.target.value)}
+          />
+          <p className="mt-1 text-[12px] text-ink-faint">
+            They told us {operator?.age}. Correct it if that is wrong — nobody under 13
+            can use HelloNeighbor.
+          </p>
+
+          <label className="mt-3 flex cursor-pointer items-start gap-2 text-[13px]">
+            <input
+              type="checkbox"
+              className="!mt-0.5 !w-auto"
+              checked={ageTicked}
+              onChange={(e) => setAgeTicked(e.target.checked)}
+            />
+            <span className="text-ink-muted">{GUARDIAN_AGE_ATTESTATION}</span>
+          </label>
+        </fieldset>
+      )}
+
       <fieldset className="card">
         <legend className="px-1 text-[13px] font-semibold">Please confirm</legend>
         <div className="space-y-3">
@@ -149,8 +203,13 @@ export default function GuardianConsent({ token }: { token: string }) {
       {error && <Notice tone="error">{error}</Notice>}
 
       <button className="btn-primary w-full" disabled={busy || !allTicked || !signature.trim()}>
-        {busy ? 'Recording…' : 'Give permission'}
+        {busy ? 'Recording…' : confirmingAge ? 'Confirm and give permission' : 'Give permission'}
       </button>
+      {!allTicked && (
+        <p className="text-center text-[12px] text-ink-faint">
+          Tick every box to continue.
+        </p>
+      )}
     </form>
   );
 }

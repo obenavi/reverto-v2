@@ -99,3 +99,46 @@ Questions: safety@helloneighbor.app`;
 
   return { subject, text, html };
 }
+
+/**
+ * Sent when a guardian is being asked to settle an age the face check could
+ * not. Deliberately different copy from the routine consent email: this one
+ * leads with the age question, because that is what is being asked.
+ */
+export function guardianAgeCheckEmail(args: {
+  operatorName: string;
+  operatorAge: number;
+  area: string;
+  consentUrl: string;
+}): { subject: string; text: string; html: string } {
+  const subject = `Please confirm ${args.operatorName}'s age on HelloNeighbor`;
+
+  const text = `${args.operatorName}, in ${args.area}, signed up for HelloNeighbor and told us they are ${args.operatorAge}.
+
+Our automatic age check could not confirm that, so we are asking you instead.
+
+HelloNeighbor is a neighborhood app where young people take small local jobs — trash cans, car washes, dog walking, tutoring, yard work. Babysitting and other care work are not allowed.
+
+To confirm their age and give permission:
+
+${args.consentUrl}
+
+You will be asked to confirm that you are their legal guardian and that you take responsibility for their activity in the app. Their account stays on hold until you do.
+
+If you were not expecting this email, ignore it — the account will not go live.
+
+Questions: safety@helloneighbor.app`;
+
+  const html = `<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a;max-width:520px;margin:0 auto;padding:24px">
+  <h1 style="font-size:20px;margin:0 0 16px">Please confirm an age</h1>
+  <p style="color:#4b5563"><strong>${esc(args.operatorName)}</strong>, in ${esc(args.area)}, signed up for HelloNeighbor and told us they are <strong>${args.operatorAge}</strong>.</p>
+  <p style="color:#4b5563">Our automatic age check could not confirm that, so we are asking you instead.</p>
+  <p style="color:#4b5563">HelloNeighbor is a neighborhood app where young people take small local jobs — trash cans, car washes, dog walking, tutoring, yard work. Babysitting and other care work are not allowed.</p>
+  <p style="margin:24px 0"><a href="${esc(args.consentUrl)}" style="background:#185FA5;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block">Confirm their age and give permission</a></p>
+  <p style="color:#6b7280;font-size:13px">You will be asked to confirm that you are their legal guardian and that you take responsibility for their activity in the app. Their account stays on hold until you do.</p>
+  <p style="color:#6b7280;font-size:13px">If you were not expecting this email, ignore it — the account will not go live.</p>
+  <p style="color:#6b7280;font-size:13px">Questions: <a href="mailto:safety@helloneighbor.app" style="color:#185FA5">safety@helloneighbor.app</a></p>
+</body></html>`;
+
+  return { subject, text, html };
+}

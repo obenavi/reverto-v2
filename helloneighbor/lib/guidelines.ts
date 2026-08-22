@@ -101,8 +101,17 @@ export const CLIENT_ACKNOWLEDGEMENTS = [
  * a client component, can import it without pulling in server-only code.
  */
 export const GUARDIAN_ACKNOWLEDGEMENTS = [
-  'I am the parent or legal guardian of this person, and I am over 18.',
+  'I am the parent or legal guardian of this person, I am over 18, and I have the legal authority to make this decision for them.',
   'I give permission for them to offer services and accept bookings on HelloNeighbor.',
+  'I take full responsibility for their activity in this app — the bookings they accept, the people they meet through it, and the work they do.',
   'I understand HelloNeighbor does not run background checks on anyone, does not supervise any work, and is not responsible for any injury, harm, or damage to people or property arising from a booking.',
-  'I understand I am responsible for knowing where they are and what bookings they accept.',
+  'I understand I am responsible for knowing where they are and what bookings they accept, and that I can withdraw this permission at any time.',
 ];
+
+/**
+ * The extra line shown when a guardian link is standing in for a failed or
+ * skipped face check. It asks the guardian to confirm the age as a fact they
+ * are attesting to, which is the whole point of the fallback.
+ */
+export const GUARDIAN_AGE_ATTESTATION =
+  'I confirm this is their true age. I understand HelloNeighbor is relying on my word for it, and that giving a false age here puts my own child at risk.';

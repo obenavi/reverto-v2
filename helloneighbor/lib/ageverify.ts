@@ -189,7 +189,7 @@ export function judge(
 export async function recordVerification(args: {
   subscriberId: string;
   declaredAge: number;
-  method: 'estimate' | 'document' | 'manual';
+  method: 'estimate' | 'document' | 'manual' | 'guardian';
   provider: string | null;
   estimate: Estimate | null;
   status: VerificationStatus;

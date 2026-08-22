@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Notice } from '@/components/ui';
 
-type Stage = 'intro' | 'consented' | 'capturing' | 'sending' | 'done';
+type Stage = 'intro' | 'consented' | 'capturing' | 'sending' | 'done' | 'guardian';
 
 /**
  * The face check.
@@ -16,14 +16,22 @@ type Stage = 'intro' | 'consented' | 'capturing' | 'sending' | 'done';
 export default function AgeCheck({
   alreadyConsented,
   status,
+  guardianEmailOnFile,
+  guardianNameOnFile,
 }: {
   alreadyConsented: boolean;
   status: string | null;
+  guardianEmailOnFile?: string | null;
+  guardianNameOnFile?: string | null;
 }) {
   const [stage, setStage] = useState<Stage>(alreadyConsented ? 'consented' : 'intro');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ status: string; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const [guardianEmail, setGuardianEmail] = useState(guardianEmailOnFile ?? '');
+  const [guardianName, setGuardianName] = useState(guardianNameOnFile ?? '');
+  const [guardianSent, setGuardianSent] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -70,6 +78,27 @@ export default function AgeCheck({
     } catch {
       setError('We could not open your camera. Check the permission and try again.');
     }
+  }
+
+  /** The fallback: ask a named adult to settle it instead. */
+  async function askGuardian(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+
+    const res = await fetch('/api/age-verification/guardian', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guardian_email: guardianEmail, guardian_name: guardianName }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setBusy(false);
+
+    if (!res.ok) {
+      setError(body.error ?? 'Could not send that.');
+      return;
+    }
+    setGuardianSent(body.message ?? 'Sent.');
   }
 
   async function capture() {
@@ -127,15 +156,84 @@ export default function AgeCheck({
     return <Notice tone="success">Your age has been checked. Nothing more to do.</Notice>;
   }
 
+  const guardianFallback = (
+    <div className="card">
+      <p className="font-bold">Ask a parent or guardian instead</p>
+      <p className="mt-1 text-[13px] text-ink-muted">
+        We&apos;ll email them to confirm your age. They&apos;ll be asked to state that
+        they are your legal guardian and that they take responsibility for what you do
+        here. Your account goes live once they do.
+      </p>
+
+      {guardianSent ? (
+        <div className="mt-3">
+          <Notice tone="success">{guardianSent}</Notice>
+        </div>
+      ) : (
+        <form onSubmit={askGuardian} className="mt-3 space-y-3">
+          <div>
+            <label htmlFor="g-name">Their name</label>
+            <input
+              id="g-name"
+              required
+              value={guardianName}
+              onChange={(e) => setGuardianName(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="g-email">Their email</label>
+            <input
+              id="g-email"
+              type="email"
+              required
+              value={guardianEmail}
+              onChange={(e) => setGuardianEmail(e.target.value)}
+              placeholder="parent@example.com"
+            />
+            <p className="mt-1 text-[12px] text-ink-faint">
+              Has to be different from your own.
+            </p>
+          </div>
+          {error && <Notice tone="error">{error}</Notice>}
+          <button className="btn-primary w-full" disabled={busy}>
+            {busy ? 'Sending…' : 'Email my guardian'}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+
   if (stage === 'done' && result) {
     return (
-      <Notice
-        tone={
-          result.status === 'passed' ? 'success' : result.status === 'failed' ? 'error' : 'warn'
-        }
-      >
-        {result.message}
-      </Notice>
+      <div className="space-y-3">
+        <Notice
+          tone={
+            result.status === 'passed' ? 'success' : result.status === 'failed' ? 'error' : 'warn'
+          }
+        >
+          {result.message}
+        </Notice>
+        {/* Anything short of a pass gets the second route rather than a dead end. */}
+        {result.status !== 'passed' && guardianFallback}
+      </div>
+    );
+  }
+
+  if (stage === 'guardian') {
+    return (
+      <div className="space-y-3">
+        {guardianFallback}
+        <button
+          className="btn-secondary w-full"
+          onClick={() => {
+            setGuardianSent(null);
+            setError(null);
+            setStage(alreadyConsented ? 'consented' : 'intro');
+          }}
+        >
+          Back to the photo check
+        </button>
+      </div>
     );
   }
 
@@ -176,6 +274,12 @@ export default function AgeCheck({
           <button className="btn-primary mt-3 w-full" onClick={consent} disabled={busy}>
             {busy ? 'Saving…' : 'I agree — run the check'}
           </button>
+          <button
+            className="mt-2 w-full py-2 text-center text-[13px] font-semibold text-ink-faint hover:text-brand"
+            onClick={() => setStage('guardian')}
+          >
+            Skip it — ask my parent or guardian instead
+          </button>
         </>
       )}
 
@@ -191,6 +295,12 @@ export default function AgeCheck({
           )}
           <button className="btn-primary mt-3 w-full" onClick={startCamera}>
             Open camera
+          </button>
+          <button
+            className="mt-2 w-full py-2 text-center text-[13px] font-semibold text-ink-faint hover:text-brand"
+            onClick={() => setStage('guardian')}
+          >
+            Ask my parent or guardian instead
           </button>
         </>
       )}
