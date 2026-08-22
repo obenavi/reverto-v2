@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 import { currentOperatorId } from '@/lib/session';
 import { Shell } from '@/components/ui';
+import { blockedPhones } from '@/lib/blocks';
 import DashboardTabs from '@/components/dashboard/DashboardTabs';
 import type {
   BookingRow,
@@ -16,6 +17,7 @@ import type {
 } from '@/lib/types';
 
 type ConversationRow = Conversation & { bookings: { id: string; status: string } | null };
+type CustomerBookingRow = BookingRow & { subscribers: { name: string } | null };
 
 // Always reflect the latest bookings; nothing here is cacheable.
 export const dynamic = 'force-dynamic';
@@ -36,6 +38,7 @@ export default async function DashboardPage() {
     galleryRes,
     profileRes,
     conversationsRes,
+    customerBookingsRes,
   ] = await Promise.all([
     db.from('subscribers').select('*').eq('id', operatorId).maybeSingle(),
     db.from('services').select('*').eq('operator_id', operatorId).order('kind'),
@@ -54,7 +57,15 @@ export default async function DashboardPage() {
       .select('*, bookings (id, status)')
       .eq('operator_id', operatorId)
       .order('last_message_at', { ascending: false }),
+    // Bookings this operator made as a customer of someone else.
+    db
+      .from('bookings')
+      .select('*, services (title, kind), slots (starts_at, ends_at), subscribers (name)')
+      .eq('client_subscriber_id', operatorId)
+      .order('created_at', { ascending: false }),
   ]);
+
+  const blocked = await blockedPhones(operatorId);
 
   const operator = operatorRes.data as Subscriber | null;
 
@@ -86,6 +97,8 @@ export default async function DashboardPage() {
       reviews={(reviewsRes.data as Review[]) ?? []}
       gallery={(galleryRes.data as GalleryPhoto[]) ?? []}
       conversations={(conversationsRes.data as ConversationRow[]) ?? []}
+      customerBookings={(customerBookingsRes.data as CustomerBookingRow[]) ?? []}
+      blocked={blocked}
     />
   );
 }

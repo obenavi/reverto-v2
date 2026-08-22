@@ -16,6 +16,7 @@ import type {
   Subscriber,
 } from '@/lib/types';
 import CardPayment from './CardPayment';
+import { YoungProviderNotice, YoungProviderPill } from './YoungProviderBadge';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -149,9 +150,15 @@ export default function BookingFlow({
         )}
         <div>
           <h1 className="text-xl font-extrabold">{operator.name}</h1>
-          <p className="text-ink-muted">{operator.area}</p>
+          <p className="text-ink-muted">
+            {operator.area} <YoungProviderPill age={operator.age} />
+          </p>
         </div>
       </header>
+
+      <div className="mb-4">
+        <YoungProviderNotice name={operator.name} age={operator.age} />
+      </div>
 
       {operator.bio && <p className="mb-4 text-ink-muted">{operator.bio}</p>}
 

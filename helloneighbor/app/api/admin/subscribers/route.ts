@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireAdmin } from '@/lib/guards';
 import { sendSms } from '@/lib/sms';
-import { guardianConsentUrl, isMinor } from '@/lib/guardian';
+import { sendEmail, guardianConsentEmail } from '@/lib/email';
+import { guardianConsentUrl, needsGuardianConsent } from '@/lib/guardian';
 
 const NEXT_STATUS = new Set(['active', 'rejected', 'suspended', 'pending']);
 
@@ -33,11 +34,11 @@ export async function PATCH(request: Request) {
 
     if (!candidate) return NextResponse.json({ error: 'Operator not found.' }, { status: 404 });
 
-    if (isMinor(candidate.age) && !candidate.guardian_consent_at) {
+    if (needsGuardianConsent(candidate.age) && !candidate.guardian_consent_at) {
       return NextResponse.json(
         {
           error:
-            'This applicant is under 18 and their parent or guardian has not given permission yet.',
+            'This applicant is under 16 and their parent or guardian has not given permission yet.',
           awaitingGuardian: true,
         },
         { status: 409 }
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
 
   const { data } = await supabaseAdmin()
     .from('subscribers')
-    .select('id, name, guardian_phone, guardian_consent_at')
+    .select('id, name, age, area, guardian_email, guardian_consent_at')
     .eq('id', id)
     .maybeSingle();
 
@@ -96,14 +97,17 @@ export async function POST(request: Request) {
   if (data.guardian_consent_at) {
     return NextResponse.json({ error: 'Permission is already recorded.' }, { status: 409 });
   }
-  if (!data.guardian_phone) {
-    return NextResponse.json({ error: 'No guardian phone on file.' }, { status: 400 });
+  if (!data.guardian_email) {
+    return NextResponse.json({ error: 'No guardian email on file.' }, { status: 400 });
   }
 
-  const result = await sendSms(
-    data.guardian_phone,
-    `Reminder: ${data.name} is waiting on your permission to use HelloNeighbor. ${guardianConsentUrl(data.id)}`
-  );
+  const message = guardianConsentEmail({
+    operatorName: data.name,
+    operatorAge: data.age,
+    area: data.area,
+    consentUrl: guardianConsentUrl(data.id),
+  });
+  const result = await sendEmail({ to: data.guardian_email, ...message });
 
   return NextResponse.json({ ok: true, sent: result.sent });
 }

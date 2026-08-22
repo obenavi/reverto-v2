@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { ADMIN_COOKIE, cookieOptions, createToken } from '@/lib/session';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
+import { adminAreaVisible } from '@/lib/adminAccess';
 
 /** POST /api/auth/admin — password login for the admin dashboard. */
 export async function POST(request: Request) {
@@ -9,6 +10,13 @@ export async function POST(request: Request) {
   if (limited) return limited;
 
   const body = await request.json().catch(() => null);
+
+  // Unlisted entrance and optional IP allowlist, both checked before the
+  // password. 404 rather than 401 — a 401 confirms the endpoint exists.
+  if (!adminAreaVisible(body?.access_key ? String(body.access_key) : undefined)) {
+    return NextResponse.json({ error: 'Not found.' }, { status: 404 });
+  }
+
   const provided = String(body?.password ?? '');
   const expected = process.env.ADMIN_PASSWORD;
 

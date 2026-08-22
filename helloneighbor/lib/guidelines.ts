@@ -18,7 +18,8 @@ export const GUIDELINES: GuidelineSection[] = [
     id: 'who',
     title: 'Who HelloNeighbor is for',
     body: [
-      'HelloNeighbor connects neighbors with young people in their area who offer small services — taking out trash cans, washing a car, walking a dog, tutoring, yard work.',
+      'HelloNeighbor connects neighbors with people in their area who offer small services — taking out trash cans, washing a car, walking a dog, tutoring, yard work. Most are teenagers; anyone 13 or older can offer services.',
+      'Providers under 18 are labelled with their age on their booking page. Their prices are lower and their availability works around school — a customer should know that before booking, and it is not a fault to be hidden.',
       'Everyone who offers services is reviewed by a person before their listing goes live. That review is a basic sanity check, not a background check, and it is not a guarantee of anything.',
     ],
   },
@@ -46,7 +47,7 @@ export const GUIDELINES: GuidelineSection[] = [
     id: 'safety',
     title: 'Safety expectations',
     body: [
-      'If you are under 18, a parent or guardian must know about every booking you accept, and should know where you are and when you expect to be done.',
+      'If you are under 16, a parent or guardian must approve your account before it goes live. Under 18, they must know about every booking you accept, and should know where you are and when you expect to be done.',
       'Work outdoors or in a visible, public part of a property wherever possible.',
       'Anyone may cancel a booking at any time, for any reason or none, without penalty. Leaving a situation that feels wrong is always the right call — you do not owe anyone an explanation.',
       'Do not accept a booking that asks you to do something outside the service you listed.',
@@ -86,7 +87,7 @@ export const OPERATOR_ACKNOWLEDGEMENTS = [
   'I have read the community guidelines and agree to follow them.',
   'I understand HelloNeighbor is not responsible for any harm, injury, or damage to people or property arising from a booking.',
   'I will keep all communication with neighbors inside the app.',
-  'If I am under 18, my parent or guardian will be asked to approve this account before it goes live, and will know about my bookings.',
+  'If I am under 16, my parent or guardian will be emailed to approve this account before it goes live. If I am under 18, they will know about my bookings.',
 ];
 
 export const CLIENT_ACKNOWLEDGEMENTS = [

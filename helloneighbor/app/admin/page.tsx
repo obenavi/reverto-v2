@@ -1,13 +1,16 @@
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 import { isAdmin } from '@/lib/session';
+import { adminLoginPath, ipAllowed } from '@/lib/adminAccess';
 import AdminDashboard from '@/components/AdminDashboard';
 import type { BookingRow, DisputeRow, ModerationReview, Report, Subscriber } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminPage() {
-  if (!isAdmin()) redirect('/admin/login');
+  // An IP outside the allowlist should not learn this page exists.
+  if (!ipAllowed()) notFound();
+  if (!isAdmin()) redirect(adminLoginPath());
 
   const db = supabaseAdmin();
 

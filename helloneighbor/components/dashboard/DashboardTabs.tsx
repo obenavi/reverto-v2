@@ -24,8 +24,11 @@ import GalleryPanel from './GalleryPanel';
 import ReviewsPanel from './ReviewsPanel';
 import MessagesPanel from './MessagesPanel';
 import EnableNotifications from '@/components/EnableNotifications';
+import AccountPanel from './AccountPanel';
+import CustomerBookingsPanel from './CustomerBookingsPanel';
 
 type ConversationRow = Conversation & { bookings: { id: string; status: string } | null };
+type CustomerBookingRow = BookingRow & { subscribers: { name: string } | null };
 
 type TabId =
   | 'bookings'
@@ -36,7 +39,9 @@ type TabId =
   | 'profile'
   | 'link'
   | 'gallery'
-  | 'reviews';
+  | 'reviews'
+  | 'booked'
+  | 'account';
 
 export default function DashboardTabs(props: {
   operator: Subscriber;
@@ -48,9 +53,22 @@ export default function DashboardTabs(props: {
   reviews: Review[];
   gallery: GalleryPhoto[];
   conversations: ConversationRow[];
+  customerBookings: CustomerBookingRow[];
+  blocked: string[];
 }) {
-  const { operator, profile, services, slots, bookings, pings, reviews, gallery, conversations } =
-    props;
+  const {
+    operator,
+    profile,
+    services,
+    slots,
+    bookings,
+    pings,
+    reviews,
+    gallery,
+    conversations,
+    customerBookings,
+    blocked,
+  } = props;
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('bookings');
 
@@ -67,6 +85,8 @@ export default function DashboardTabs(props: {
     { id: 'link', label: 'My link' },
     { id: 'gallery', label: 'Gallery' },
     { id: 'reviews', label: 'Reviews' },
+    { id: 'booked', label: 'I booked', badge: customerBookings.length },
+    { id: 'account', label: 'Account' },
   ];
 
   async function logout() {
@@ -132,6 +152,10 @@ export default function DashboardTabs(props: {
         {tab === 'link' && <LinkPanel operatorId={operator.id} />}
         {tab === 'gallery' && <GalleryPanel photos={gallery} />}
         {tab === 'reviews' && <ReviewsPanel reviews={reviews} />}
+        {tab === 'booked' && <CustomerBookingsPanel bookings={customerBookings} />}
+        {tab === 'account' && (
+          <AccountPanel operator={operator} bookings={bookings} blocked={blocked} />
+        )}
       </Shell>
     </>
   );

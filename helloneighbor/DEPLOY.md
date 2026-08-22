@@ -39,6 +39,9 @@ these for **Production, Preview and Development**. Get the Supabase values from
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `npx web-push generate-vapid-keys` |
 | `VAPID_SUBJECT` | `mailto:` your safety address |
 | `SAFETY_ALERT_PHONE` | a number that should be texted about urgent reports |
+| `RESEND_API_KEY` / `EMAIL_FROM` | resend.com — **required**, guardian consent is emailed |
+| `ADMIN_ACCESS_KEY` | a long random string; the admin login 404s without it |
+| `ADMIN_ALLOWED_IPS` | optional comma-separated IP allowlist for the admin area |
 
 Redeploy after adding them: `vercel --prod`.
 

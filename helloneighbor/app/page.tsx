@@ -92,8 +92,8 @@ export default function LandingPage() {
           <Link href="/privacy" className="hover:text-ink-muted">
             Privacy
           </Link>
-          <Link href="/admin/login" className="hover:text-ink-muted">
-            Admin
+          <Link href="/my-bookings" className="hover:text-ink-muted">
+            Find my booking
           </Link>
         </footer>
       </Shell>

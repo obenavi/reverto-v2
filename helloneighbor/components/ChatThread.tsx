@@ -7,6 +7,7 @@ import { PAYMENT_TIMINGS, paymentNote, paymentLabel } from '@/lib/catalog';
 import type { Message, PaymentMethod, PaymentTiming } from '@/lib/types';
 import ReportBlock from './ReportBlock';
 import EnableNotifications from './EnableNotifications';
+import { OpenDispute, LeaveReview } from './DisputeReview';
 
 type ConversationView = {
   id: string;
@@ -297,6 +298,13 @@ export default function ChatThread({
       <p className="text-center text-[12px] text-ink-faint">
         Keep it here. This thread is what gets reviewed if a dispute is opened.
       </p>
+
+      {/* A completed job is reviewable; anything else can be disputed. */}
+      {token && booking?.status === 'completed' && <LeaveReview token={token} onDone={load} />}
+
+      {booking && booking.status !== 'cancelled' && (
+        <OpenDispute token={token} bookingId={booking.id} onDone={load} />
+      )}
 
       <EnableNotifications token={token} />
 

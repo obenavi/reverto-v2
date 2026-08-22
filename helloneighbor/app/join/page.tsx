@@ -20,8 +20,10 @@ export default function JoinPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [age, setAge] = useState('');
 
-  // Under-18s need a guardian on record before the account can be approved.
-  const isMinor = age !== '' && Number(age) < 18;
+  // Under-16s need a guardian's approval before the account can be approved.
+  // 16- and 17-year-olds do not, but customers are still told their age.
+  const needsConsent = age !== '' && Number(age) < 16;
+  const isYoung = age !== '' && Number(age) < 18;
 
   function toggle(kind: string) {
     setInterests((prev) =>
@@ -43,6 +45,7 @@ export default function JoinPage() {
         phone: form.get('phone'),
         area: form.get('area'),
         age: Number(form.get('age')),
+        email: form.get('email'),
         guardian_name: form.get('guardian_name'),
         guardian_phone: form.get('guardian_phone'),
         guardian_email: form.get('guardian_email'),
@@ -73,8 +76,8 @@ export default function JoinPage() {
           </p>
           <h1 className="mt-2 text-2xl font-extrabold">You&apos;re on the list!</h1>
           <p className="mt-2 text-ink-muted">
-            {isMinor
-              ? 'We just texted your parent or guardian a link to approve. Once they do, someone on our team reviews your application — usually within a day.'
+            {needsConsent
+              ? 'We just emailed your parent or guardian a link to approve. Once they do, someone on our team reviews your application — usually within a day.'
               : 'Someone on our team reviews every application, usually within a day. We\u2019ll text you the moment you\u2019re approved — then you can log in and set up your services.'}
           </p>
           <Link href="/" className="btn-secondary mt-5">
@@ -126,43 +129,74 @@ export default function JoinPage() {
             name="age"
             required
             type="number"
-            min={8}
-            max={25}
+            min={13}
+            max={120}
             placeholder="16"
             value={age}
             onChange={(e) => setAge(e.target.value)}
           />
+          <p className="mt-1 text-[12px] text-ink-faint">
+            You need to be at least 13. Anyone can offer services — under 18, your age is
+            shown to customers so they know what to expect.
+          </p>
         </div>
 
-        {isMinor && (
+        <div>
+          <label htmlFor="email">
+            Your email{' '}
+            <span className="font-normal text-ink-faint">
+              {needsConsent ? '' : '(optional)'}
+            </span>
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required={needsConsent}
+            autoComplete="email"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        {needsConsent && (
           <fieldset className="rounded-card border border-brand bg-brand-light p-3">
             <legend className="px-1 text-[13px] font-semibold text-brand">
               Your parent or guardian
             </legend>
             <p className="mb-3 text-[13px] text-ink-muted">
-              You&apos;re under 18, so we need a grown-up&apos;s permission first. We&apos;ll
-              text them a link to approve — your account stays on hold until they do.
+              You&apos;re under 16, so we need a grown-up&apos;s permission first. We&apos;ll
+              email them a link to approve — your account stays on hold until they do. It
+              has to be a different email from your own.
             </p>
             <div className="space-y-3">
               <div>
                 <label htmlFor="guardian_name">Their name</label>
-                <input id="guardian_name" name="guardian_name" required={isMinor} />
+                <input id="guardian_name" name="guardian_name" required={needsConsent} />
               </div>
               <div>
-                <label htmlFor="guardian_phone">Their phone</label>
+                <label htmlFor="guardian_email">Their email</label>
+                <input
+                  id="guardian_email"
+                  name="guardian_email"
+                  type="email"
+                  required={needsConsent}
+                  placeholder="parent@example.com"
+                />
+                <p className="mt-1 text-[12px] text-ink-faint">
+                  Must be different from your own email — that is the whole point of
+                  asking a grown-up.
+                </p>
+              </div>
+              <div>
+                <label htmlFor="guardian_phone">
+                  Their phone <span className="font-normal text-ink-faint">(optional)</span>
+                </label>
                 <input
                   id="guardian_phone"
                   name="guardian_phone"
                   type="tel"
-                  required={isMinor}
                   placeholder="(555) 987-6543"
                 />
-              </div>
-              <div>
-                <label htmlFor="guardian_email">
-                  Their email <span className="font-normal text-ink-faint">(optional)</span>
-                </label>
-                <input id="guardian_email" name="guardian_email" type="email" />
               </div>
               <div>
                 <label htmlFor="guardian_relationship">They are your…</label>
@@ -226,6 +260,7 @@ export default function JoinPage() {
               the full guidelines are here
             </Link>
             . Note that babysitting and other care work are not allowed on HelloNeighbor.
+            {isYoung && ' Because you\u2019re under 18, customers see your age on your booking page.'}
           </p>
           <div className="space-y-2">
             {OPERATOR_ACKNOWLEDGEMENTS.map((text, i) => (

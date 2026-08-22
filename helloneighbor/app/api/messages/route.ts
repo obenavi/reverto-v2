@@ -29,12 +29,21 @@ async function authorize(request: Request): Promise<
 
   const { data } = await supabaseAdmin()
     .from('conversations')
-    .select('id')
+    .select('id, operator_id, bookings (client_subscriber_id)')
     .eq('id', conversationId)
-    .eq('operator_id', operatorId)
     .maybeSingle();
 
-  return data ? { conversationId: data.id, sender: 'operator' } : null;
+  if (!data) return null;
+
+  // The same person can be either side: the provider on this booking, or an
+  // operator who booked someone else as a customer.
+  if (data.operator_id === operatorId) return { conversationId: data.id, sender: 'operator' };
+
+  const booking = data.bookings as unknown as { client_subscriber_id: string | null } | null;
+  if (booking?.client_subscriber_id === operatorId) {
+    return { conversationId: data.id, sender: 'client' };
+  }
+  return null;
 }
 
 /** GET — the full thread, oldest first. */

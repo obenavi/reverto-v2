@@ -1,19 +1,32 @@
 import { createToken, readToken } from './tokens';
 
 /**
- * Guardian consent for operators under 18.
+ * Guardian consent for operators under 16.
  *
  * The guidelines say a parent or guardian "must know" about bookings. That is
- * unenforceable as prose, so it is a gate: an under-18 account cannot be
- * approved until a guardian follows a signed link and consents.
+ * unenforceable as prose, so it is a gate: an under-16 account cannot be
+ * approved until a guardian follows an emailed link and consents.
+ *
+ * Two different thresholds, on purpose:
+ *   CONSENT_AGE_LIMIT  16 — below this, a guardian must actively approve
+ *   MINOR_BADGE_LIMIT  18 — below this, the booking page says so, because a
+ *                           customer booking a 17-year-old should know that
+ *                           even though no consent is required
  */
 
-export const MINOR_AGE_LIMIT = 18;
+export const CONSENT_AGE_LIMIT = 16;
+export const MINOR_BADGE_LIMIT = 18;
 
 const PREFIX = 'guardian';
 
+/** Needs a guardian's approval before the account can go live. */
+export function needsGuardianConsent(age: number): boolean {
+  return age < CONSENT_AGE_LIMIT;
+}
+
+/** Shown to customers as a young provider. */
 export function isMinor(age: number): boolean {
-  return age < MINOR_AGE_LIMIT;
+  return age < MINOR_BADGE_LIMIT;
 }
 
 export function guardianToken(subscriberId: string): string {

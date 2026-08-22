@@ -98,7 +98,8 @@ export default function GuardianConsent({ token }: { token: string }) {
         <p className="mt-2 text-ink-muted">
           HelloNeighbor lets young people take small local jobs — trash cans, car washes,
           dog walking, tutoring, yard work. Babysitting and other care work are not
-          allowed. Nothing happens on this account until you say yes.
+          allowed. Anyone under 16 needs your permission, and nothing happens on this
+          account until you give it.
         </p>
         <Link
           href="/guidelines"

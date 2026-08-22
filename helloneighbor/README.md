@@ -68,14 +68,32 @@ minors in contact with strangers carries real exposure that no wording removes.
 Before launch, get this reviewed by a lawyer, and look into insurance, identity
 verification, and whether COPPA applies to your under-13 signups.
 
+## Ages, and who can operate
+
+- **Minimum 13.** COPPA governs under-13, so nobody on the platform falls inside it.
+- **No upper limit.** Adults can offer services too.
+- **Under 16 needs a guardian's approval** by email before the account goes live.
+- **Under 18 is labelled to customers** — the booking page shows the provider's age and
+  explains what it means, because a customer comparing a 15-year-old to a professional
+  is comparing different things. Lower price, school-shaped availability, less
+  experience. Saying it up front is fairer to the young person than a disappointed
+  customer.
+
+Two thresholds, deliberately different: `CONSENT_AGE_LIMIT` (16) and
+`MINOR_BADGE_LIMIT` (18) in `lib/guardian.ts`.
+
 ## Guardian consent
 
-Operators under 18 give a parent or guardian's name and phone at signup. That
-guardian gets an SMS with a signed link to `/consent/<token>`, where they read
-what the app is, tick four acknowledgements, and type their name to sign. Name,
-timestamp, and IP are recorded.
+Operators under 16 give a parent or guardian's name and **email** at signup, plus
+their own email. The guardian's address must differ from the applicant's own —
+case-insensitively, enforced by a database constraint as well as the form, because
+a minor using a second address of their own would defeat the entire mechanism.
 
-**An under-18 account cannot be approved until that happens.** The Approve
+That guardian gets an email with a signed link to `/consent/<token>`, where they
+read what the app is, tick four acknowledgements, and type their name to sign.
+Name, timestamp, and IP are recorded.
+
+**An under-16 account cannot be approved until that happens.** The Approve
 button is disabled in the admin UI and `/api/admin/subscribers` returns 409
 independently, so the gate does not depend on the UI. Admins can re-send the
 link. Adults skip all of this.
@@ -295,13 +313,57 @@ color. On Android Chrome offers an install prompt; on iOS it is Share → Add to
 Home Screen. Once installed it opens without browser chrome and behaves like an
 app. This works the moment the site is deployed — no app store involved.
 
+## Things that were half-built, and now are not
+
+Four features had data and admin tooling but no way for a user to reach them:
+
+- **Disputes could be resolved but never opened.** `/api/disputes` now lets either
+  party raise one from the conversation; the booking is resolved from the caller's
+  own credential, so nobody can dispute a booking they are not part of.
+- **Reviews could be displayed and replied to but never written.** `/api/reviews`
+  takes one review per completed booking, from the neighbor on it.
+- **No in-app account deletion**, which the privacy policy promises and App Store
+  Guideline 5.1.1(v) requires. Deletion scrubs personal data and keeps the shell —
+  hard-deleting would cascade away the *other* party's booking history and the
+  record a dispute depends on. Refused while a booking is confirmed or a dispute
+  is open.
+- **A neighbor who lost their SMS lost the booking.** `/my-bookings` re-texts the
+  links, and answers identically whether or not the number is known — a differing
+  response would make it a way to test whether a phone number uses the app.
+
+And the one that mattered most: **an administrator resolving a dispute could not
+read the conversation.** The guidelines promise both parties that in-app messages
+are what gets reviewed. `AdminConversation` makes that true — read-only, because
+an admin should be judging what was said, not adding to it.
+
+## The operator as a customer
+
+Running a business here does not stop you being a customer. A logged-in operator
+booking someone else's link is recognised by session: the booking records
+`client_subscriber_id`, appears in their **I booked** tab, and the conversation
+opens to their session instead of a texted link. A database constraint stops
+anyone booking themselves.
+
+## Admin access
+
+The admin area is not linked from anywhere and is disallowed in `robots.txt`. Two
+optional controls sit in front of the password:
+
+- `ADMIN_ACCESS_KEY` — `/admin/login` returns **404** unless reached as
+  `/admin/login?k=<key>`. Bookmark the full URL.
+- `ADMIN_ALLOWED_IPS` — comma-separated allowlist; anything else 404s.
+
+404 rather than 403 throughout: a 403 confirms there is something there.
+
 ## Known gaps
 
 - **No image uploads.** Profile photos and gallery entries take URLs. Wire up
   Supabase Storage to accept real uploads.
+- **Email is only used for guardian consent.** No booking receipts, no password
+  reset (there are no passwords), no marketing.
+- **Age is self-declared.** Nothing verifies it, and nothing verifies that the
+  guardian email belongs to an adult — only that it differs from the applicant's.
 - **Chat polls every 10 seconds** rather than using Supabase Realtime.
-- **Reviews have no submission page.** The schema, dashboard, and public
-  display all exist; the neighbor-facing form does not.
 - **`referrals` and `boosts` are schema-only** — no UI reads or writes them.
 - **Nothing verifies a P2P payment actually arrived.** The memo makes a transfer
   traceable by hand; the app cannot see Venmo or Zelle, so `payment_status` for

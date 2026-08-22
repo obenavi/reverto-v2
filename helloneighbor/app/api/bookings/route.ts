@@ -8,6 +8,7 @@ import { openConversationForBooking } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
 import { TERMS_VERSION } from '@/lib/guidelines';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
+import { currentOperatorId } from '@/lib/session';
 import { isBlocked } from '@/lib/blocks';
 import { sendPush, pushTemplates } from '@/lib/push';
 import { verifyTurnstile } from '@/lib/turnstile';
@@ -76,6 +77,14 @@ export async function POST(request: Request) {
   }
 
   const db = supabaseAdmin();
+
+  // An operator browsing someone else's page books with their own account, so
+  // the booking lands in their dashboard and the thread opens to their session
+  // rather than a texted link.
+  const bookingAsSubscriberId = currentOperatorId();
+  if (bookingAsSubscriberId === operatorId) {
+    return NextResponse.json({ error: 'You cannot book yourself.' }, { status: 400 });
+  }
 
   if (await isBlocked(operatorId, clientPhone)) {
     // Deliberately vague: confirming a block tells the blocked party they were
@@ -152,6 +161,7 @@ export async function POST(request: Request) {
       payment_method: paymentMethod,
       payment_status: 'pending',
       status: 'confirmed',
+      client_subscriber_id: bookingAsSubscriberId,
       accepted_terms_at: new Date().toISOString(),
       accepted_terms_version: TERMS_VERSION,
     })

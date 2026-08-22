@@ -7,6 +7,7 @@ import { formatPhone, formatPrice, formatSlot, relativeTime } from '@/lib/format
 import { paymentLabel } from '@/lib/catalog';
 import type { BookingRow, DisputeRow, ModerationReview, Report, Subscriber } from '@/lib/types';
 import { RESPONSE_TARGET_HOURS, isUrgent, reasonLabel } from '@/lib/reports';
+import AdminConversation from './AdminConversation';
 
 type Tab = 'reports' | 'subscribers' | 'bookings' | 'disputes' | 'flags';
 
@@ -338,6 +339,7 @@ export default function AdminDashboard({
                     <StatusPill status={b.payment_status} />
                   </div>
                 </div>
+                <AdminConversation bookingId={b.id} />
               </article>
             ))
           ))}
@@ -408,6 +410,9 @@ export default function AdminDashboard({
                 </div>
 
                 <p className="mt-2">{d.reason}</p>
+
+                <AdminConversation bookingId={d.booking_id} />
+
                 {d.resolution_note && (
                   <p className="mt-2 text-[13px] text-ink-muted">
                     Resolution: {d.resolution_note}

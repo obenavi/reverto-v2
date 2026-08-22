@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Notice, PageHeader, Shell } from '@/components/ui';
 
-export default function AdminLoginPage() {
+function AdminLoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const accessKey = searchParams.get('k') ?? '';
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -18,7 +20,7 @@ export default function AdminLoginPage() {
     const res = await fetch('/api/auth/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, access_key: accessKey }),
     });
     setBusy(false);
 
@@ -52,5 +54,14 @@ export default function AdminLoginPage() {
         </button>
       </form>
     </Shell>
+  );
+}
+
+export default function AdminLoginPage() {
+  // useSearchParams needs a Suspense boundary in the App Router.
+  return (
+    <Suspense fallback={null}>
+      <AdminLoginForm />
+    </Suspense>
   );
 }
