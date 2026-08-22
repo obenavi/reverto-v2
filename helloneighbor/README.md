@@ -250,6 +250,44 @@ npm run lint        # next lint
 npm run build       # production build
 ```
 
+## Reporting, blocking, and the safety queue
+
+Every conversation carries a **Report or block this person** link. The reporter
+picks a reason, optionally blocks at the same time, and the report lands in the
+**Reports** tab of `/admin` — which opens first whenever anything is waiting.
+
+- **Reports are always from a party to the thing reported.** An operator is
+  identified by session, a neighbor by the signed token on their conversation.
+  There is no anonymous reporting endpoint to abuse.
+- **Safety, inappropriate-content and age reports jump the queue** and text
+  `SAFETY_ALERT_PHONE` immediately rather than waiting to be noticed.
+- **Blocks are enforced, not cosmetic.** One row per operator/neighbor-phone
+  pair stops bookings, messages and pings in both directions. The refusal is
+  deliberately vague — confirming a block invites retaliation.
+- **Reports outlive the accounts they concern.** Deleting a subscriber nulls
+  `reporter_id` but keeps the report, so removing an account cannot erase an
+  abuse record.
+- `acknowledged_at` is stamped when an admin starts reviewing, and the queue
+  marks anything past `RESPONSE_TARGET_HOURS` as overdue — which is what makes
+  a "timely response" claim measurable.
+
+`/safety` is the published contact page: how to report, how blocking works,
+what is checked automatically, and the email address for parents and guardians.
+
+## Push notifications
+
+Web push via VAPID, working on installed PWAs including iOS 16.4+. Operators
+get alerts for new bookings and messages; neighbors get them for replies on
+their conversation. `public/sw.js` handles display and click-through, and
+deliberately caches nothing — bookings and availability are live data.
+
+Subscriptions are bound to whoever the caller already is, and endpoints the
+push service rejects with 404/410 are deleted rather than retried forever.
+Unset VAPID keys disable the whole feature cleanly.
+
+On iPhone the Push API only exists once the app is installed to the home
+screen, so the opt-in explains that rather than silently disappearing.
+
 ## Installing it on a phone
 
 The app is a PWA: `/manifest.webmanifest`, icons, standalone display, theme
@@ -268,6 +306,8 @@ app. This works the moment the site is deployed — no app store involved.
 - **Nothing verifies a P2P payment actually arrived.** The memo makes a transfer
   traceable by hand; the app cannot see Venmo or Zelle, so `payment_status` for
   these is a claim, not a fact.
+- **A report's `subject_id` can dangle** after the subject is deleted. Kept
+  that way on purpose — the audit trail matters more than referential tidiness.
 - **No automatic capture deadline.** The build summary describes a 48-hour
   auto-release; that would be a scheduled job, not part of this app.
 - **`npm audit` flags PostCSS** inside Next's own dependency tree. It is

@@ -5,23 +5,29 @@ import { useRouter } from 'next/navigation';
 import { EmptyState, Notice, Shell, StatusPill } from '@/components/ui';
 import { formatPhone, formatPrice, formatSlot, relativeTime } from '@/lib/format';
 import { paymentLabel } from '@/lib/catalog';
-import type { BookingRow, DisputeRow, ModerationReview, Subscriber } from '@/lib/types';
+import type { BookingRow, DisputeRow, ModerationReview, Report, Subscriber } from '@/lib/types';
+import { RESPONSE_TARGET_HOURS, isUrgent, reasonLabel } from '@/lib/reports';
 
-type Tab = 'subscribers' | 'bookings' | 'disputes' | 'flags';
+type Tab = 'reports' | 'subscribers' | 'bookings' | 'disputes' | 'flags';
 
 export default function AdminDashboard({
   subscribers,
   bookings,
   disputes,
   flags,
+  reports,
 }: {
   subscribers: Subscriber[];
   bookings: BookingRow[];
   disputes: DisputeRow[];
   flags: ModerationReview[];
+  reports: Report[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('subscribers');
+  // Reports open first: a safety report waiting behind an approvals list is
+  // the failure mode this queue exists to prevent.
+  const urgent = reports.filter((r) => isUrgent(r.reason));
+  const [tab, setTab] = useState<Tab>(reports.length > 0 ? 'reports' : 'subscribers');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +58,7 @@ export default function AdminDashboard({
   }
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
+    { id: 'reports', label: 'Reports', badge: reports.length },
     { id: 'subscribers', label: 'Subscribers', badge: pending.length },
     { id: 'bookings', label: 'Bookings' },
     { id: 'disputes', label: 'Disputes', badge: openDisputes.length },
@@ -96,6 +103,108 @@ export default function AdminDashboard({
 
       <Shell className="space-y-3">
         {error && <Notice tone="error">{error}</Notice>}
+
+        {tab === 'reports' && (
+          <>
+            {urgent.length > 0 && (
+              <Notice tone="error">
+                {urgent.length} safety-critical {urgent.length === 1 ? 'report' : 'reports'}{' '}
+                waiting. Target response is {RESPONSE_TARGET_HOURS} hours.
+              </Notice>
+            )}
+
+            {reports.length === 0 ? (
+              <EmptyState title="No open reports" hint="Reports from either side land here." />
+            ) : (
+              reports.map((report) => {
+                const ageHours = Math.floor(
+                  (Date.now() - new Date(report.created_at).getTime()) / 3_600_000
+                );
+                const overdue = ageHours >= RESPONSE_TARGET_HOURS;
+
+                return (
+                  <article
+                    key={report.id}
+                    className={`card ${isUrgent(report.reason) ? 'border-danger' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold">
+                          {reasonLabel(report.reason)}
+                          {isUrgent(report.reason) && (
+                            <span className="pill ml-2 bg-danger-light text-danger">urgent</span>
+                          )}
+                        </p>
+                        <p className="text-[13px] text-ink-muted">
+                          from a {report.reporter_type} · about a {report.subject_type}{' '}
+                          <span className="font-mono text-[12px]">
+                            {report.subject_id.slice(0, 8)}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <StatusPill status={report.status} />
+                        <p
+                          className={`mt-1 text-[12px] ${overdue ? 'font-bold text-danger' : 'text-ink-faint'}`}
+                        >
+                          {relativeTime(report.created_at)}
+                          {overdue ? ' · overdue' : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    {report.details && <p className="mt-2">{report.details}</p>}
+                    {report.reporter_phone && (
+                      <p className="mt-1 text-[13px] text-ink-muted">
+                        Reporter: {formatPhone(report.reporter_phone)}
+                      </p>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {report.status === 'open' && (
+                        <button
+                          className="btn-secondary flex-1"
+                          disabled={busy}
+                          onClick={() =>
+                            call('/api/admin/reports', { id: report.id, status: 'reviewing' })
+                          }
+                        >
+                          Start reviewing
+                        </button>
+                      )}
+                      <button
+                        className="btn-danger flex-1"
+                        disabled={busy}
+                        onClick={() =>
+                          call('/api/admin/reports', {
+                            id: report.id,
+                            status: 'actioned',
+                            resolution_note: 'Action taken.',
+                          })
+                        }
+                      >
+                        Actioned
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        disabled={busy}
+                        onClick={() =>
+                          call('/api/admin/reports', {
+                            id: report.id,
+                            status: 'dismissed',
+                            resolution_note: 'No action needed.',
+                          })
+                        }
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </article>
+                );
+              })
+            )}
+          </>
+        )}
 
         {tab === 'subscribers' &&
           (subscribers.length === 0 ? (

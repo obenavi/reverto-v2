@@ -86,6 +86,9 @@ export default function LandingPage() {
           <Link href="/guidelines" className="hover:text-ink-muted">
             Guidelines
           </Link>
+          <Link href="/safety" className="hover:text-ink-muted">
+            Safety
+          </Link>
           <Link href="/privacy" className="hover:text-ink-muted">
             Privacy
           </Link>

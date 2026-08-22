@@ -4,6 +4,9 @@ import { currentOperatorId } from '@/lib/session';
 import { readConversationToken, touchConversation } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
+import { isBlocked } from '@/lib/blocks';
+import { sendPush, pushTemplates } from '@/lib/push';
+import { conversationPath } from '@/lib/conversations';
 
 /**
  * Both sides of a conversation read and write here. A neighbor authenticates
@@ -72,6 +75,20 @@ export async function POST(request: Request) {
   const limited = await enforceRateLimit('message', [auth.conversationId, clientIp(request)]);
   if (limited) return limited;
 
+  // Either side blocking closes the thread for both.
+  const { data: pair } = await supabaseAdmin()
+    .from('conversations')
+    .select('operator_id, client_phone')
+    .eq('id', auth.conversationId)
+    .maybeSingle();
+
+  if (pair && (await isBlocked(pair.operator_id, pair.client_phone))) {
+    return NextResponse.json(
+      { error: 'This conversation is closed because one of you blocked the other.' },
+      { status: 403 }
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const text = String(body?.body ?? '').trim();
 
@@ -97,6 +114,30 @@ export async function POST(request: Request) {
   }
 
   await touchConversation(auth.conversationId);
+
+  // Notify whichever side did not send it.
+  if (pair) {
+    const { data: names } = await supabaseAdmin()
+      .from('conversations')
+      .select('client_name, subscribers (name)')
+      .eq('id', auth.conversationId)
+      .maybeSingle();
+
+    const operatorName =
+      (names?.subscribers as unknown as { name: string } | null)?.name ?? 'your provider';
+
+    if (auth.sender === 'client') {
+      await sendPush(
+        { operatorId: pair.operator_id },
+        pushTemplates.newMessage(names?.client_name ?? 'A neighbor', text, '/dashboard')
+      );
+    } else {
+      await sendPush(
+        { conversationId: auth.conversationId },
+        pushTemplates.newMessage(operatorName, text, conversationPath(auth.conversationId))
+      );
+    }
+  }
 
   // Messages are checked after delivery — holding a chat message behind a
   // model call would make the thread feel broken.

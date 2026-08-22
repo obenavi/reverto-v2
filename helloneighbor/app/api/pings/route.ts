@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { normalizePhone } from '@/lib/format';
 import { sendSms, smsTemplates } from '@/lib/sms';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
+import { isBlocked } from '@/lib/blocks';
 import { verifyTurnstile } from '@/lib/turnstile';
 
 /** POST /api/pings — public "are you around?" inquiry, no slot required. */
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
 
   if (!operator || operator.status !== 'active') {
     return NextResponse.json({ error: 'That operator is unavailable.' }, { status: 404 });
+  }
+  if (await isBlocked(operatorId, clientPhone)) {
+    return NextResponse.json({ error: 'That operator is unavailable.' }, { status: 403 });
   }
 
   const requestedFor = body?.requested_for ? new Date(String(body.requested_for)) : null;

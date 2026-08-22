@@ -220,3 +220,42 @@ export interface ModerationReview {
   resolved_at: string | null;
   resolved_by: string | null;
 }
+
+export type ReportReason =
+  | 'harassment'
+  | 'inappropriate'
+  | 'scam'
+  | 'safety'
+  | 'spam'
+  | 'off_platform'
+  | 'underage'
+  | 'other';
+
+export type ReportStatus = 'open' | 'reviewing' | 'actioned' | 'dismissed';
+export type ReportSubject = 'subscriber' | 'message' | 'booking' | 'conversation' | 'service';
+
+export interface Report {
+  id: string;
+  created_at: string;
+  reporter_type: 'operator' | 'neighbor' | 'admin';
+  reporter_id: string | null;
+  reporter_phone: string | null;
+  subject_type: ReportSubject;
+  subject_id: string;
+  reason: ReportReason;
+  details: string | null;
+  status: ReportStatus;
+  acknowledged_at: string | null;
+  resolution_note: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
+export interface Block {
+  id: string;
+  created_at: string;
+  operator_id: string;
+  client_phone: string;
+  initiated_by: 'operator' | 'neighbor' | 'admin';
+  reason: string | null;
+}

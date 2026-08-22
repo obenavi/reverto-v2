@@ -8,6 +8,8 @@ import { openConversationForBooking } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
 import { TERMS_VERSION } from '@/lib/guidelines';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
+import { isBlocked } from '@/lib/blocks';
+import { sendPush, pushTemplates } from '@/lib/push';
 import { verifyTurnstile } from '@/lib/turnstile';
 import type { PaymentMethod } from '@/lib/types';
 
@@ -74,6 +76,15 @@ export async function POST(request: Request) {
   }
 
   const db = supabaseAdmin();
+
+  if (await isBlocked(operatorId, clientPhone)) {
+    // Deliberately vague: confirming a block tells the blocked party they were
+    // blocked, which invites retaliation.
+    return NextResponse.json(
+      { error: 'This provider is not accepting bookings from you.' },
+      { status: 403 }
+    );
+  }
 
   const { data: operator } = await db
     .from('subscribers')
@@ -196,6 +207,10 @@ export async function POST(request: Request) {
   await Promise.all([
     sendSms(operator.phone, smsTemplates.newBooking(clientName, service.title, when)),
     sendSms(clientPhone, smsTemplates.bookingConfirmed(operator.name, service.title, when)),
+    sendPush(
+      { operatorId },
+      pushTemplates.newBooking(clientName, service.title, when)
+    ),
   ]);
 
   return NextResponse.json(

@@ -5,10 +5,13 @@ import { EmptyState, Notice } from '@/components/ui';
 import { formatPrice, relativeTime } from '@/lib/format';
 import { PAYMENT_TIMINGS, paymentNote, paymentLabel } from '@/lib/catalog';
 import type { Message, PaymentMethod, PaymentTiming } from '@/lib/types';
+import ReportBlock from './ReportBlock';
+import EnableNotifications from './EnableNotifications';
 
 type ConversationView = {
   id: string;
   client_name: string;
+  client_phone: string;
   bookings: {
     id: string;
     price_cents: number;
@@ -294,6 +297,16 @@ export default function ChatThread({
       <p className="text-center text-[12px] text-ink-faint">
         Keep it here. This thread is what gets reviewed if a dispute is opened.
       </p>
+
+      <EnableNotifications token={token} />
+
+      <ReportBlock
+        subjectType="conversation"
+        subjectId={conversation?.id ?? ''}
+        token={token}
+        clientPhone={viewer === 'operator' ? conversation?.client_phone : undefined}
+        label="Report or block this person"
+      />
     </div>
   );
 }

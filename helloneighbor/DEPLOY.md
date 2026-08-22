@@ -36,6 +36,9 @@ these for **Production, Preview and Development**. Get the Supabase values from
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` | Twilio console |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | dash.cloudflare.com → Turnstile (free) |
 | `CRON_SECRET` | Vercel sets this when you add the cron in `vercel.json` |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `npx web-push generate-vapid-keys` |
+| `VAPID_SUBJECT` | `mailto:` your safety address |
+| `SAFETY_ALERT_PHONE` | a number that should be texted about urgent reports |
 
 Redeploy after adding them: `vercel --prod`.
 
@@ -82,14 +85,18 @@ An App Store listing needs four things I cannot do for you:
 ### Be aware of three likely rejections
 
 **Guideline 4.2 — Minimum Functionality.** A webview wrapper around a website,
-with no native capability, is the single most commonly rejected app type. To
-pass you generally need real native integration — push notifications, contacts,
-camera, offline behaviour — not just a shell.
+with no native capability, is the single most commonly rejected app type. Push
+notifications are now implemented, which is the strongest single answer to
+this — but in a wrapper you would want them delivered natively (APNs through
+the wrapper) rather than as web push, and ideally one more native integration
+such as contacts or the camera for gallery photos.
 
 **Guideline 1.2 — User-Generated Content.** An app with UGC and messaging must
 have a content filter, a way to report abuse, a way to block users, and a
-published contact. You have automated content review and admin flags; you do
-**not** yet have in-app reporting or blocking. Add those before submitting.
+published contact. **All four now exist**: the supervisor agent filters, every
+conversation has report-and-block, `/safety` is the published contact, and the
+admin queue tracks response time against a stated target. Point the reviewer at
+`/safety` in your review notes.
 
 **Kids and safety.** An app whose users are largely minors, arranging in-person
 meetings with adults at private homes, will get close scrutiny. Expect

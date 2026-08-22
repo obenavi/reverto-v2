@@ -23,6 +23,7 @@ import LinkPanel from './LinkPanel';
 import GalleryPanel from './GalleryPanel';
 import ReviewsPanel from './ReviewsPanel';
 import MessagesPanel from './MessagesPanel';
+import EnableNotifications from '@/components/EnableNotifications';
 
 type ConversationRow = Conversation & { bookings: { id: string; status: string } | null };
 
@@ -117,7 +118,12 @@ export default function DashboardTabs(props: {
       </div>
 
       <Shell>
-        {tab === 'bookings' && <BookingsPanel bookings={bookings} />}
+        {tab === 'bookings' && (
+          <div className="space-y-3">
+            <EnableNotifications />
+            <BookingsPanel bookings={bookings} />
+          </div>
+        )}
         {tab === 'messages' && <MessagesPanel conversations={conversations} />}
         {tab === 'schedule' && <SchedulePanel slots={slots} />}
         {tab === 'pings' && <PingsPanel pings={pings} />}
