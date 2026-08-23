@@ -63,6 +63,8 @@ export interface Service {
   description: string | null;
   price_cents: number;
   duration_min: number;
+  /** Whether the provider travels to the customer or hosts. Drives travel-gap warnings. */
+  location_type: 'at_customer' | 'at_provider';
   active: boolean;
 }
 
@@ -188,6 +190,8 @@ export type MessageKind =
   | 'timing_poll'
   | 'timing_choice'
   | 'payment_memo'
+  | 'late_notice'
+  | 'late_choice'
   | 'system';
 
 export interface Conversation {

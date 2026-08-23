@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/ageverify.test.mjs"
+    "test": "node tests/ageverify.test.mjs && node tests/scheduling.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

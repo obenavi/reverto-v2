@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shell, StatusPill } from '@/components/ui';
+import type { TightPair } from '@/lib/scheduling';
 import type {
   BookingRow,
   Conversation,
@@ -25,6 +26,7 @@ import ReviewsPanel from './ReviewsPanel';
 import MessagesPanel from './MessagesPanel';
 import EnableNotifications from '@/components/EnableNotifications';
 import AccountPanel from './AccountPanel';
+import ScheduleAlerts from './ScheduleAlerts';
 import CustomerBookingsPanel from './CustomerBookingsPanel';
 
 type ConversationRow = Conversation & { bookings: { id: string; status: string } | null };
@@ -55,6 +57,7 @@ export default function DashboardTabs(props: {
   conversations: ConversationRow[];
   customerBookings: CustomerBookingRow[];
   blocked: string[];
+  tightPairs: TightPair[];
 }) {
   const {
     operator,
@@ -68,6 +71,7 @@ export default function DashboardTabs(props: {
     conversations,
     customerBookings,
     blocked,
+    tightPairs,
   } = props;
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('bookings');
@@ -140,6 +144,7 @@ export default function DashboardTabs(props: {
       <Shell>
         {tab === 'bookings' && (
           <div className="space-y-3">
+            <ScheduleAlerts pairs={tightPairs} />
             <EnableNotifications />
             <BookingsPanel bookings={bookings} />
           </div>

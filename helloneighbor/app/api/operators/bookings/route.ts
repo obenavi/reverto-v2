@@ -4,6 +4,7 @@ import { requireOperator } from '@/lib/guards';
 import { stripe, isStripeConfigured } from '@/lib/stripe';
 import { sendSms, smsTemplates } from '@/lib/sms';
 import { formatSlot } from '@/lib/format';
+import { releaseBlockedSlots } from '@/lib/scheduling';
 
 /**
  * PATCH /api/operators/bookings — mark a booking complete or cancelled.
@@ -72,9 +73,13 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Could not update that booking.' }, { status: 500 });
   }
 
-  // Free the slot back up when a booking is cancelled.
-  if (action === 'cancel' && booking.slot_id) {
-    await db.from('slots').update({ status: 'open' }).eq('id', booking.slot_id);
+  // Free the slot back up when a booking is cancelled, along with any other
+  // slots this booking closed for overlapping.
+  if (action === 'cancel') {
+    if (booking.slot_id) {
+      await db.from('slots').update({ status: 'open' }).eq('id', booking.slot_id);
+    }
+    await releaseBlockedSlots(booking.id);
   }
 
   const title = booking.services?.title ?? 'your booking';

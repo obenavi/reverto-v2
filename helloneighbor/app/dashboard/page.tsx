@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { currentOperatorId } from '@/lib/session';
 import { Shell } from '@/components/ui';
 import { blockedPhones } from '@/lib/blocks';
+import { findTightPairs, type ScheduledJob } from '@/lib/scheduling';
 import DashboardTabs from '@/components/dashboard/DashboardTabs';
 import type {
   BookingRow,
@@ -45,7 +46,7 @@ export default async function DashboardPage() {
     db.from('slots').select('*').eq('operator_id', operatorId).order('starts_at'),
     db
       .from('bookings')
-      .select('*, services (title, kind), slots (starts_at, ends_at)')
+      .select('*, services (title, kind, location_type), slots (starts_at, ends_at)')
       .eq('operator_id', operatorId)
       .order('created_at', { ascending: false }),
     db.from('pings').select('*').eq('operator_id', operatorId).order('created_at', { ascending: false }),
@@ -66,6 +67,22 @@ export default async function DashboardPage() {
   ]);
 
   const blocked = await blockedPhones(operatorId);
+
+  // Upcoming confirmed work, for the too-close-together check.
+  const upcomingJobs: ScheduledJob[] = ((bookingsRes.data as BookingRow[]) ?? [])
+    .filter((b) => b.status === 'confirmed' && b.slots && b.services)
+    .filter((b) => new Date(b.slots!.starts_at) > new Date())
+    .map((b) => ({
+      bookingId: b.id,
+      serviceTitle: b.services!.title,
+      locationType:
+        (b.services as unknown as { location_type?: string }).location_type ?? 'at_customer',
+      startsAt: b.slots!.starts_at,
+      endsAt: b.slots!.ends_at,
+      clientName: b.client_name,
+    }));
+
+  const tightPairs = findTightPairs(upcomingJobs);
 
   const operator = operatorRes.data as Subscriber | null;
 
@@ -99,6 +116,7 @@ export default async function DashboardPage() {
       conversations={(conversationsRes.data as ConversationRow[]) ?? []}
       customerBookings={(customerBookingsRes.data as CustomerBookingRow[]) ?? []}
       blocked={blocked}
+      tightPairs={tightPairs}
     />
   );
 }

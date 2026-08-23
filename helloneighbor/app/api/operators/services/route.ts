@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       description: body?.description ? String(body.description).trim() : null,
       price_cents: priceCents,
       duration_min: durationMin,
+      location_type: body?.location_type === 'at_provider' ? 'at_provider' : 'at_customer',
       active: body?.active !== false,
     })
     .select('*')
@@ -88,6 +89,9 @@ export async function PATCH(request: Request) {
   if (body.price_cents !== undefined) patch.price_cents = Math.round(Number(body.price_cents));
   if (body.duration_min !== undefined) patch.duration_min = Math.round(Number(body.duration_min));
   if (typeof body.active === 'boolean') patch.active = body.active;
+  if (body.location_type === 'at_provider' || body.location_type === 'at_customer') {
+    patch.location_type = body.location_type;
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });

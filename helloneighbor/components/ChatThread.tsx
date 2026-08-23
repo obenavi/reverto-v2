@@ -95,6 +95,23 @@ export default function ChatThread({
     await load();
   }
 
+  async function answerLate(choice: 'accepted' | 'reschedule') {
+    setSending(true);
+    const res = await fetch(`/api/messages/late-choice?${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ choice }),
+    });
+    setSending(false);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? 'Could not send that.');
+      return;
+    }
+    await load();
+  }
+
   async function choosePayment(method: PaymentMethod) {
     setSending(true);
     const res = await fetch(`/api/messages/payment-choice?${query}`, {
@@ -145,6 +162,7 @@ export default function ChatThread({
   const booking = conversation?.bookings;
   const answered = messages.some((m) => m.kind === 'payment_choice');
   const timingAnswered = messages.some((m) => m.kind === 'timing_choice');
+  const lateAnswered = messages.some((m) => m.kind === 'late_choice');
   const otherName =
     viewer === 'client' ? (conversation?.subscribers?.name ?? 'your provider') : conversation?.client_name;
 
@@ -208,7 +226,7 @@ export default function ChatThread({
 
             const mine = message.sender === viewer;
             const meta = (message.metadata ?? {}) as {
-              options?: (PaymentMethod | PaymentTiming)[];
+              options?: (PaymentMethod | PaymentTiming | 'accepted' | 'reschedule')[];
               handles?: Record<string, string>;
             };
             const options = Array.isArray(meta.options) ? meta.options : [];
@@ -221,6 +239,35 @@ export default function ChatThread({
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.body}</p>
+
+                  {message.kind === 'late_notice' && (
+                    <div className="mt-2 space-y-1">
+                      {viewer === 'client' && !lateAnswered ? (
+                        <>
+                          {(meta.options ?? []).includes('accepted' as never) && (
+                            <button
+                              disabled={sending}
+                              onClick={() => answerLate('accepted')}
+                              className="block w-full rounded-btn bg-white px-3 py-2 text-left font-semibold text-brand hover:bg-brand-light disabled:opacity-50"
+                            >
+                              Yes, I&apos;d like you to come late
+                            </button>
+                          )}
+                          <button
+                            disabled={sending}
+                            onClick={() => answerLate('reschedule')}
+                            className="block w-full rounded-btn bg-white px-3 py-2 text-left font-semibold text-danger hover:bg-danger-light disabled:opacity-50"
+                          >
+                            No, I&apos;d like to reschedule
+                          </button>
+                        </>
+                      ) : (
+                        <p className={`text-[12px] ${mine ? 'text-white/70' : 'text-ink-faint'}`}>
+                          {lateAnswered ? 'Answered' : 'Waiting for a reply'}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {message.kind === 'timing_poll' && (
                     <div className="mt-2 space-y-1">

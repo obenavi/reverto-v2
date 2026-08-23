@@ -346,6 +346,54 @@ npm run lint        # next lint
 npm run build       # production build
 ```
 
+## Scheduling
+
+Three problems, all caused by slots being independent of each other.
+
+**Overlap blocking.** Offering two services in the same hour used to mean both
+were separately bookable. Booking one now closes every other slot of that
+operator's that overlaps it — recorded as `blocked_by_booking_id`, so
+cancelling the booking reopens exactly what it closed and nothing else.
+
+**Travel gaps.** The gap a provider needs scales with the job they just
+finished — half its length, clamped to 10–45 minutes. A one-hour job lands at
+30, which is the number most people reach for anyway, while a 15-minute bin run
+is not padded out of existence and a three-hour yard job is not assumed to need
+90.
+
+The gap is **zero when no travel is involved**: two lessons at the provider's
+own kitchen table are back to back on purpose. Each service carries a
+`location_type` — *I go to them* or *they come to me* — set when the operator
+creates it.
+
+**Running late.** Where two jobs are too close, the dashboard says so and
+offers to tell the customer. The message reads as a person wrote it:
+
+> Hi! This is Alex. You've booked me for Car wash **today** at 2:00 PM. I'm
+> sorry but I will be approximately 20 minutes late. Would you still like me to
+> arrive late, or reschedule for a different day?
+
+"today" / "tomorrow" / "on Saturday" is chosen by `whenPhrase()`, which also
+drops the preposition where it would read wrong.
+
+The customer gets two buttons. *Come late* replies **"Great! I will be there
+ASAP!"**; *reschedule* replies with an apology and a link back to the booking
+page. Both are posted automatically, because the person who is late is by
+definition busy.
+
+**When being late would hit the next booking**, the late option is not offered
+at all — `lateWouldCollide()` checks the shifted end against the following job,
+and the message asks to reschedule instead. Offering to arrive late there would
+just make the operator late for two people.
+
+Before anything sends, a caution: late arrivals and reschedules can lose the
+customer and earn a bad review. Shown *after* they pick how late they are, so
+it interrupts the decision rather than the intention — **It's ok — send it** or
+**Don't send it**.
+
+`npm test` pins the gap formula, tight-pair detection, the same-house
+exemption, collision detection and the day phrasing.
+
 ## Reporting, blocking, and the safety queue
 
 Every conversation carries a **Report or block this person** link. The reporter

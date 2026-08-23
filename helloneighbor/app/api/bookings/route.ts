@@ -11,6 +11,7 @@ import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { currentOperatorId } from '@/lib/session';
 import { isBlocked } from '@/lib/blocks';
 import { sendPush, pushTemplates } from '@/lib/push';
+import { blockOverlappingSlots, releaseBlockedSlots } from '@/lib/scheduling';
 import { verifyTurnstile } from '@/lib/turnstile';
 import type { PaymentMethod } from '@/lib/types';
 
@@ -175,6 +176,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Could not save that booking.' }, { status: 500 });
   }
 
+  // One person cannot be in two places at once: close every other slot of
+  // theirs that overlaps this one. Reversed if the booking is cancelled.
+  await blockOverlappingSlots({
+    operatorId,
+    bookingId: booking.id,
+    slotId: slot.id,
+    startsAt: slot.starts_at,
+    endsAt: slot.ends_at,
+  });
+
   let clientSecret: string | null = null;
   if (paymentMethod === 'stripe') {
     try {
@@ -183,6 +194,7 @@ export async function POST(request: Request) {
       console.error('[bookings:intent]', err);
       await db.from('bookings').update({ status: 'cancelled', payment_status: 'failed' }).eq('id', booking.id);
       await db.from('slots').update({ status: 'open' }).eq('id', slot.id);
+      await releaseBlockedSlots(booking.id);
       return NextResponse.json({ error: 'Could not start the card payment.' }, { status: 502 });
     }
   }

@@ -13,6 +13,7 @@ export default function ServicesPanel({ services }: { services: Service[] }) {
   const [title, setTitle] = useState(serviceKind('trash').label);
   const [price, setPrice] = useState(serviceKind('trash').defaultPriceCents / 100);
   const [duration, setDuration] = useState(serviceKind('trash').defaultDurationMin);
+  const [locationType, setLocationType] = useState<'at_customer' | 'at_provider'>('at_customer');
 
   function pickKind(next: ServiceKind) {
     const preset = serviceKind(next);
@@ -31,6 +32,7 @@ export default function ServicesPanel({ services }: { services: Service[] }) {
         title,
         price_cents: Math.round(price * 100),
         duration_min: duration,
+        location_type: locationType,
         active: true,
       },
     });
@@ -84,6 +86,21 @@ export default function ServicesPanel({ services }: { services: Service[] }) {
           </div>
         </div>
 
+        <div>
+          <label htmlFor="where">Where does it happen?</label>
+          <select
+            id="where"
+            value={locationType}
+            onChange={(e) => setLocationType(e.target.value as 'at_customer' | 'at_provider')}
+          >
+            <option value="at_customer">I go to them</option>
+            <option value="at_provider">They come to me</option>
+          </select>
+          <p className="mt-1 text-[12px] text-ink-faint">
+            We use this to work out whether you need travel time between bookings.
+          </p>
+        </div>
+
         {error && <Notice tone="error">{error}</Notice>}
         <button className="btn-primary w-full" disabled={busy}>
           Add service
@@ -101,7 +118,8 @@ export default function ServicesPanel({ services }: { services: Service[] }) {
                   <span aria-hidden>{serviceKind(service.kind).emoji}</span> {service.title}
                 </p>
                 <p className="text-ink-muted">
-                  {formatPrice(service.price_cents)} · {service.duration_min} min
+                  {formatPrice(service.price_cents)} · {service.duration_min} min ·{' '}
+                  {service.location_type === 'at_provider' ? 'at my place' : 'I travel'}
                   {!service.active && ' · hidden'}
                 </p>
               </div>
