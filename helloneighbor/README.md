@@ -338,9 +338,36 @@ See [DEPLOY.md](./DEPLOY.md) — Vercel steps, the full environment variable
 table, the post-deploy checklist, and an honest read on what an App Store
 submission would actually involve.
 
+## Route authorization
+
+The same bug shipped three times: a handler calling `supabaseAdmin()` before
+working out who was calling. In production the 401 still won, but an
+unauthenticated caller got a 500 and a stack trace on the way there, and the
+route did work it should not have.
+
+Two things now stop it recurring.
+
+**`withCaller()` in `lib/route-auth.ts`** makes the mistake unavailable rather
+than discouraged. The database client is only handed to the handler, and the
+handler only runs once a caller has been resolved and accepted — a route using
+it cannot construct the client early because it never imports it. `accept`
+narrows the caller type, so a route taking only operators gets `operatorId`
+without re-checking. A signed conversation token wins over a session, because
+an operator who booked someone else is the customer on that thread.
+
+**`tests/route-guards.test.mjs`** walks every handler and fails when the client
+is constructed before the first authorization decision. It is static — no
+server, no database — and catches the pattern whether or not the author used
+the wrapper. Genuinely public routes are listed with a reason each, so adding
+one is a decision rather than a way to silence the check.
+
+The check was verified by reintroducing the original bug: it exits 1 with the
+bug present and 0 once fixed.
+
 ## Checks
 
 ```bash
+npm test            # route guards, age decisions, scheduling rules
 npm run typecheck   # tsc --noEmit
 npm run lint        # next lint
 npm run build       # production build

@@ -1,0 +1,117 @@
+/**
+ * Guards against a bug that shipped three times.
+ *
+ * A handler that calls supabaseAdmin() before working out who is calling still
+ * returns 401 in production — but an unauthenticated caller gets a 500 and a
+ * stack trace on the way there, and the route does work it should not.
+ *
+ * This walks every route handler and fails when the service-role client is
+ * constructed before the first authorization decision. It is static, so it
+ * needs no server and no database, and it catches the pattern whether or not
+ * the author used lib/route-auth.ts.
+ */
+import { readFileSync, readdirSync, statSync } from 'fs';
+import { join, relative } from 'path';
+
+const API = new URL('../app/api', import.meta.url).pathname;
+const ROOT = new URL('..', import.meta.url).pathname;
+
+/**
+ * Routes with no caller to authorize: anyone may reach them, so there is no
+ * ordering to get wrong. Each needs a reason, so adding one is a decision
+ * rather than a way to silence the check.
+ */
+const PUBLIC_ROUTES = {
+  'app/api/operators/join/route.ts': 'signup — anyone may apply',
+  'app/api/bookings/route.ts': 'neighbors book without an account',
+  'app/api/bookings/recover/route.ts': 'recovery by phone, answers identically either way',
+  'app/api/pings/route.ts': 'neighbors ping without an account',
+  'app/api/auth/request-code/route.ts': 'requesting a login code precedes having one',
+  'app/api/auth/verify-code/route.ts': 'exchanging a code for a session',
+  'app/api/auth/admin/route.ts': 'admin password login, gated by access key first',
+  'app/api/auth/logout/route.ts': 'clearing cookies needs no credential',
+  'app/api/stripe/webhook/route.ts': 'authorized by Stripe signature, verified before the db',
+  'app/api/push/route.ts': 'DELETE is authorized by the endpoint secret itself',
+  'app/api/cron/sweep/route.ts': 'authorized by CRON_SECRET, checked first',
+  'app/api/consent/route.ts': 'guardian link token is checked before the db',
+};
+
+function walk(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...walk(full));
+    else if (entry === 'route.ts') out.push(full);
+  }
+  return out;
+}
+
+/** Extracts each exported handler body by brace matching. */
+function handlers(source) {
+  const found = [];
+  const re = /export async function (GET|POST|PATCH|PUT|DELETE)\s*\([^)]*\)\s*\{/g;
+  let m;
+  while ((m = re.exec(source))) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    while (i < source.length && depth > 0) {
+      if (source[i] === '{') depth += 1;
+      else if (source[i] === '}') depth -= 1;
+      i += 1;
+    }
+    found.push({ method: m[1], body: source.slice(m.index + m[0].length, i - 1) });
+  }
+  return found;
+}
+
+const GUARDS = [
+  'requireOperator',
+  'requireAdmin',
+  'withCaller',
+  'readConversationToken',
+  'readGuardianToken',
+  'status: 401',
+  'status: 404',
+];
+
+let failures = 0;
+let checked = 0;
+
+for (const file of walk(API).sort()) {
+  const rel = relative(ROOT, file);
+  const source = readFileSync(file, 'utf8');
+
+  for (const { method, body } of handlers(source)) {
+    const db = body.indexOf('supabaseAdmin()');
+    if (db < 0) continue;
+
+    checked += 1;
+
+    const reason = PUBLIC_ROUTES[rel];
+    const firstGuard = GUARDS.map((g) => body.indexOf(g))
+      .filter((i) => i >= 0)
+      .sort((a, b) => a - b)[0];
+
+    const guarded = firstGuard !== undefined && firstGuard < db;
+
+    if (guarded) {
+      console.log(`ok   ${rel} ${method} — authorizes before touching the database`);
+    } else if (reason) {
+      console.log(`ok   ${rel} ${method} — public: ${reason}`);
+    } else {
+      failures += 1;
+      console.log(
+        `FAIL ${rel} ${method} — supabaseAdmin() is constructed before any authorization.\n` +
+          `     Move the guard above it, use withCaller() from lib/route-auth.ts,\n` +
+          `     or add it to PUBLIC_ROUTES in this test with a reason.`
+      );
+    }
+  }
+}
+
+console.log(`\n${checked} handlers touch the database`);
+if (failures > 0) {
+  console.error(`${failures} FAILED`);
+  process.exit(1);
+}
+console.log('all passed');

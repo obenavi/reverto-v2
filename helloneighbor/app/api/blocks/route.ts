@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { currentOperatorId } from '@/lib/session';
-import { readConversationToken } from '@/lib/conversations';
 import { normalizePhone } from '@/lib/format';
+import { withCaller } from '@/lib/route-auth';
 
 /**
  * Blocking. One row per operator/neighbor-phone pair, whoever asked for it —
@@ -12,61 +12,59 @@ import { normalizePhone } from '@/lib/format';
 
 /** POST /api/blocks — block the other party. */
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+  return withCaller(
+    request,
+    ['operator', 'neighbor'],
+    async ({ caller, db, body }) => {
+      let operatorId: string;
+      let clientPhone: string;
+      let initiatedBy: 'operator' | 'neighbor';
 
-  const conversationId = readConversationToken(body.token);
-  const operatorId = currentOperatorId();
+      if (caller.kind === 'neighbor') {
+        // A neighbor blocking their provider: both sides come from the thread.
+        const { data: conversation } = await db
+          .from('conversations')
+          .select('operator_id, client_phone')
+          .eq('id', caller.conversationId)
+          .maybeSingle();
 
-  if (!conversationId && !operatorId) {
-    return NextResponse.json({ error: 'Not authorized.' }, { status: 401 });
-  }
+        if (!conversation) {
+          return NextResponse.json({ error: 'Conversation not found.' }, { status: 404 });
+        }
+        operatorId = conversation.operator_id;
+        clientPhone = conversation.client_phone;
+        initiatedBy = 'neighbor';
+      } else {
+        // An operator blocking a neighbor, by phone.
+        const phone = normalizePhone(String(body.client_phone ?? ''));
+        if (!phone) {
+          return NextResponse.json(
+            { error: 'That phone number does not look right.' },
+            { status: 400 }
+          );
+        }
+        operatorId = caller.operatorId;
+        clientPhone = phone;
+        initiatedBy = 'operator';
+      }
 
-  const db = supabaseAdmin();
+      const { error } = await db.from('blocks').upsert(
+        {
+          operator_id: operatorId,
+          client_phone: clientPhone,
+          initiated_by: initiatedBy,
+          reason: body.reason ? String(body.reason).trim().slice(0, 500) : null,
+        },
+        { onConflict: 'operator_id,client_phone' }
+      );
 
-  let targetOperatorId: string;
-  let clientPhone: string;
-  let initiatedBy: 'operator' | 'neighbor';
-
-  if (conversationId) {
-    // A neighbor blocking their provider.
-    const { data: conversation } = await db
-      .from('conversations')
-      .select('operator_id, client_phone')
-      .eq('id', conversationId)
-      .maybeSingle();
-    if (!conversation) {
-      return NextResponse.json({ error: 'Conversation not found.' }, { status: 404 });
+      if (error) {
+        console.error('[blocks:create]', error);
+        return NextResponse.json({ error: 'Could not block.' }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true }, { status: 201 });
     }
-    targetOperatorId = conversation.operator_id;
-    clientPhone = conversation.client_phone;
-    initiatedBy = 'neighbor';
-  } else {
-    // An operator blocking a neighbor, by phone.
-    const phone = normalizePhone(String(body.client_phone ?? ''));
-    if (!phone) {
-      return NextResponse.json({ error: 'That phone number does not look right.' }, { status: 400 });
-    }
-    targetOperatorId = operatorId!;
-    clientPhone = phone;
-    initiatedBy = 'operator';
-  }
-
-  const { error } = await db.from('blocks').upsert(
-    {
-      operator_id: targetOperatorId,
-      client_phone: clientPhone,
-      initiated_by: initiatedBy,
-      reason: body.reason ? String(body.reason).trim().slice(0, 500) : null,
-    },
-    { onConflict: 'operator_id,client_phone' }
   );
-
-  if (error) {
-    console.error('[blocks:create]', error);
-    return NextResponse.json({ error: 'Could not block.' }, { status: 500 });
-  }
-  return NextResponse.json({ ok: true }, { status: 201 });
 }
 
 /** DELETE /api/blocks?phone=… — an operator unblocks someone. */
