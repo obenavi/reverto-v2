@@ -358,11 +358,19 @@ an operator who booked someone else is the customer on that thread.
 **`tests/route-guards.test.mjs`** walks every handler and fails when the client
 is constructed before the first authorization decision. It is static — no
 server, no database — and catches the pattern whether or not the author used
-the wrapper. Genuinely public routes are listed with a reason each, so adding
-one is a decision rather than a way to silence the check.
+the wrapper.
 
-The check was verified by reintroducing the original bug: it exits 1 with the
-bug present and 0 once fixed.
+Handlers with genuinely no caller to authorize are exempt, keyed by **file and
+method** with a written reason each. Keying by file alone was a real hole: one
+entry silently excused every handler in the file, and a planted ordering bug in
+`push` POST went undetected behind an exemption written for `push` DELETE.
+
+An exemption that is no longer needed also fails the check, because a stale one
+hides the next regression.
+
+All three failure modes are verified by planting them: an ordering bug in a
+guarded handler, an ordering bug in a handler whose sibling is exempt, and a
+leftover exemption. Each exits 1; a clean tree exits 0.
 
 ## Checks
 

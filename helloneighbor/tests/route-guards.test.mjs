@@ -17,23 +17,26 @@ const API = new URL('../app/api', import.meta.url).pathname;
 const ROOT = new URL('..', import.meta.url).pathname;
 
 /**
- * Routes with no caller to authorize: anyone may reach them, so there is no
+ * Handlers with no caller to authorize: anyone may reach them, so there is no
  * ordering to get wrong. Each needs a reason, so adding one is a decision
  * rather than a way to silence the check.
+ *
+ * Keyed by file AND method. Keying by file alone was a real hole: one entry
+ * silently excused every handler in the file, so a genuine ordering bug in
+ * push POST went undetected behind an exemption written for push DELETE.
  */
-const PUBLIC_ROUTES = {
-  'app/api/operators/join/route.ts': 'signup — anyone may apply',
-  'app/api/bookings/route.ts': 'neighbors book without an account',
-  'app/api/bookings/recover/route.ts': 'recovery by phone, answers identically either way',
-  'app/api/pings/route.ts': 'neighbors ping without an account',
-  'app/api/auth/request-code/route.ts': 'requesting a login code precedes having one',
-  'app/api/auth/verify-code/route.ts': 'exchanging a code for a session',
-  'app/api/auth/admin/route.ts': 'admin password login, gated by access key first',
-  'app/api/auth/logout/route.ts': 'clearing cookies needs no credential',
-  'app/api/stripe/webhook/route.ts': 'authorized by Stripe signature, verified before the db',
-  'app/api/push/route.ts': 'DELETE is authorized by the endpoint secret itself',
-  'app/api/cron/sweep/route.ts': 'authorized by CRON_SECRET, checked first',
-  'app/api/consent/route.ts': 'guardian link token is checked before the db',
+const PUBLIC_HANDLERS = {
+  'app/api/operators/join/route.ts POST': 'signup — anyone may apply',
+  'app/api/bookings/route.ts POST': 'neighbors book without an account',
+  'app/api/bookings/recover/route.ts POST':
+    'recovery by phone, answers identically whether or not the number is known',
+  'app/api/pings/route.ts POST': 'neighbors ping without an account',
+  'app/api/auth/request-code/route.ts POST': 'requesting a login code precedes having one',
+  'app/api/auth/verify-code/route.ts POST': 'exchanging a code for a session',
+  'app/api/stripe/webhook/route.ts POST':
+    'authorized by the Stripe signature, which is verified before the client is built',
+  'app/api/push/route.ts DELETE':
+    'the push endpoint URL is itself the per-browser secret; a session may have expired by the time someone turns notifications off',
 };
 
 function walk(dir) {
@@ -76,6 +79,8 @@ const GUARDS = [
 
 let failures = 0;
 let checked = 0;
+/** Exemptions actually relied on, so stale ones can be reported. */
+const seen = new Set();
 
 for (const file of walk(API).sort()) {
   const rel = relative(ROOT, file);
@@ -87,7 +92,7 @@ for (const file of walk(API).sort()) {
 
     checked += 1;
 
-    const reason = PUBLIC_ROUTES[rel];
+    const reason = PUBLIC_HANDLERS[`${rel} ${method}`];
     const firstGuard = GUARDS.map((g) => body.indexOf(g))
       .filter((i) => i >= 0)
       .sort((a, b) => a - b)[0];
@@ -97,16 +102,29 @@ for (const file of walk(API).sort()) {
     if (guarded) {
       console.log(`ok   ${rel} ${method} — authorizes before touching the database`);
     } else if (reason) {
+      seen.add(`${rel} ${method}`);
       console.log(`ok   ${rel} ${method} — public: ${reason}`);
     } else {
       failures += 1;
       console.log(
         `FAIL ${rel} ${method} — supabaseAdmin() is constructed before any authorization.\n` +
-          `     Move the guard above it, use withCaller() from lib/route-auth.ts,\n` +
-          `     or add it to PUBLIC_ROUTES in this test with a reason.`
+          `     Move the guard above it, or use withCaller() from lib/route-auth.ts.\n` +
+          `     If this handler genuinely has no caller to authorize, add\n` +
+          `     '${rel} ${method}' to PUBLIC_HANDLERS with a reason — and expect\n` +
+          `     that line to be questioned in review.`
       );
     }
   }
+}
+
+const unused = Object.keys(PUBLIC_HANDLERS).filter((k) => !seen.has(k));
+for (const key of unused) {
+  failures += 1;
+  console.log(
+    `FAIL ${key} is exempt in PUBLIC_HANDLERS but does not need to be —\n` +
+      `     it either authorizes correctly now or no longer exists.\n` +
+      `     Remove the entry; a stale exemption hides the next regression.`
+  );
 }
 
 console.log(`\n${checked} handlers touch the database`);
