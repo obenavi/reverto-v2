@@ -375,27 +375,36 @@ async function renderCommunityBench() {
     if (!Array.isArray(data) || !data.length) {
       el.innerHTML = `<div class="card-pad" style="text-align:center;padding:20px">
         <div style="font-size:13px;font-weight:700;margin-bottom:6px">בנצ'מרק קהילתי</div>
-        <div style="font-size:12px;color:var(--on-surface-3);line-height:1.6">הנתונים יופיעו כאשר לפחות 5 עסקים סרקו חשבוניות עם אותו מוצר.</div>
+        <div style="font-size:12px;color:var(--on-surface-3);line-height:1.6">המחיר החציוני יוצג ברגע שמספיק עסקים יסרקו חשבוניות עם אותו מוצר.</div>
       </div>`;
       return;
     }
 
+    // The benchmark is the median of one price per business, pooled across all
+    // grades and varieties of the same base product. The range shown is the
+    // middle half (quartiles) — never the true extremes, which in a small pool
+    // would each be one identifiable restaurant's actual price.
     el.innerHTML = `
       <div style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:11px;color:var(--on-surface-3);font-weight:700">
-        ממוצע שוק — ${data[0]?.period || ''} · ${data.length} מוצרים
+        מחיר חציוני — ${data[0]?.period || ''} · ${data.length} מוצרים
+      </div>
+      <div style="padding:8px 14px;font-size:11px;color:var(--on-surface-3);line-height:1.5">
+        ההשוואה גסה בכוונה: כל הזנים והדרגות של אותו מוצר נספרים יחד, והחציון מנטרל את ההפרש ביניהם.
       </div>
       ${data.map(p => {
         const userPrice = userPriceAvg[p.product_name];
-        const avgPrice  = parseFloat(p.avg_price);
-        const diff = userPrice ? ((userPrice - avgPrice) / avgPrice * 100) : null;
+        const median = parseFloat(p.median_price ?? p.avg_price);
+        const q1 = parseFloat(p.min_price);
+        const q3 = parseFloat(p.max_price);
+        const diff = userPrice && median ? ((userPrice - median) / median * 100) : null;
         const diffColor = diff === null ? 'var(--on-surface-3)' : diff > 5 ? 'var(--error)' : diff < -5 ? 'var(--success)' : '#F59E0B';
         return `<div class="list-row">
           <div style="flex:1">
             <div style="font-size:13px;font-weight:700">${p.product_name}</div>
-            <div style="font-size:11px;color:var(--on-surface-3)">${p.sample_count} עסקים · ₪${parseFloat(p.min_price).toFixed(2)}–₪${parseFloat(p.max_price).toFixed(2)}</div>
+            <div style="font-size:11px;color:var(--on-surface-3)">${p.sample_count} עסקים · מחצית אמצעית ₪${q1.toFixed(2)}–₪${q3.toFixed(2)}</div>
           </div>
           <div style="text-align:left">
-            <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${avgPrice.toFixed(2)}</div>
+            <div style="font-size:14px;font-weight:800;color:var(--primary)">₪${median.toFixed(2)}</div>
             ${userPrice ? `<div style="font-size:11px;font-weight:700;color:${diffColor}">${diff > 0 ? '+' : ''}${diff?.toFixed(0)}% שלך</div>` : ''}
           </div>
         </div>`;

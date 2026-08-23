@@ -1,78 +1,55 @@
 // Called daily by GitHub Actions via HTTP POST
-// Reads invoice_items → aggregates → writes to community_prices
+// Reads invoice_items → cold-matches → aggregates → writes community_prices
 // Requires x-cron-secret header for auth
+//
+// COLD MATCHING: products are pooled by head noun alone — grade, variety, brand,
+// trim, cut and flavour are all discarded, so every rice is one bucket and every
+// apple is one bucket. That is deliberate. Precise matching on Hebrew free text
+// leaves almost every bucket below the sample threshold, which is why the old
+// exact-string grouping produced nothing at all. Pooling wide and publishing the
+// MEDIAN gives a usable "what do restaurants pay for rice" number: the middle
+// value is unmoved by a few premium or bargain variants, where an average would
+// be dragged by both.
+//
+// What the median CANNOT absorb is a difference of basis (₪/kg vs ₪/carton), so
+// buckets are segmented by canonical unit and unresolved units are dropped.
 
-// Different customers (and different suppliers' invoices) name the same base
-// product differently — brand, package size, grade. Grouping by the exact raw
-// string means most products never reach the 5-business sample-size threshold
-// even when there's real data for them. This buckets known common staples into
-// one generic name for aggregation, deliberately ignoring brand/grade for now —
-// coarse on purpose, to get a usable community price sooner. Order matters: more
-// specific patterns are checked before broader ones. Extend this list over time
-// as more products are identified; anything unmatched falls back to its raw name,
-// same as before this existed.
-const GENERIC_PRODUCT_MAP = [
-  // Dry goods / staples
-  { generic: 'אורז', pattern: /אורז/ },
-  { generic: 'סוכר', pattern: /סוכר/ },
-  { generic: 'מלח', pattern: /מלח/ },
-  { generic: 'קמח', pattern: /קמח/ },
-  { generic: 'שמן זית', pattern: /שמן זית/ },
-  { generic: 'שמן בישול', pattern: /שמן (קנולה|סויה|חמניות|תירס|בישול)/ },
-  { generic: 'פסטה', pattern: /פסטה|ספגטי/ },
-  { generic: 'עדשים', pattern: /עדשים/ },
-  { generic: 'קינואה', pattern: /קינואה/ },
+const { coldKey } = require('./_shared/cold-match');
+const { canonicalUnit } = require('./_shared/units');
 
-  // Vegetables
-  { generic: 'עגבניות', pattern: /עגבני/ },
-  { generic: 'מלפפונים', pattern: /מלפפון/ },
-  { generic: 'בצל אדום', pattern: /בצל אדום/ },
-  { generic: 'בצל ירוק', pattern: /בצל ירוק/ },
-  { generic: 'בצל לבן', pattern: /בצל (לבן|יבש)/ },
-  { generic: 'גזר', pattern: /גזר/ },
-  { generic: 'תפוחי אדמה', pattern: /תפו״?א|תפוח(י)? אדמה/ },
-  { generic: 'שום', pattern: /שום/ },
-  { generic: 'חציל', pattern: /חציל/ },
-  { generic: 'קישואים', pattern: /קישוא/ },
-  { generic: 'תרד', pattern: /תרד/ },
-  { generic: 'ברוקולי', pattern: /ברוקול/ },
-  { generic: 'כרובית', pattern: /כרובית/ },
-  { generic: 'כרוב לבן', pattern: /כרוב לבן/ },
-  { generic: 'כרוב אדום', pattern: /כרוב אדום/ },
-  { generic: 'חסה', pattern: /חסה/ },
-  { generic: 'פלפל אדום', pattern: /פלפל אדום/ },
-  { generic: 'פלפל צהוב', pattern: /פלפל צהוב/ },
-  { generic: 'פלפל ירוק', pattern: /פלפל ירוק/ },
-  { generic: 'פלפל חריף', pattern: /פלפל חריף|צ׳ילי|צ'ילי/ },
+// Minimum distinct businesses before a bucket may be published. Anonymity comes
+// from the size of the pool, so this is the privacy control: below it, a viewer
+// could subtract their own price and read a competitor's. Configurable so the
+// threshold can track the size of the user base, but never below 3.
+const MIN_BUSINESSES = Math.max(3, parseInt(process.env.COMMUNITY_MIN_BUSINESSES || '5', 10));
 
-  // Fruits
-  { generic: 'לימון', pattern: /לימון/ },
-  { generic: 'תפוחים', pattern: /תפוח עץ|תפוחים/ },
-  { generic: 'בננות', pattern: /בננ/ },
-  { generic: 'אבטיח', pattern: /אבטיח/ },
-  { generic: 'מלון', pattern: /מלון/ },
-  { generic: 'תות שדה', pattern: /תות שדה|תותים/ },
-  { generic: 'ענבים', pattern: /ענבים/ },
-  { generic: 'אבוקדו', pattern: /אבוקדו/ },
+// A bucket whose middle half spans more than this fraction of its median is not
+// measuring one thing — it is a mix of bases or corrupted rows. Suppress rather
+// than publish a number nobody can act on.
+const MAX_IQR_RATIO = parseFloat(process.env.COMMUNITY_MAX_IQR_RATIO || '1.2');
 
-  // Dairy / eggs
-  { generic: 'ביצים', pattern: /ביצ/ },
-  { generic: 'חלב', pattern: /^חלב/ },
-  { generic: 'שמנת', pattern: /שמנת/ },
+const LOOKBACK_DAYS = parseInt(process.env.COMMUNITY_LOOKBACK_DAYS || '90', 10);
 
-  // Meat / poultry
-  { generic: 'חזה עוף', pattern: /חזה עוף/ },
-  { generic: 'שוק עוף', pattern: /שוק עוף|ירך עוף/ },
-  { generic: 'עוף שלם', pattern: /עוף שלם/ },
-  { generic: 'בשר טחון בקר', pattern: /טחון בקר|בקר טחון/ }
-];
+function quantile(sorted, q) {
+  if (!sorted.length) return null;
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
 
-function normalizeToGeneric(name) {
-  const n = (name || '').trim();
-  for (const { generic, pattern } of GENERIC_PRODUCT_MAP) {
-    if (pattern.test(n)) return generic;
-  }
-  return n;
+// Median absolute deviation — drops rows the OCR mangled (a ₪2,970 line that
+// should read ₪183) without assuming a normal distribution the way stddev does.
+function dropOutliers(values) {
+  if (values.length < 4) return values;
+  const sorted = [...values].sort((a, b) => a - b);
+  const med = quantile(sorted, 0.5);
+  const deviations = sorted.map(v => Math.abs(v - med)).sort((a, b) => a - b);
+  const mad = quantile(deviations, 0.5);
+  if (!mad) return values;
+  // 3.5 modified z-scores ≈ the conventional outlier cut for MAD
+  return values.filter(v => Math.abs(v - med) / (1.4826 * mad) <= 3.5);
 }
 
 exports.handler = async (event) => {
@@ -89,57 +66,91 @@ exports.handler = async (event) => {
   const period = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
 
   try {
-    // Fetch invoice_items from last 30 days
     const since = new Date();
-    since.setDate(since.getDate() - 30);
+    since.setDate(since.getDate() - LOOKBACK_DAYS);
     const sinceStr = since.toISOString().slice(0, 10);
 
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/invoice_items?select=product_name,unit_price,user_id,unit&date=gte.${sinceStr}&unit_price=gt.0`,
+      `${SUPABASE_URL}/rest/v1/invoice_items` +
+      `?select=product_name,unit_price,quantity,total_price,user_id,unit` +
+      `&date=gte.${sinceStr}&unit_price=gt.0`,
       { headers: H }
     );
     const items = await r.json();
     if (!Array.isArray(items)) throw new Error('Failed to fetch invoice_items');
 
-    // Group by generic product name + unit. Never average a ₪/kg price together
-    // with a ₪/package price for "the same" product — that's comparing different
-    // things. Rows scanned before unit tracking existed have unit=null and form
-    // their own group rather than being guessed into one of the real ones.
+    const stats = { scanned: items.length, no_key: 0, no_unit: 0, inconsistent: 0, used: 0 };
     const map = {};
-    items.forEach(item => {
-      const generic = normalizeToGeneric(item.product_name);
-      if (!generic || !item.unit_price) return;
-      const unit = (item.unit || '').trim();
-      const key = generic.toLowerCase() + '|' + unit.toLowerCase();
-      if (!map[key]) map[key] = { name: generic, unit, prices: [], users: new Set() };
-      map[key].prices.push(parseFloat(item.unit_price));
-      map[key].users.add(item.user_id);
-    });
 
-    // Only include products with 5+ unique businesses
-    const MIN_SAMPLE = 5;
+    for (const item of items) {
+      const price = parseFloat(item.unit_price);
+      if (!(price > 0)) continue;
+
+      // A line whose own arithmetic disagrees was mis-parsed; one bad row can
+      // move a small bucket's median, so it never enters the pool.
+      const qty = parseFloat(item.quantity);
+      const total = parseFloat(item.total_price);
+      if (qty > 0 && total > 0 && Math.abs(price * qty - total) > Math.max(0.02, total * 0.02)) {
+        stats.inconsistent++;
+        continue;
+      }
+
+      const unit = canonicalUnit(item.unit);
+      if (!unit) { stats.no_unit++; continue; }
+
+      const { key, label } = coldKey(item.product_name);
+      if (!key) { stats.no_key++; continue; }
+
+      const mapKey = `${key}|${unit}`;
+      if (!map[mapKey]) map[mapKey] = { label, unit, prices: [], byUser: new Map() };
+      map[mapKey].prices.push(price);
+      // Track per-business so one heavy uploader cannot dominate a bucket
+      const list = map[mapKey].byUser.get(item.user_id) || [];
+      list.push(price);
+      map[mapKey].byUser.set(item.user_id, list);
+      stats.used++;
+    }
+
     const rows = [];
-    Object.values(map).forEach(({ name, unit, prices, users }) => {
-      if (users.size < MIN_SAMPLE) return;
-      prices.sort((a, b) => a - b);
-      const avg = prices.reduce((s, p) => s + p, 0) / prices.length;
-      const mid = Math.floor(prices.length / 2);
-      const median = prices.length % 2 === 0 ? (prices[mid - 1] + prices[mid]) / 2 : prices[mid];
+    const suppressed = { thin: 0, spread: 0 };
+
+    for (const { label, unit, byUser } of Object.values(map)) {
+      if (byUser.size < MIN_BUSINESSES) { suppressed.thin++; continue; }
+
+      // One observation per business (its own median) before pooling, so a
+      // restaurant that uploaded 40 invoices does not outvote one that uploaded 1.
+      const perBusiness = [...byUser.values()].map(list => {
+        const s = [...list].sort((a, b) => a - b);
+        return quantile(s, 0.5);
+      });
+
+      const cleaned = dropOutliers(perBusiness).sort((a, b) => a - b);
+      if (cleaned.length < MIN_BUSINESSES) { suppressed.thin++; continue; }
+
+      const p25 = quantile(cleaned, 0.25);
+      const p50 = quantile(cleaned, 0.50);
+      const p75 = quantile(cleaned, 0.75);
+
+      if (!p50 || (p75 - p25) / p50 > MAX_IQR_RATIO) { suppressed.spread++; continue; }
+
       rows.push({
-        // community_prices has no separate unit column — fold it into the display
-        // name (e.g. "אורז (ק"ג)") so the unit stays visible and unambiguous.
-        product_name: unit ? `${name} (${unit})` : name,
-        avg_price: Math.round(avg * 100) / 100,
-        min_price: prices[0],
-        max_price: prices[prices.length - 1],
-        median_price: Math.round(median * 100) / 100,
-        sample_count: users.size,
+        // community_prices has no unit column — fold it into the display name
+        product_name: `${label} (${unit === 'kg' ? 'ק"ג' : unit === 'l' ? 'ליטר' : "יח'"})`,
+        // Median is the published benchmark. avg_price is kept populated for the
+        // existing UI contract, but it carries the median too — an average of a
+        // cold bucket is not a number anyone should see.
+        avg_price: Math.round(p50 * 100) / 100,
+        median_price: Math.round(p50 * 100) / 100,
+        // Quartiles, never true min/max: the extremes of a small pool are two
+        // identifiable businesses' actual prices.
+        min_price: Math.round(p25 * 100) / 100,
+        max_price: Math.round(p75 * 100) / 100,
+        sample_count: byUser.size,
         period
       });
-    });
+    }
 
     if (rows.length > 0) {
-      // Delete stale data for this period then insert fresh
       await fetch(`${SUPABASE_URL}/rest/v1/community_prices?period=eq.${period}`, {
         method: 'DELETE', headers: H
       });
@@ -153,7 +164,11 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: true, aggregated: rows.length, period, total_items: items.length })
+      body: JSON.stringify({
+        success: true, period, published: rows.length,
+        buckets: Object.keys(map).length, suppressed, stats,
+        min_businesses: MIN_BUSINESSES
+      })
     };
   } catch (e) {
     return { statusCode: 500, body: JSON.stringify({ error: e.message }) };

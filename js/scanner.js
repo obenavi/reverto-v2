@@ -155,9 +155,27 @@ async function scannerExtract(file, attempt = 1, silent = false) {
             // Claude's total_price already accounts for discount_pct, but unit_price is the
             // pre-discount list price — recompute unit_price so it reflects the actual net
             // price paid (used downstream for catalog/community pricing, not just this invoice).
+            // The prompt asks Claude to sanity-check unit_price x quantity against
+            // total_price, but a third of returned lines historically failed that
+            // check, so it is enforced here instead of trusted. Discounted lines
+            // need the same recomputation, since unit_price is the pre-discount
+            // list price while total_price is what was actually paid.
             invoices[0].items = claudeData.items.map(item => {
-              if (item.discount_pct > 0 && item.quantity > 0) {
-                return { ...item, unit_price: parseFloat((item.total_price / item.quantity).toFixed(2)) };
+              const qty = parseFloat(item.quantity);
+              const total = parseFloat(item.total_price);
+              const price = parseFloat(item.unit_price);
+              if (!(qty > 0) || !(total > 0)) return item;
+
+              const derived = total / qty;
+              const disagrees = !(price > 0) ||
+                Math.abs(price * qty - total) > Math.max(0.02, total * 0.02);
+
+              if (item.discount_pct > 0 || disagrees) {
+                return {
+                  ...item,
+                  unit_price: parseFloat(derived.toFixed(2)),
+                  price_corrected: disagrees
+                };
               }
               return item;
             });
@@ -417,6 +435,17 @@ function extractVendorFromContent(data) {
   return lines.find(looksLikeName) || '';
 }
 
+// Reads a unit of measure out of Azure's Unit field, falling back to whatever
+// the description spells out. Without a unit a line cannot be price-compared to
+// anything, because ₪/kg and ₪/carton are not the same kind of number.
+function extractUnit(f, desc) {
+  const stated = f.Unit?.valueString || f.Unit?.content || '';
+  if (stated.trim()) return stated.trim();
+
+  const m = (desc || '').match(/\b(ק"?ג|קילו|גרם|גר'|ליטר|מ"?ל|יח'?|יחידה)\b/);
+  return m ? m[1] : null;
+}
+
 function parseLineItemsForDoc(doc) {
   const items = [];
   const rawItems = doc?.fields?.Items?.valueArray || [];
@@ -430,13 +459,28 @@ function parseLineItemsForDoc(doc) {
 
     if (!desc) return;
 
-    const finalUnitPrice = unitPrice > 0 ? unitPrice : (qty > 0 ? amount / qty : 0);
+    // Azure regularly picks UnitPrice out of the wrong column on Israeli
+    // invoices — reading the carton count as the quantity, or the line total as
+    // the price. When the stated unit price disagrees with amount ÷ quantity,
+    // the line total is the more reliable figure (it is the number the supplier
+    // is actually charging), so derive the unit price from it.
+    const derived = qty > 0 && amount > 0 ? amount / qty : 0;
+    let finalUnitPrice = unitPrice > 0 ? unitPrice : derived;
+    let priceCorrected = false;
+
+    if (unitPrice > 0 && derived > 0 &&
+        Math.abs(unitPrice * qty - amount) > Math.max(0.02, amount * 0.02)) {
+      finalUnitPrice = derived;
+      priceCorrected = true;
+    }
 
     items.push({
       product_name: desc.trim(),
       quantity: qty,
       unit_price: parseFloat(finalUnitPrice.toFixed(2)),
-      total_price: amount || (finalUnitPrice * qty)
+      total_price: amount || (finalUnitPrice * qty),
+      unit: extractUnit(f, desc),
+      price_corrected: priceCorrected
     });
   });
 
