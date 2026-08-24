@@ -17,6 +17,7 @@ import type {
 } from '@/lib/types';
 import CardPayment from './CardPayment';
 import { YoungProviderNotice, YoungProviderPill } from './YoungProviderBadge';
+import type { Capacity } from '@/lib/plans';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -28,12 +29,14 @@ export default function BookingFlow({
   slots,
   gallery,
   reviews,
+  capacity,
 }: {
   operator: Subscriber;
   services: Service[];
   slots: Slot[];
   gallery: GalleryPhoto[];
   reviews: Review[];
+  capacity: Capacity;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
@@ -220,7 +223,26 @@ export default function BookingFlow({
 
       {step === 2 && (
         <section>
-          {slots.length === 0 ? (
+          {capacity.soldOut ? (
+            <div className="card border-warning bg-warning-light text-center">
+              <p className="text-2xl" aria-hidden>
+                🗓️
+              </p>
+              <p className="mt-1 font-bold text-warning">
+                {operator.name} is fully booked this week
+              </p>
+              <p className="mt-1 text-[13px] text-warning">
+                They take {capacity.cap} bookings a week and this week is full. New times
+                open up on{' '}
+                {new Date(capacity.resetsAt).toLocaleDateString(undefined, {
+                  weekday: 'long',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+                .
+              </p>
+            </div>
+          ) : slots.length === 0 ? (
             <EmptyState
               title="No open times right now"
               hint="Check back soon — new slots get added often."

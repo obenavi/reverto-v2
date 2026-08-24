@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { requireOperator } from '@/lib/guards';
 import { SERVICE_KINDS } from '@/lib/catalog';
 import { reviewContent } from '@/lib/supervisor';
+import { PLANS, kindAllowedOnPlan, type PlanId } from '@/lib/plans';
+import { serviceAllowance } from '@/lib/capacity';
 import type { ServiceKind } from '@/lib/types';
 
 const KINDS = new Set(SERVICE_KINDS.map((s) => s.kind));
@@ -27,6 +29,37 @@ export async function POST(request: Request) {
   }
   if (!Number.isFinite(durationMin) || durationMin <= 0) {
     return NextResponse.json({ error: 'How long does it take?' }, { status: 400 });
+  }
+
+  // What the operator's plan allows.
+  const { data: account } = await supabaseAdmin()
+    .from('subscribers')
+    .select('plan')
+    .eq('id', operatorId)
+    .maybeSingle();
+
+  const planId = (account?.plan ?? 'basic') as PlanId;
+  const planDef = PLANS[planId];
+
+  if (!kindAllowedOnPlan(planId, kind)) {
+    return NextResponse.json(
+      {
+        error: `${planDef.name} covers the services on our list. Upgrade to Pro to name your own.`,
+        upgrade: true,
+      },
+      { status: 402 }
+    );
+  }
+
+  const allowance = await serviceAllowance(operatorId, planId);
+  if (allowance.atLimit) {
+    return NextResponse.json(
+      {
+        error: `${planDef.name} covers ${allowance.max} services and you have ${allowance.used}. Remove one, or upgrade for more.`,
+        upgrade: true,
+      },
+      { status: 402 }
+    );
   }
 
   const { data, error } = await supabaseAdmin()

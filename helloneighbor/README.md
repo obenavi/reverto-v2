@@ -381,6 +381,38 @@ npm run lint        # next lint
 npm run build       # production build
 ```
 
+## Plans
+
+Operators pay HelloNeighbor monthly. Entirely separate from what a neighbor
+pays an operator for a job, which never touches the platform.
+
+| | Basic | Pro | Pro+ |
+|---|---|---|---|
+| Price | **$15**/mo | **$25**/mo | **$30**/mo |
+| Services | 3, from our list | unlimited, name your own | unlimited |
+| Bookings per week | 4, then sold out | no cap | no cap |
+| Young people covered | 1 | 1 | 3 |
+
+**Sold out is a real state, not a label.** Once a Basic operator has four
+bookings in a week, `/api/bookings` refuses with 409 and the booking page says
+so with the date it reopens. Existing bookings are untouched.
+
+Two details that matter more than they look:
+
+- **The cap counts by when the work happens, not when it was booked.** A
+  neighbor booking three weeks ahead does not eat this week's allowance.
+  Cancelled bookings do not count either — a cancellation gives the slot back.
+- **The week is Monday 00:00 UTC to the following Monday.** UTC so the cap
+  cannot be reset by travelling; Monday because "4 a week" reads as a school
+  week to the people this is for. The Sunday boundary is the easy one to get
+  wrong (`getUTCDay()` returns 0), so it is pinned in `npm test`.
+
+Limits are enforced server-side in `/api/operators/services` (count and the
+premade-list restriction, 402 with `upgrade: true`) and `/api/bookings` (the
+weekly cap). The **Plan** tab shows where an operator stands against both.
+
+Changing plans is not wired up — that arrives with Stripe billing.
+
 ## Scheduling
 
 Three problems, all caused by slots being independent of each other.

@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
+import { operatorCapacity } from '@/lib/capacity';
+import type { PlanId } from '@/lib/plans';
 import { Shell } from '@/components/ui';
 import BookingFlow from '@/components/BookingFlow';
 import type { GalleryPhoto, Review, Service, Slot, Subscriber } from '@/lib/types';
@@ -60,6 +62,11 @@ export default async function PublicBookingPage({
       .limit(5),
   ]);
 
+  const capacityNow = await operatorCapacity(
+    operator.id,
+    ((operator as { plan?: string }).plan ?? 'basic') as PlanId
+  );
+
   return (
     <Shell>
       <BookingFlow
@@ -68,6 +75,7 @@ export default async function PublicBookingPage({
         slots={(slotsRes.data as Slot[]) ?? []}
         gallery={(galleryRes.data as GalleryPhoto[]) ?? []}
         reviews={(reviewsRes.data as Review[]) ?? []}
+        capacity={capacityNow}
       />
     </Shell>
   );

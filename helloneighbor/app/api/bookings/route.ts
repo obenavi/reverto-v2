@@ -12,6 +12,8 @@ import { currentOperatorId } from '@/lib/session';
 import { isBlocked } from '@/lib/blocks';
 import { sendPush, pushTemplates } from '@/lib/push';
 import { blockOverlappingSlots, releaseBlockedSlots } from '@/lib/scheduling';
+import { operatorCapacity } from '@/lib/capacity';
+import type { PlanId } from '@/lib/plans';
 import { verifyTurnstile } from '@/lib/turnstile';
 import type { PaymentMethod } from '@/lib/types';
 
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
 
   const { data: operator } = await db
     .from('subscribers')
-    .select('id, name, phone, status, payment_methods, prefers_advance_payment')
+    .select('id, name, phone, status, payment_methods, prefers_advance_payment, plan')
     .eq('id', operatorId)
     .maybeSingle();
 
@@ -107,6 +109,33 @@ export async function POST(request: Request) {
   }
   if (!operator.payment_methods.includes(paymentMethod)) {
     return NextResponse.json({ error: 'That payment method is not accepted.' }, { status: 400 });
+  }
+
+  // A Basic operator only takes so much work a week. Counted against the week
+  // the job falls in, so booking far ahead does not consume this week's
+  // allowance.
+  const slotWeek = await db
+    .from('slots')
+    .select('starts_at')
+    .eq('id', slotId)
+    .maybeSingle();
+
+  if (slotWeek.data?.starts_at) {
+    const capacityNow = await operatorCapacity(
+      operatorId,
+      (operator.plan ?? 'basic') as PlanId,
+      new Date(slotWeek.data.starts_at)
+    );
+    if (capacityNow.soldOut) {
+      return NextResponse.json(
+        {
+          error: `${operator.name} is fully booked that week. Try a later week.`,
+          soldOut: true,
+          resetsAt: capacityNow.resetsAt,
+        },
+        { status: 409 }
+      );
+    }
   }
 
   // Handles live on the extended profile; a neighbor paying by app needs them.

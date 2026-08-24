@@ -4,6 +4,8 @@ import { currentOperatorId } from '@/lib/session';
 import { Shell } from '@/components/ui';
 import { blockedPhones } from '@/lib/blocks';
 import { findTightPairs, type ScheduledJob } from '@/lib/scheduling';
+import { operatorCapacity } from '@/lib/capacity';
+import type { PlanId } from '@/lib/plans';
 import DashboardTabs from '@/components/dashboard/DashboardTabs';
 import type {
   BookingRow,
@@ -103,6 +105,9 @@ export default async function DashboardPage() {
     );
   }
 
+  const planId = (operator.plan ?? 'basic') as PlanId;
+  const planCapacity = await operatorCapacity(operatorId, planId);
+
   return (
     <DashboardTabs
       operator={operator}
@@ -117,6 +122,8 @@ export default async function DashboardPage() {
       customerBookings={(customerBookingsRes.data as CustomerBookingRow[]) ?? []}
       blocked={blocked}
       tightPairs={tightPairs}
+      planId={planId}
+      planCapacity={planCapacity}
     />
   );
 }

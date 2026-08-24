@@ -27,6 +27,8 @@ import MessagesPanel from './MessagesPanel';
 import EnableNotifications from '@/components/EnableNotifications';
 import AccountPanel from './AccountPanel';
 import ScheduleAlerts from './ScheduleAlerts';
+import PlanPanel from './PlanPanel';
+import type { Capacity, PlanId } from '@/lib/plans';
 import CustomerBookingsPanel from './CustomerBookingsPanel';
 
 type ConversationRow = Conversation & { bookings: { id: string; status: string } | null };
@@ -43,6 +45,7 @@ type TabId =
   | 'gallery'
   | 'reviews'
   | 'booked'
+  | 'plan'
   | 'account';
 
 export default function DashboardTabs(props: {
@@ -58,6 +61,8 @@ export default function DashboardTabs(props: {
   customerBookings: CustomerBookingRow[];
   blocked: string[];
   tightPairs: TightPair[];
+  planId: PlanId;
+  planCapacity: Capacity;
 }) {
   const {
     operator,
@@ -72,6 +77,8 @@ export default function DashboardTabs(props: {
     customerBookings,
     blocked,
     tightPairs,
+    planId,
+    planCapacity,
   } = props;
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('bookings');
@@ -90,6 +97,7 @@ export default function DashboardTabs(props: {
     { id: 'gallery', label: 'Gallery' },
     { id: 'reviews', label: 'Reviews' },
     { id: 'booked', label: 'I booked', badge: customerBookings.length },
+    { id: 'plan', label: 'Plan' },
     { id: 'account', label: 'Account' },
   ];
 
@@ -158,6 +166,14 @@ export default function DashboardTabs(props: {
         {tab === 'gallery' && <GalleryPanel photos={gallery} />}
         {tab === 'reviews' && <ReviewsPanel reviews={reviews} />}
         {tab === 'booked' && <CustomerBookingsPanel bookings={customerBookings} />}
+        {tab === 'plan' && (
+          <PlanPanel
+            planId={planId}
+            capacity={planCapacity}
+            services={services.length}
+            renewsAt={operator.plan_renews_at ?? null}
+          />
+        )}
         {tab === 'account' && (
           <AccountPanel operator={operator} bookings={bookings} blocked={blocked} />
         )}

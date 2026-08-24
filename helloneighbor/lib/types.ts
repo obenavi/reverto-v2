@@ -53,6 +53,10 @@ export interface Subscriber {
   guardian_responsibility_at: string | null;
   guardian_confirmed_age: number | null;
   guardian_age_check_sent_at: string | null;
+  /** Subscription plan. See lib/plans.ts for what each one allows. */
+  plan: 'basic' | 'pro' | 'pro_plus';
+  plan_started_at: string | null;
+  plan_renews_at: string | null;
 }
 
 export interface Service {
