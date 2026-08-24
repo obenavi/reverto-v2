@@ -62,8 +62,17 @@ export const TOLERANCE_YEARS = 4;
  * The buffer a provider needs to clear the minimum on its own. An estimate of
  * exactly 14 does not establish that someone is 14 — the error bar straddles
  * the line — so a challenge zone routes to review instead.
+ *
+ * Two years, not three. The buffer sits on top of the floor, so it decides the
+ * youngest age that can auto-pass: at floor 14 a buffer of 3 would send every
+ * 16-year-old to manual review, which is a lot of human work for no safety
+ * gain. Two keeps the ages nearest the floor — 14 and 15 — under human eyes
+ * while comfortably clearing the models' 1–1.5 year error for anyone 16 or up.
+ *
+ * Raising MINIMUM_AGE without revisiting this silently raises the review
+ * threshold with it; the tests pin the pair together.
  */
-export const MINIMUM_BUFFER_YEARS = 3;
+export const MINIMUM_BUFFER_YEARS = 2;
 
 export type Estimate = {
   age: number;

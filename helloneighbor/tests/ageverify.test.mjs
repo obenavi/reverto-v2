@@ -20,9 +20,24 @@ const js = transpileModule(src, {
   compilerOptions: { module: ModuleKind.ESNext, target: 'ES2020' },
 }).outputText;
 
-const { judge, stillNeedsGuardian, MINIMUM_AGE } = await import(
+const { judge, stillNeedsGuardian, MINIMUM_AGE, MINIMUM_BUFFER_YEARS } = await import(
   'data:text/javascript;base64,' + Buffer.from(js).toString('base64')
 );
+
+let failures = 0;
+
+// The floor and the buffer together decide the youngest age that can auto-pass.
+// Raising one without the other silently sends a whole cohort to manual review,
+// which is how this broke once already.
+{
+  const threshold = MINIMUM_AGE + MINIMUM_BUFFER_YEARS;
+  const ok = threshold === 16;
+  if (!ok) failures += 1;
+  console.log(
+    `${ok ? 'ok  ' : 'FAIL'} youngest auto-passing age is ${threshold} (floor ${MINIMUM_AGE} + buffer ${MINIMUM_BUFFER_YEARS})` +
+      `${ok ? '' : ' — expected 16; 14- and 15-year-olds should need review, 16+ should not'}`
+  );
+}
 
 const cases = [
   [15, 15.2, 0.9, 'review', 'inside the challenge zone above the floor'],
@@ -36,7 +51,6 @@ const cases = [
   [14, 14.0, 0.9, 'review', 'exactly at the floor must never auto-pass'],
 ];
 
-let failures = 0;
 
 for (const [declared, age, confidence, expected, why] of cases) {
   const got = judge({ age, confidence, provider: 'test' }, declared).status;
