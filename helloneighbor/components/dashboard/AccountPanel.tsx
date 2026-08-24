@@ -7,6 +7,7 @@ import { formatPhone, formatPrice } from '@/lib/format';
 import type { BookingRow, Subscriber } from '@/lib/types';
 import { useMutate } from './useMutate';
 import AgeCheck from '@/components/AgeCheck';
+import LinkParentPanel from './LinkParentPanel';
 
 /**
  * Earnings, blocked contacts, and account deletion — the three things an
@@ -57,6 +58,8 @@ export default function AccountPanel({
 
   return (
     <div className="space-y-4">
+      <LinkParentPanel supervision={operator.supervision ?? 'none'} />
+
       <AgeCheck
         alreadyConsented={Boolean(operator.biometric_consent_at)}
         status={operator.age_verification_status}

@@ -57,6 +57,9 @@ export interface Subscriber {
   plan: 'basic' | 'pro' | 'pro_plus';
   plan_started_at: string | null;
   plan_renews_at: string | null;
+  /** Which adult route made this account eligible. See lib/parents.ts. */
+  supervision: 'none' | 'waiver' | 'parent_account';
+  link_code: string | null;
 }
 
 export interface Service {

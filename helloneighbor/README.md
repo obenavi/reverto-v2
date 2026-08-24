@@ -68,6 +68,48 @@ minors in contact with strangers carries real exposure that no wording removes.
 Before launch, get this reviewed by a lawyer, and look into insurance, identity
 verification, and whether COPPA applies to your under-13 signups.
 
+## Parent accounts
+
+A parent is a **separate login**, not a role on the young person's account.
+Separate table, separate cookie, email-and-code login. What they may do is
+deliberately narrow — see their child's bookings, cancel one, hold the
+subscription payment method — and deliberately excludes posting as the child,
+accepting work, or replying in a conversation. Those stay the child's.
+
+**Authority comes from the link, never the session.** `supervises()` is called
+before any parent route touches a child's data; a parent holding a valid
+session reaches nothing they have not linked. Verified against live data: a
+second parent account with a perfectly good session supervises nobody.
+
+Linking uses a code the young person finds under **Settings → Link parent or
+guardian account**. The alphabet excludes O/0 and I/1 because the code gets
+read aloud across a kitchen. Rate-limited, since a short code is guessable.
+
+### Cancelling
+
+The caution comes first — cancelling can cost the child the customer and earn a
+bad review — before any of the mechanics.
+
+Then the question that decides everything: **is the whole day off, or only
+certain hours?** They lead to different messages, because they leave the
+customer with different options:
+
+> This is Pat Alex. I'm Alex's mom. Unfortunately I have to cancel your
+> appointment for Car wash **tomorrow** at 2:00 PM. You can reschedule for a
+> different day. Thank you!
+
+> This is Pat Alex. I'm Alex's mom. Unfortunately Alex **isn't available
+> tomorrow between 1:00 PM and 6:00 PM**, so I have to cancel your Car wash
+> appointment at 2:00 PM. If you'd like to reschedule you can pick another time
+> tomorrow **outside those hours**, or a different day. Thank you!
+
+Telling someone to rebook "a different day" when the evening would have worked
+loses a booking that did not need to be lost.
+
+The window is recorded as **unavailability**, not just applied to the one
+booking, and open slots inside it are closed. Verified live: cancelling with a
+13:00–18:00 window closed both slots inside it and left the 19:00 one open.
+
 ## Ages, and who can operate
 
 - **Minimum 13.** COPPA governs under-13, so nobody on the platform falls inside it.
@@ -337,6 +379,22 @@ docs/         the original setup guide and build summary
 See [DEPLOY.md](./DEPLOY.md) — Vercel steps, the full environment variable
 table, the post-deploy checklist, and an honest read on what an App Store
 submission would actually involve.
+
+## Signed-out routing
+
+`middleware.ts` sends signed-out visitors to the right login page with a real
+307, before any private shell renders.
+
+It exists because `redirect()` from a server component is delivered as a
+client-side navigation — the browser gets a 200 and the shell renders before it
+moves. Nothing private leaked (the shells hold no data and every API refuses an
+anonymous caller), but the redirect should be a redirect.
+
+**This checks only that a cookie is present**, not that it is valid: middleware
+runs on the Edge runtime, which has no node crypto, and the signing key lives
+there. A forged cookie gets past it and straight into the page's own check,
+which verifies, and the API guards, which verify again. It is routing, not
+security.
 
 ## Route authorization
 

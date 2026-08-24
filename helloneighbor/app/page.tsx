@@ -14,9 +14,14 @@ export default function LandingPage() {
       <nav className="border-b border-line">
         <Shell className="flex items-center justify-between !py-3">
           <span className="text-lg font-extrabold text-brand">HelloNeighbor</span>
-          <Link href="/login" className="text-[13px] font-semibold text-brand">
-            Operator login
-          </Link>
+          <div className="flex gap-4">
+            <Link href="/parent/login" className="text-[13px] font-semibold text-ink-muted">
+              Parent login
+            </Link>
+            <Link href="/login" className="text-[13px] font-semibold text-brand">
+              Operator login
+            </Link>
+          </div>
         </Shell>
       </nav>
 
@@ -35,6 +40,9 @@ export default function LandingPage() {
             </Link>
             <Link href="/login" className="btn-secondary">
               I already have an account
+            </Link>
+            <Link href="/parent/signup" className="btn-secondary">
+              I&apos;m a parent
             </Link>
           </div>
         </section>
