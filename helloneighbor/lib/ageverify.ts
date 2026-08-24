@@ -22,7 +22,7 @@ import { CONSENT_AGE_LIMIT } from './guardian';
  * A stored face image or template is a biometric identifier under Illinois
  * BIPA — which carries a private right of action and per-violation statutory
  * damages — as well as Texas CUBI, Washington's equivalent, and GDPR Article 9.
- * Collecting one from a 13-year-old is squarely the kind of thing that draws a
+ * Collecting one from a 14-year-old is squarely the kind of thing that draws a
  * class action.
  *
  * So the image is held in memory, sent to the provider, and dropped. Only the
@@ -36,7 +36,20 @@ import { CONSENT_AGE_LIMIT } from './guardian';
  */
 
 /** Platform minimum. Below this nobody may operate. */
-export const MINIMUM_AGE = 13;
+/**
+ * Platform minimum.
+ *
+ * 14 rather than 13 because 14 is the number that carries legal weight in the
+ * US: the FLSA sets 14 as the general floor for non-agricultural work. A young
+ * person doing odd jobs on their own account is usually self-employed rather
+ * than employed, which is a different regime — but sitting on the recognised
+ * line costs nothing and removes an argument.
+ *
+ * Not 14 and a half: no statute uses half-years, it would require a date of
+ * birth rather than an age, and the estimation models cannot resolve six
+ * months anyway.
+ */
+export const MINIMUM_AGE = 14;
 
 /**
  * How far the estimate may sit from the declared age before a human looks.
@@ -47,7 +60,7 @@ export const TOLERANCE_YEARS = 4;
 
 /**
  * The buffer a provider needs to clear the minimum on its own. An estimate of
- * exactly 13 does not establish that someone is 13 — the error bar straddles
+ * exactly 14 does not establish that someone is 14 — the error bar straddles
  * the line — so a challenge zone routes to review instead.
  */
 export const MINIMUM_BUFFER_YEARS = 3;

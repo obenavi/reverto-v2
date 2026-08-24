@@ -37,8 +37,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'That phone number does not look right.' }, { status: 400 });
   }
   if (!area) return NextResponse.json({ error: 'Neighborhood is required.' }, { status: 400 });
-  if (!Number.isInteger(age) || age < 13 || age > 120) {
-    return NextResponse.json({ error: 'You need to be at least 13 to sign up.' }, { status: 400 });
+  if (!Number.isInteger(age) || age < 14 || age > 120) {
+    return NextResponse.json({ error: 'You need to be at least 14 to sign up.' }, { status: 400 });
   }
   if (body.accepted_terms !== true) {
     return NextResponse.json(

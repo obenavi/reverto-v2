@@ -18,7 +18,7 @@ export const GUIDELINES: GuidelineSection[] = [
     id: 'who',
     title: 'Who HelloNeighbor is for',
     body: [
-      'HelloNeighbor connects neighbors with people in their area who offer small services — taking out trash cans, washing a car, walking a dog, tutoring, yard work. Most are teenagers; anyone 13 or older can offer services.',
+      'HelloNeighbor connects neighbors with people in their area who offer small services — taking out trash cans, washing a car, walking a dog, tutoring, yard work. Most are teenagers; anyone 14 or older can offer services.',
       'Providers under 18 are labelled with their age on their booking page. Their prices are lower and their availability works around school — a customer should know that before booking, and it is not a fault to be hidden.',
       'Everyone who offers services is reviewed by a person before their listing goes live. That review is a basic sanity check, not a background check, and it is not a guarantee of anything.',
     ],

@@ -12,6 +12,7 @@ import { TOKEN_MAX_AGE_SECONDS, createToken, readToken } from './tokens';
 
 export const OPERATOR_COOKIE = 'hn_operator';
 export const ADMIN_COOKIE = 'hn_admin';
+export const PARENT_COOKIE = 'hn_parent';
 
 export { createToken, readToken };
 
@@ -30,4 +31,16 @@ export function currentOperatorId(): string | null {
 
 export function isAdmin(): boolean {
   return readToken(cookies().get(ADMIN_COOKIE)?.value) === 'admin';
+}
+
+/**
+ * The logged-in parent's id.
+ *
+ * A separate cookie from the operator's on purpose. A parent holding this can
+ * see and cancel their child's bookings and handle payments — they cannot post
+ * as the child, accept work, or reply in a conversation as them.
+ */
+export function currentParentId(): string | null {
+  const value = readToken(cookies().get(PARENT_COOKIE)?.value);
+  return value?.startsWith('parent:') ? value.slice('parent:'.length) : null;
 }

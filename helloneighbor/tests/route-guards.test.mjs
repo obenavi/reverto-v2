@@ -33,6 +33,11 @@ const PUBLIC_HANDLERS = {
   'app/api/pings/route.ts POST': 'neighbors ping without an account',
   'app/api/auth/request-code/route.ts POST': 'requesting a login code precedes having one',
   'app/api/auth/verify-code/route.ts POST': 'exchanging a code for a session',
+  'app/api/parents/signup/route.ts POST':
+    'a parent has no credential until this succeeds; the account it creates reaches no child until a link is made',
+  'app/api/auth/parent/request-code/route.ts POST':
+    'requesting a login code precedes having one; answers identically for unknown emails',
+  'app/api/auth/parent/verify-code/route.ts POST': 'exchanging a code for a parent session',
   'app/api/stripe/webhook/route.ts POST':
     'authorized by the Stripe signature, which is verified before the client is built',
   'app/api/push/route.ts DELETE':

@@ -30,10 +30,10 @@ const cases = [
   [17, 16.1, 0.8, 'passed', 'within tolerance'],
   [14, 26.0, 0.9, 'review', 'adult posing as a teenager goes to a human'],
   [25, 14.0, 0.9, 'review', 'teenager posing as an adult goes to a human'],
-  [13, 11.0, 0.9, 'failed', 'materially below the floor is refused'],
+  [14, 12.0, 0.9, 'failed', 'materially below the floor is refused'],
   [16, 16.2, 0.3, 'review', 'agreement at low confidence is not evidence'],
   [30, 31.0, 0.9, 'passed', 'adult operator, consistent'],
-  [13, 13.0, 0.9, 'review', 'exactly at the floor must never auto-pass'],
+  [14, 14.0, 0.9, 'review', 'exactly at the floor must never auto-pass'],
 ];
 
 let failures = 0;
@@ -49,7 +49,7 @@ for (const [declared, age, confidence, expected, why] of cases) {
 }
 
 // A pass on the face check must never stand in for a guardian's consent.
-for (const [age, expected] of [[13, true], [15, true], [16, false], [40, false]]) {
+for (const [age, expected] of [[14, true], [15, true], [16, false], [40, false]]) {
   const got = stillNeedsGuardian(age);
   const ok = got === expected;
   if (!ok) failures += 1;

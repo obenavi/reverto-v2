@@ -129,14 +129,14 @@ export default function JoinPage() {
             name="age"
             required
             type="number"
-            min={13}
+            min={14}
             max={120}
             placeholder="16"
             value={age}
             onChange={(e) => setAge(e.target.value)}
           />
           <p className="mt-1 text-[12px] text-ink-faint">
-            You need to be at least 13. Anyone can offer services — under 18, your age is
+            You need to be at least 14. Anyone can offer services — under 18, your age is
             shown to customers so they know what to expect.
           </p>
         </div>
