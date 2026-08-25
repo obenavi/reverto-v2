@@ -31,18 +31,41 @@ export function relationshipWord(value: string): string {
 }
 
 /**
+ * The age a sibling must clear to hold a parent account.
+ *
+ * 21 rather than 18, because the two roles are not the same job. A parent is
+ * already the child's guardian and the account merely gives them a screen. A
+ * sibling is being handed authority over a minor that nobody granted them, and
+ * the person doing the handing is the minor. 21 is the line most youth-serving
+ * programmes use for an unrelated-adult supervisor, and an 18-year-old brother
+ * is usually a high-school senior being asked to be accountable for someone he
+ * shares a bedroom with.
+ */
+export const SIBLING_MINIMUM_AGE = 21;
+
+/**
  * Whether this person can sign the waiver, which asserts legal guardianship
  * and accepts legal responsibility for everything the young person does here.
  *
- * An older sibling usually is not anyone's legal guardian, whatever they are
- * willing to tick. They can run the account — see bookings, set a curfew,
- * cancel, hold the card — but the document that says "I am legally responsible
- * for this child" has to be signed by someone who actually is. Letting a
- * 19-year-old brother sign it would produce a piece of paper that means
- * nothing at exactly the moment it needs to mean something.
+ * Age does not change this, and raising the sibling floor to 21 does not
+ * change it either. Legal guardianship is a status a court confers, not a
+ * threshold you age into — a 40-year-old brother is no more his sister's legal
+ * guardian than a 21-year-old one. What age changes is whether we trust
+ * someone to run the account day to day; what a court order changes is whether
+ * their signature on a responsibility document means anything.
+ *
+ * So a sibling who genuinely IS the appointed guardian has a route: they pick
+ * "Legal guardian", which is the honest answer, and sign as one. Picking
+ * "Older brother or sister" is picking the day-to-day role, and that role
+ * cannot sign for the legal one.
  */
 export function canSignGuardianWaiver(relationship: string): boolean {
   return relationship !== 'sibling';
+}
+
+/** The age floor for this relationship. */
+export function minimumAgeFor(relationship: string): number {
+  return relationship === 'sibling' ? SIBLING_MINIMUM_AGE : 18;
 }
 
 /**

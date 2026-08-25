@@ -14,7 +14,7 @@ const js = transpileModule(src, {
 
 const m = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 const {
-  CHALLENGE_AGE, ADULT_AGE, ESTIMATION_CONFIDENCE_FLOOR,
+  CHALLENGE_AGE, ADULT_AGE, ESTIMATION_CONFIDENCE_FLOOR, CHALLENGE_BUFFER_YEARS, challengeAgeFor,
   METHOD_ORDER, isStrong, judgeEstimation, adultStatus, nextStep, remainingSignals,
 } = m;
 
@@ -34,9 +34,19 @@ console.log('— the buffer —');
 check('the challenge age sits well above the real one', CHALLENGE_AGE > ADULT_AGE + 5, true);
 check('challenge age is 25', CHALLENGE_AGE, 25);
 check('the real gate is 18', ADULT_AGE, 18);
+check('the buffer is seven years', CHALLENGE_BUFFER_YEARS, 7);
+// The buffer must MOVE with the floor. Pinning it to 25 would make a sibling,
+// who has to clear 21, easier to wave through than a parent clearing 18.
+check('a sibling clearing 21 must read 28', challengeAgeFor(21), 28);
+check('the parent case is unchanged', challengeAgeFor(18), CHALLENGE_AGE);
+check('the stricter role has the higher bar', challengeAgeFor(21) > challengeAgeFor(18), true);
 
 console.log('\n— what a selfie may conclude —');
 check('a clear 30 clears', judgeEstimation({ age: 30, confidence: 0.9 }).cleared, true);
+// The same face, judged against the two different floors.
+check('a 26-year-old clears the parent bar', judgeEstimation({ age: 26, confidence: 0.9 }, 18).cleared, true);
+check('but not the sibling bar', judgeEstimation({ age: 26, confidence: 0.9 }, 21).cleared, false);
+check('a 28-year-old clears the sibling bar', judgeEstimation({ age: 28, confidence: 0.9 }, 21).cleared, true);
 check('exactly the challenge age clears', judgeEstimation({ age: 25, confidence: 0.9 }).cleared, true);
 check('24 does not clear', judgeEstimation({ age: 24, confidence: 0.9 }).cleared, false);
 // The dangerous case: a genuine adult of 20 who looks their age. Not cleared,

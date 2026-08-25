@@ -50,11 +50,33 @@
  * feature that is worth holding one.
  */
 
-/** T for an 18 gate. Not tunable per-request — a buffer you can lower is not one. */
-export const CHALLENGE_AGE = 25;
+/**
+ * How far above the real gate the challenge age sits.
+ *
+ * Seven years, from the NIST figures: at T = 18 + 7 a genuine 20-year-old is
+ * cleared only 12–14% of the time, so almost nobody near the line gets through
+ * on a selfie alone. Widening it to +10 would cut that to ~3% but sends most
+ * genuine young adults to the ID step for nothing.
+ *
+ * A constant, not a per-request parameter. A buffer that callers can lower is
+ * not a buffer.
+ */
+export const CHALLENGE_BUFFER_YEARS = 7;
 
-/** The age we actually care about. */
+/** The age we actually care about for a parent. */
 export const ADULT_AGE = 18;
+
+/** T for an 18 gate — the ordinary case. */
+export const CHALLENGE_AGE = ADULT_AGE + CHALLENGE_BUFFER_YEARS;
+
+/**
+ * T for whatever gate applies. A sibling has to clear 21, so their selfie has
+ * to read 28 — the buffer moves with the floor rather than staying pinned to
+ * the parent's, which would quietly make the stricter role the easier one.
+ */
+export function challengeAgeFor(minimumAge: number): number {
+  return minimumAge + CHALLENGE_BUFFER_YEARS;
+}
 
 /** Below this the estimate is not evidence, however old the face looks. */
 export const ESTIMATION_CONFIDENCE_FLOOR = 0.5;
@@ -90,25 +112,27 @@ export type EstimationVerdict = {
  * — the model is wrong often enough at the boundary that a refusal would be an
  * accusation we cannot support.
  */
-export function judgeEstimation(estimate: {
-  age: number;
-  confidence: number;
-}): EstimationVerdict {
+export function judgeEstimation(
+  estimate: { age: number; confidence: number },
+  minimumAge: number = ADULT_AGE
+): EstimationVerdict {
+  const challenge = challengeAgeFor(minimumAge);
+
   if (estimate.confidence < ESTIMATION_CONFIDENCE_FLOOR) {
     return {
       cleared: false,
       detail: `Confidence ${(estimate.confidence * 100).toFixed(0)}% is too low to rely on.`,
     };
   }
-  if (estimate.age >= CHALLENGE_AGE) {
+  if (estimate.age >= challenge) {
     return {
       cleared: true,
-      detail: `Estimated ${estimate.age}, clear of the ${CHALLENGE_AGE} challenge age.`,
+      detail: `Estimated ${estimate.age}, clear of the ${challenge} challenge age.`,
     };
   }
   return {
     cleared: false,
-    detail: `Estimated ${estimate.age}, under the ${CHALLENGE_AGE} challenge age — needs another check.`,
+    detail: `Estimated ${estimate.age}, under the ${challenge} challenge age — needs another check.`,
   };
 }
 

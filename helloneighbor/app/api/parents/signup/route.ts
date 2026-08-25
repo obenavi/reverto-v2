@@ -4,7 +4,7 @@ import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { verifyTurnstile } from '@/lib/turnstile';
 import { normalizePhone } from '@/lib/format';
 import { TERMS_VERSION } from '@/lib/guidelines';
-import { PARENT_RELATIONSHIPS } from '@/lib/parentRoles';
+import { PARENT_RELATIONSHIPS, SIBLING_MINIMUM_AGE, canSignGuardianWaiver } from '@/lib/parentRoles';
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RELATIONSHIPS = new Set(PARENT_RELATIONSHIPS.map((r) => r.value));
@@ -50,6 +50,21 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // A sibling is being handed authority over a minor that nobody granted them,
+  // and the person doing the handing is the minor. Declared here and checked
+  // for real against their ID later — this only stops the obvious case.
+  if (!canSignGuardianWaiver(relationship)) {
+    const declaredAge = Number(body.age);
+    if (!Number.isInteger(declaredAge) || declaredAge < SIBLING_MINIMUM_AGE) {
+      return NextResponse.json(
+        {
+          error: `A brother or sister has to be ${SIBLING_MINIMUM_AGE} or over to hold a parent account.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   if (body.accepted_terms !== true) {
     return NextResponse.json(
       { error: 'You need to accept the community guidelines.' },

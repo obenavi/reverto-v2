@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Notice } from '@/components/ui';
-import { CHALLENGE_AGE, type AdultMethod } from '@/lib/adultcheck';
+import { type AdultMethod } from '@/lib/adultcheck';
 
 type Progress = {
   status: 'pending' | 'verified' | 'rejected';
@@ -35,6 +35,8 @@ export default function AdultCheck() {
   const [busy, setBusy] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [consented, setConsented] = useState(false);
+  const [idFile, setIdFile] = useState<File | null>(null);
+  const [idMode, setIdMode] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -131,6 +133,10 @@ export default function AdultCheck() {
     const form = new FormData();
     form.append('image', new File([blob], 'selfie.jpg', { type: 'image/jpeg' }));
     form.append('consent', 'true');
+    // Present only on the ID flow. Its presence is what tells the route which
+    // check to run — the two images have to travel together, because the match
+    // is only worth something when both are from the same moment.
+    if (idFile) form.append('document', idFile);
 
     const res = await fetch('/api/parents/adult-check', { method: 'POST', body: form });
     const body = await res.json().catch(() => ({}));
@@ -141,6 +147,8 @@ export default function AdultCheck() {
       return;
     }
     setProgress(body);
+    setIdFile(null);
+    setIdMode(false);
   }
 
   if (!progress) return null;
@@ -223,8 +231,9 @@ export default function AdultCheck() {
           {!done('estimation') && consented && !capturing && (
             <p className="mt-1 text-[12px] text-ink-faint">
               By opening the camera you agree to the photo being sent to our age-check
-              provider and immediately discarded. It reads about {CHALLENGE_AGE} and over
-              reliably; younger than that just means we ask for something else.
+              provider and immediately discarded. It only reads clearly-older-than
+              reliably, so if it can&apos;t tell, that says nothing about you — we just
+              ask for something else.
             </p>
           )}
 
@@ -256,11 +265,80 @@ export default function AdultCheck() {
           )}
         </li>
 
+        <li className="rounded-btn border border-line px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[13px] font-semibold">{METHOD_LABEL.document}</span>
+            {done('document') ? (
+              <span className="pill bg-success text-white">done</span>
+            ) : idMode || capturing ? null : (
+              <button
+                className="btn-secondary !py-1 text-[13px]"
+                onClick={() => setIdMode(true)}
+                disabled={busy}
+              >
+                Use ID
+              </button>
+            )}
+          </div>
+
+          {!done('document') && !idMode && (
+            <p className="mt-1 text-[12px] text-ink-faint">
+              Settles it on its own — you don&apos;t need the other two. Your ID is read
+              and thrown away; we keep whether you cleared the age, not your date of
+              birth, your ID number or the picture.
+            </p>
+          )}
+
+          {idMode && !done('document') && (
+            <div className="mt-2 space-y-2">
+              <label htmlFor="idfile" className="text-[13px]">
+                Photo of your ID
+              </label>
+              <input
+                id="idfile"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                onChange={(e) => setIdFile(e.target.files?.[0] ?? null)}
+              />
+              <p className="text-[12px] text-ink-faint">
+                Then we&apos;ll take a selfie so we can check the ID is yours. Both are
+                deleted the moment the check comes back.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  className="btn-primary flex-1"
+                  disabled={!idFile || busy}
+                  onClick={startCamera}
+                >
+                  {busy ? 'Checking…' : 'Next: selfie'}
+                </button>
+                <button
+                  className="btn-secondary flex-1"
+                  onClick={() => {
+                    setIdMode(false);
+                    setIdFile(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {tried('document') && !done('document') && !idMode && (
+            <p className="mt-1 text-[12px] text-ink-faint">
+              That didn&apos;t go through. Try again in better light, or email us and a
+              person will sort it out.
+            </p>
+          )}
+        </li>
+
         <li className="rounded-btn border border-line px-3 py-2 opacity-70">
           <span className="text-[13px] font-semibold">{METHOD_LABEL.manual}</span>
           <p className="mt-1 text-[12px] text-ink-faint">
-            If neither works, email us and a person will sort it out. You will not be
-            locked out by a machine.
+            If none of these work, email us and a person will sort it out. You will not
+            be locked out by a machine.
           </p>
         </li>
       </ul>

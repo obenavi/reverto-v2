@@ -5,7 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Notice, PageHeader, Shell } from '@/components/ui';
 import Turnstile from '@/components/Turnstile';
-import { PARENT_RELATIONSHIPS, canSignGuardianWaiver } from '@/lib/parentRoles';
+import {
+  PARENT_RELATIONSHIPS,
+  SIBLING_MINIMUM_AGE,
+  canSignGuardianWaiver,
+} from '@/lib/parentRoles';
 import { GUARDIAN_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
 
 export default function ParentSignupPage() {
@@ -35,6 +39,7 @@ export default function ParentSignupPage() {
         email: form.get('email'),
         phone: form.get('phone'),
         relationship: form.get('relationship'),
+        age: form.get('age') ? Number(form.get('age')) : null,
         accepted_terms: ticked.every(Boolean),
         confirms_adult: confirmsAdult,
         turnstile_token: turnstileToken,
@@ -121,6 +126,18 @@ export default function ParentSignupPage() {
             ))}
           </select>
         </div>
+
+        {!canSignGuardianWaiver(relationship) && (
+          <div>
+            <label htmlFor="age">Your age</label>
+            <input id="age" name="age" type="number" min={SIBLING_MINIMUM_AGE} max={120} required />
+            <p className="mt-1 text-[12px] text-ink-faint">
+              A brother or sister has to be {SIBLING_MINIMUM_AGE} or over to hold this
+              account. A parent is already their guardian; you are being handed authority
+              nobody granted you, so the bar is higher. We check it against your ID.
+            </p>
+          </div>
+        )}
 
         <fieldset className="rounded-card border border-line p-3">
           <legend className="px-1 text-[13px] font-semibold">Proof of age</legend>
