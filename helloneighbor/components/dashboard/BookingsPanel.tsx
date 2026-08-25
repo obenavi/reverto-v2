@@ -5,6 +5,7 @@ import { formatPrice, formatPhone, formatSlot } from '@/lib/format';
 import { paymentLabel } from '@/lib/catalog';
 import type { BookingRow } from '@/lib/types';
 import { useMutate } from './useMutate';
+import CustomerCard, { ReviewCustomer } from './CustomerCard';
 
 export default function BookingsPanel({ bookings }: { bookings: BookingRow[] }) {
   const { mutate, busy, error } = useMutate();
@@ -68,6 +69,12 @@ export default function BookingsPanel({ bookings }: { bookings: BookingRow[] }) 
               <p className="pt-1 text-ink-muted">&ldquo;{booking.notes}&rdquo;</p>
             )}
           </dl>
+
+          <CustomerCard bookingId={booking.id} />
+
+          {booking.status === 'completed' && (
+            <ReviewCustomer bookingId={booking.id} name={booking.client_name} />
+          )}
 
           {booking.status === 'confirmed' && (
             <div className="mt-3 flex gap-2">
