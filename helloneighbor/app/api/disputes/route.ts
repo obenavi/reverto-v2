@@ -4,6 +4,7 @@ import { currentOperatorId } from '@/lib/session';
 import { readConversationToken } from '@/lib/conversations';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { sendSms } from '@/lib/sms';
+import { categoryLabel } from '@/lib/enforcement';
 
 /**
  * POST /api/disputes — either party raises a dispute on a booking.
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null);
   const reason = String(body?.reason ?? '').trim();
+  const category = String(body?.category ?? 'other');
+  const desiredOutcome = String(body?.desired_outcome ?? 'other');
 
   if (reason.length < 10) {
     return NextResponse.json(
@@ -79,13 +82,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'That booking was cancelled.' }, { status: 409 });
   }
 
-  const { error } = await db.from('disputes').insert({
-    booking_id: bookingId,
-    opened_by: openedBy,
-    opened_by_subscriber_id: openedBySubscriberId,
-    opened_by_phone: openedByPhone,
-    reason: reason.slice(0, 2000),
-  });
+  const OUTCOMES = new Set(['refund', 'payment', 'apology', 'account_action', 'other']);
+
+  // The category drives the escalation ladder, so it is prefixed onto the
+  // reason rather than trusted as a bare enum from the client — a reviewer
+  // reads the words, and severityOf() decides what the words are worth.
+  const { data: created, error } = await db
+    .from('disputes')
+    .insert({
+      booking_id: bookingId,
+      opened_by: openedBy,
+      opened_by_subscriber_id: openedBySubscriberId,
+      opened_by_phone: openedByPhone,
+      reason: `${categoryLabel(category)}: ${reason}`.slice(0, 2000),
+      desired_outcome: OUTCOMES.has(desiredOutcome) ? desiredOutcome : 'other',
+    })
+    .select('id')
+    .single();
 
   if (error) {
     if (error.code === '23505') {
@@ -114,5 +127,5 @@ export async function POST(request: Request) {
       : Promise.resolve(),
   ]);
 
-  return NextResponse.json({ ok: true }, { status: 201 });
+  return NextResponse.json({ ok: true, disputeId: created.id, side: openedBy }, { status: 201 });
 }

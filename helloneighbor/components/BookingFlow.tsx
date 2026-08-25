@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EmptyState, Notice } from '@/components/ui';
-import { CLIENT_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
+import { CUSTOMER_WAIVER, LIABILITY_VERSION } from '@/lib/liability';
 import { PAYMENT_METHODS, serviceKind } from '@/lib/catalog';
 import { formatPrice, formatSlot } from '@/lib/format';
 import { withinCurfew } from '@/lib/curfew';
@@ -53,7 +53,12 @@ export default function BookingFlow({
   const [notes, setNotes] = useState('');
   const [method, setMethod] = useState<PaymentMethod>(operator.payment_methods[0] ?? 'cash');
 
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // Each line is ticked on its own rather than merged into one sentence. Four
+  // taps is friction, and here the friction is the point: a tick against a
+  // sentence someone read is worth something, and a tick against a paragraph
+  // they scrolled past is worth nothing at all.
+  const [waiver, setWaiver] = useState<boolean[]>(() => CUSTOMER_WAIVER.map(() => false));
+  const acceptedTerms = waiver.every(Boolean);
   const [noteConfirmed, setNoteConfirmed] = useState(false);
 
   const [busy, setBusy] = useState(false);
@@ -444,21 +449,41 @@ export default function BookingFlow({
                 <legend className="mb-2 block text-[13px] font-semibold">
                   Before you book
                 </legend>
-                <label className="flex cursor-pointer items-start gap-2 text-[13px]">
-                  <input
-                    type="checkbox"
-                    className="!mt-0.5 !w-auto"
-                    checked={acceptedTerms}
-                    onChange={(e) => setAcceptedTerms(e.target.checked)}
-                  />
-                  <span className="text-ink-muted">
-                    {CLIENT_ACKNOWLEDGEMENTS.join(' ')}{' '}
-                    <Link href="/guidelines" target="_blank" className="font-semibold text-brand">
-                      Read the community guidelines
-                    </Link>
-                    .
-                  </span>
-                </label>
+                <p className="mb-3 text-[13px] text-ink-muted">
+                  Please tick each of these —{' '}
+                  <Link href="/terms" target="_blank" className="font-semibold text-brand">
+                    the full terms are here
+                  </Link>
+                  , and the{' '}
+                  <Link href="/guidelines" target="_blank" className="font-semibold text-brand">
+                    community guidelines here
+                  </Link>
+                  .
+                </p>
+                <div className="space-y-2">
+                  {CUSTOMER_WAIVER.map((text, i) => (
+                    <label
+                      key={i}
+                      className="flex cursor-pointer items-start gap-2 text-[13px]"
+                    >
+                      <input
+                        type="checkbox"
+                        className="!mt-0.5 !w-auto"
+                        checked={waiver[i]}
+                        onChange={(e) => {
+                          const next = [...waiver];
+                          next[i] = e.target.checked;
+                          setWaiver(next);
+                        }}
+                      />
+                      <span className="text-ink-muted">{text}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-3 text-[12px] text-ink-faint">
+                  Terms version {LIABILITY_VERSION}. We record which version you accepted
+                  and when, so a dispute is judged against the words you actually saw.
+                </p>
               </fieldset>
 
               <div className="flex gap-2">

@@ -4,6 +4,7 @@ import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { verifyTurnstile } from '@/lib/turnstile';
 import { normalizePhone } from '@/lib/format';
 import { TERMS_VERSION } from '@/lib/guidelines';
+import { LIABILITY_VERSION } from '@/lib/liability';
 import { PARENT_RELATIONSHIPS, SIBLING_MINIMUM_AGE, canSignGuardianWaiver } from '@/lib/parentRoles';
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -90,6 +91,9 @@ export async function POST(request: Request) {
       relationship,
       accepted_terms_at: new Date().toISOString(),
       accepted_terms_version: TERMS_VERSION,
+      liability_accepted_at: new Date().toISOString(),
+      liability_accepted_version: LIABILITY_VERSION,
+      liability_accepted_ip: ip,
       // Self-declaration is not proof. Awaiting review either way.
       age_proof_status: 'pending',
     })

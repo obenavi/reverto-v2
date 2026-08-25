@@ -5,6 +5,8 @@ import type { ServiceKind } from '@/lib/types';
 import { SERVICE_KINDS, serviceKind } from '@/lib/catalog';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '@/lib/curfew';
 import { TERMS_VERSION } from '@/lib/guidelines';
+import { LIABILITY_VERSION } from '@/lib/liability';
+import { phoneIsBanned } from '@/lib/bans';
 import { reviewContent } from '@/lib/supervisor';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { verifyTurnstile } from '@/lib/turnstile';
@@ -103,6 +105,12 @@ export async function POST(request: Request) {
     ? body.interests.filter((k: unknown): k is ServiceKind => typeof k === 'string' && known.has(k as ServiceKind))
     : [];
 
+  // A ban that lets someone sign up again the next day is not a ban.
+  const banned = await phoneIsBanned(phone);
+  if (banned.blocked) {
+    return NextResponse.json({ error: banned.message }, { status: 403 });
+  }
+
   const db = supabaseAdmin();
 
   const { data: subscriber, error } = await db
@@ -116,6 +124,11 @@ export async function POST(request: Request) {
       status: 'pending',
       accepted_terms_at: new Date().toISOString(),
       accepted_terms_version: TERMS_VERSION,
+      // Stamped separately from the guidelines: this is the part meant to have
+      // legal effect, and a dispute is judged against the words this person saw.
+      liability_accepted_at: new Date().toISOString(),
+      liability_accepted_version: LIABILITY_VERSION,
+      liability_accepted_ip: ip,
       email,
       guardian_name: needsConsent ? guardianName : null,
       guardian_phone: needsConsent ? guardianPhone : null,

@@ -7,6 +7,8 @@ import { ALL_PAYMENT_METHODS, PAYMENT_METHODS } from '@/lib/catalog';
 import { openConversationForBooking } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
 import { TERMS_VERSION } from '@/lib/guidelines';
+import { LIABILITY_VERSION } from '@/lib/liability';
+import { phoneIsBanned } from '@/lib/bans';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { currentOperatorId } from '@/lib/session';
 import { isBlocked } from '@/lib/blocks';
@@ -88,6 +90,12 @@ export async function POST(request: Request) {
   const bookingAsSubscriberId = currentOperatorId();
   if (bookingAsSubscriberId === operatorId) {
     return NextResponse.json({ error: 'You cannot book yourself.' }, { status: 400 });
+  }
+
+  // A ban that lets someone book again on Tuesday is not a ban.
+  const banned = await phoneIsBanned(clientPhone);
+  if (banned.blocked) {
+    return NextResponse.json({ error: banned.message }, { status: 403 });
   }
 
   if (await isBlocked(operatorId, clientPhone)) {
@@ -220,6 +228,9 @@ export async function POST(request: Request) {
       client_subscriber_id: bookingAsSubscriberId,
       accepted_terms_at: new Date().toISOString(),
       accepted_terms_version: TERMS_VERSION,
+      liability_accepted_at: new Date().toISOString(),
+      liability_accepted_version: LIABILITY_VERSION,
+      liability_accepted_ip: ip,
     })
     .select('*')
     .single();

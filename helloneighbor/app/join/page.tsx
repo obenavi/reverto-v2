@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { SERVICE_KINDS } from '@/lib/catalog';
 import { OPERATOR_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
+import { PROVIDER_WAIVER, LIABILITY_VERSION } from '@/lib/liability';
 import { Notice, PageHeader, Shell } from '@/components/ui';
 import Turnstile from '@/components/Turnstile';
 
@@ -16,7 +17,11 @@ export default function JoinPage() {
     OPERATOR_ACKNOWLEDGEMENTS.map(() => false)
   );
 
-  const allAccepted = accepted.every(Boolean);
+  const [waiver, setWaiver] = useState<boolean[]>(() => PROVIDER_WAIVER.map(() => false));
+
+  // Two separate documents, so both have to be ticked through before the form
+  // will submit.
+  const allAccepted = accepted.every(Boolean) && waiver.every(Boolean);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [age, setAge] = useState('');
 
@@ -285,6 +290,38 @@ export default function JoinPage() {
           </div>
         </fieldset>
 
+        <fieldset className="rounded-card border border-line p-3">
+          <legend className="px-1 text-[13px] font-semibold">Terms and liability</legend>
+          <p className="mb-3 text-[13px] text-ink-muted">
+            Separate from the guidelines above — this is who is responsible for what.{' '}
+            <Link href="/terms" target="_blank" className="font-semibold text-brand">
+              Read the full terms
+            </Link>
+            .
+          </p>
+          <div className="space-y-2">
+            {PROVIDER_WAIVER.map((text, i) => (
+              <label key={i} className="flex cursor-pointer items-start gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  className="!mt-0.5 !w-auto"
+                  checked={waiver[i]}
+                  onChange={(e) => {
+                    const next = [...waiver];
+                    next[i] = e.target.checked;
+                    setWaiver(next);
+                  }}
+                />
+                <span className="text-ink-muted">{text}</span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-3 text-[12px] text-ink-faint">
+            Terms version {LIABILITY_VERSION}. We record which version you accepted and
+            when.
+          </p>
+        </fieldset>
+
         <Turnstile onToken={setTurnstileToken} />
 
         {error && <Notice tone="error">{error}</Notice>}
@@ -298,7 +335,7 @@ export default function JoinPage() {
         </button>
         {!allAccepted && (
           <p className="text-center text-[12px] text-ink-faint">
-            Tick all four to submit.
+            Tick every box in both sections to submit.
           </p>
         )}
       </form>

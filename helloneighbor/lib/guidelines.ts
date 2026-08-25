@@ -90,10 +90,10 @@ export const OPERATOR_ACKNOWLEDGEMENTS = [
   'If I am under 16, my parent or guardian will be emailed to approve this account before it goes live. If I am under 18, they will know about my bookings.',
 ];
 
-export const CLIENT_ACKNOWLEDGEMENTS = [
-  'I understand HelloNeighbor is not responsible for any harm, injury, or damage to people or property arising from this booking.',
-  'I will keep all communication with this provider inside the app, and I understand a dispute about off-app arrangements cannot be reviewed.',
-];
+// The customer's ticks moved to lib/liability.ts (CUSTOMER_WAIVER) when the
+// terms became a signed document with its own version stamp. Kept out of this
+// file deliberately: two lists of customer acknowledgements is an invitation to
+// wire up the weaker one by mistake.
 
 /**
  * What a parent or guardian confirms before an under-18 account can be
