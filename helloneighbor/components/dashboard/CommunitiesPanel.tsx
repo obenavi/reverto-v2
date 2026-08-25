@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { EmptyState, Notice } from '@/components/ui';
-import { MEMBER_ROLES, looksLikeStreetAddress } from '@/lib/communities';
+import {
+  COMMUNITY_OWNER_MIN_AGE,
+  JOIN_POLICIES,
+  MEMBER_ROLES,
+  OWNER_ACTIVITY_DAYS,
+  looksLikeStreetAddress,
+  ownerIsActive,
+} from '@/lib/communities';
 import { useMutate } from './useMutate';
 
 type Owned = {
@@ -15,6 +22,21 @@ type Owned = {
   successor_subscriber_id: string | null;
   successor_declined_at: string | null;
   ownership_source: string;
+  zip_code: string | null;
+  join_policy: string;
+  owner_last_active_at: string | null;
+};
+
+type Nearby = { id: string; name: string; area: string; memberCount: number };
+
+type GroupBooking = {
+  id: string;
+  status: string;
+  provider: string;
+  providerAge: number | null;
+  customer: string;
+  service: string;
+  startsAt: string | null;
 };
 
 type Nomination = {
@@ -48,10 +70,12 @@ type Membership = {
  */
 export default function CommunitiesPanel({
   communityOnly,
-  isAdult,
+  age,
+  zip,
 }: {
   communityOnly: boolean;
-  isAdult: boolean;
+  age: number;
+  zip: string | null;
 }) {
   const { mutate, busy, error } = useMutate();
   const [owned, setOwned] = useState<Owned[]>([]);
@@ -68,6 +92,14 @@ export default function CommunitiesPanel({
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [area, setArea] = useState('');
+  const [zipCode, setZipCode] = useState(zip ?? '');
+  const [joinPolicy, setJoinPolicy] = useState<string>('both');
+
+  const [nearby, setNearby] = useState<Nearby[] | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
+
+  const [bookingsFor, setBookingsFor] = useState<string | null>(null);
+  const [groupBookings, setGroupBookings] = useState<GroupBooking[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -110,13 +142,43 @@ export default function CommunitiesPanel({
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
-    const ok = await mutate('/api/communities', { method: 'POST', body: { name, area } });
+    const ok = await mutate('/api/communities', {
+      method: 'POST',
+      body: { name, area, zip_code: zipCode, join_policy: joinPolicy },
+    });
     if (ok) {
       setName('');
       setArea('');
       setCreating(false);
       load();
     }
+  }
+
+  async function findNearby() {
+    setLookingUp(true);
+    setNearby(null);
+    const res = await fetch(`/api/communities/nearby?zip=${encodeURIComponent(zip ?? '')}`);
+    setLookingUp(false);
+    if (res.ok) setNearby((await res.json()).groups ?? []);
+  }
+
+  async function requestJoin(communityId: string) {
+    const ok = await mutate('/api/communities/join', {
+      method: 'POST',
+      body: { community_id: communityId, role: joinRole },
+    });
+    if (ok) {
+      setJoined('Asked to join. Whoever runs the group will let you in.');
+      setNearby(null);
+      load();
+    }
+  }
+
+  async function openBookings(communityId: string) {
+    setBookingsFor(communityId);
+    setGroupBookings([]);
+    const res = await fetch(`/api/communities/bookings?community_id=${communityId}`);
+    if (res.ok) setGroupBookings((await res.json()).bookings ?? []);
   }
 
   async function openPicker(communityId: string) {
@@ -230,6 +292,57 @@ export default function CommunitiesPanel({
             {busy ? 'Joining…' : 'Join'}
           </button>
         </form>
+
+        <div className="mt-3 border-t border-gray-100 pt-3">
+          <p className="text-[13px] font-semibold">No code?</p>
+          {zip ? (
+            <>
+              <p className="mt-1 text-[13px] text-ink-muted">
+                Groups in {zip} will show up here. You ask, and whoever runs it lets you
+                in — a zip alone is never enough to get you into one.
+              </p>
+              <button
+                className="btn-secondary mt-2 w-full"
+                onClick={findNearby}
+                disabled={lookingUp}
+              >
+                {lookingUp ? 'Looking…' : 'Find groups near me'}
+              </button>
+            </>
+          ) : (
+            <p className="mt-1 text-[13px] text-ink-muted">
+              Add your zip code under Profile first — we match you to your own
+              neighborhood with it.
+            </p>
+          )}
+
+          {nearby?.length === 0 && (
+            <p className="mt-2 text-[13px] text-ink-faint">
+              Nothing in {zip} yet. If you know a neighbor with a group, ask them for the
+              code.
+            </p>
+          )}
+
+          {nearby && nearby.length > 0 && (
+            <ul className="mt-2 space-y-2">
+              {nearby.map((g) => (
+                <li key={g.id} className="rounded-btn border border-line px-3 py-2">
+                  <p className="text-[13px] font-semibold">{g.name}</p>
+                  <p className="text-[12px] text-ink-muted">
+                    {g.area} · {g.memberCount} {g.memberCount === 1 ? 'person' : 'people'}
+                  </p>
+                  <button
+                    className="btn-secondary mt-2 w-full !py-1 text-[13px]"
+                    onClick={() => requestJoin(g.id)}
+                    disabled={busy}
+                  >
+                    Ask to join
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
 
       <h3 className="text-[13px] font-bold uppercase tracking-wide text-ink-faint">
@@ -281,6 +394,61 @@ export default function CommunitiesPanel({
                 <p className="mt-2 text-[12px] text-ink-faint">
                   Only give this to people you actually know. Whoever has it can join.
                 </p>
+
+                {!ownerIsActive(c.owner_last_active_at) && (
+                  <div className="mt-2">
+                    <Notice tone="warn">
+                      You haven&apos;t looked at this group in over {OWNER_ACTIVITY_DAYS}{' '}
+                      days, so it has stopped letting people in on the code — requests are
+                      waiting for you instead. Opening this page starts the clock again.
+                    </Notice>
+                  </div>
+                )}
+
+                <button
+                  className="btn-secondary mt-2 w-full"
+                  onClick={() => openBookings(c.id)}
+                >
+                  {bookingsFor === c.id ? 'Bookings in this group' : 'See bookings in this group'}
+                </button>
+
+                {bookingsFor === c.id && (
+                  <div className="mt-2">
+                    {groupBookings.length === 0 ? (
+                      <p className="text-[13px] text-ink-faint">
+                        Nothing booked inside this group yet.
+                      </p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {groupBookings.map((b) => (
+                          <li key={b.id} className="text-[13px] text-ink-muted">
+                            <span className="font-semibold text-ink">{b.provider}</span>
+                            {b.providerAge != null && b.providerAge < 18 && (
+                              <span className="text-ink-faint"> ({b.providerAge})</span>
+                            )}{' '}
+                            → {b.customer} · {b.service}
+                            {b.startsAt && (
+                              <span className="text-ink-faint">
+                                {' '}
+                                ·{' '}
+                                {new Date(b.startsAt).toLocaleDateString(undefined, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {/* First names only, deliberately. An owner needs to see that
+                        Sam is mowing for the Patels, not their phone numbers. */}
+                    <p className="mt-2 text-[12px] text-ink-faint">
+                      First names only. You see what is happening on your street, not
+                      anyone&apos;s contact details.
+                    </p>
+                  </div>
+                )}
 
                 <div className="mt-3 border-t border-gray-100 pt-3">
                   <p className="text-[13px] font-semibold">If you can&apos;t run it</p>
@@ -356,7 +524,7 @@ export default function CommunitiesPanel({
         </>
       )}
 
-      {isAdult ? (
+      {age >= COMMUNITY_OWNER_MIN_AGE ? (
         creating ? (
           <form onSubmit={create} className="card space-y-3">
             <p className="font-bold">Start a group</p>
@@ -387,6 +555,39 @@ export default function CommunitiesPanel({
                 </p>
               )}
             </div>
+            <div>
+              <label htmlFor="czip">Zip code</label>
+              <input
+                id="czip"
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+                placeholder="02139"
+                inputMode="numeric"
+                required
+              />
+              <p className="mt-1 text-[12px] text-ink-faint">
+                Only people who live in this zip can join. It is a filter, not a password
+                — a zip covers thousands of homes, so it keeps the next town out and
+                nothing more.
+              </p>
+            </div>
+            <div>
+              <label htmlFor="cpolicy">How people get in</label>
+              <select
+                id="cpolicy"
+                value={joinPolicy}
+                onChange={(e) => setJoinPolicy(e.target.value)}
+              >
+                {JOIN_POLICIES.map((jp) => (
+                  <option key={jp.value} value={jp.value}>
+                    {jp.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[12px] text-ink-faint">
+                {JOIN_POLICIES.find((jp) => jp.value === joinPolicy)?.hint}
+              </p>
+            </div>
             <div className="flex gap-2">
               <button className="btn-primary flex-1" disabled={busy}>
                 {busy ? 'Creating…' : 'Create'}
@@ -407,8 +608,9 @@ export default function CommunitiesPanel({
         )
       ) : (
         <p className="text-[13px] text-ink-faint">
-          Running a group means deciding who gets in, so an adult has to own it. Ask a
-          parent to start one — you can be the first member.
+          Running a group means seeing every booking in it and deciding who gets in, so
+          you have to be {COMMUNITY_OWNER_MIN_AGE} or over. Ask a parent to start one —
+          you can be the first member.
         </p>
       )}
     </div>

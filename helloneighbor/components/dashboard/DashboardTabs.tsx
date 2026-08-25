@@ -170,7 +170,8 @@ export default function DashboardTabs(props: {
         {tab === 'communities' && (
           <CommunitiesPanel
             communityOnly={Boolean(operator.community_only)}
-            isAdult={operator.age >= 18}
+            age={operator.age}
+            zip={operator.zip_code ?? null}
           />
         )}
         {tab === 'pings' && <PingsPanel pings={pings} />}

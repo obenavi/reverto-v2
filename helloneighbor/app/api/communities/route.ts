@@ -3,15 +3,19 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { currentOperatorId, currentParentId } from '@/lib/session';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { isVerifiedAdult } from '@/lib/adultverify';
-import { MINOR_BADGE_LIMIT } from '@/lib/ages';
+
 import {
   MAX_COMMUNITY_AREA,
   MAX_COMMUNITY_DESCRIPTION,
   MAX_COMMUNITY_NAME,
   MAX_OWNED_COMMUNITIES,
+  COMMUNITY_OWNER_MIN_AGE,
   looksLikeStreetAddress,
+  normalizeZip,
 } from '@/lib/communities';
 import { ensureInviteCode, membershipsForSubscriber } from '@/lib/communityDb';
+
+const JOIN_SET = new Set(['code', 'request', 'both']);
 
 /** GET /api/communities — the groups I am in, and the ones I own. */
 export async function GET() {
@@ -25,9 +29,20 @@ export async function GET() {
 
   const owned = await db
     .from('communities')
-    .select('id, name, area, description, invite_code, invites_open, approval_required, created_at, successor_subscriber_id, successor_declined_at, ownership_source')
+    .select('id, name, area, zip_code, description, invite_code, invites_open, join_policy, approval_required, created_at, successor_subscriber_id, successor_declined_at, ownership_source, owner_last_active_at')
     .is('archived_at', null)
     .eq(operatorId ? 'owner_subscriber_id' : 'owner_parent_id', operatorId ?? parentId!);
+
+  // Opening this screen IS the activity. Recorded here rather than on a
+  // heartbeat, because "did the person running this group look at it" is the
+  // question, and a background ping would answer a different one.
+  if (owned.data?.length) {
+    await db
+      .from('communities')
+      .update({ owner_last_active_at: new Date().toISOString(), owner_inactive_since: null })
+      .eq(operatorId ? 'owner_subscriber_id' : 'owner_parent_id', operatorId ?? parentId!)
+      .is('archived_at', null);
+  }
 
   const memberships = operatorId ? await membershipsForSubscriber(operatorId) : [];
 
@@ -75,6 +90,14 @@ export async function POST(request: Request) {
   if (!area) {
     return NextResponse.json({ error: 'Roughly where is it?' }, { status: 400 });
   }
+
+  const zip = normalizeZip(String(body?.zip_code ?? ''));
+  if (!zip) {
+    return NextResponse.json(
+      { error: 'We need the zip code — it is what keeps people from other towns out.' },
+      { status: 400 }
+    );
+  }
   // The page is semi-public. A house number on it is a map to a child.
   if (looksLikeStreetAddress(area)) {
     return NextResponse.json(
@@ -105,11 +128,10 @@ export async function POST(request: Request) {
     if (!owner || owner.status !== 'active') {
       return NextResponse.json({ error: 'Your account is not active.' }, { status: 403 });
     }
-    if (owner.age < MINOR_BADGE_LIMIT) {
+    if (owner.age < COMMUNITY_OWNER_MIN_AGE) {
       return NextResponse.json(
         {
-          error:
-            'Running a group means deciding who gets in, so an adult has to own it. Ask a parent to start one — you can be the first member.',
+          error: `Running a group means seeing every booking in it and deciding who gets in, so you have to be ${COMMUNITY_OWNER_MIN_AGE} or over. Ask a parent to start one — you can be the first member.`,
         },
         { status: 403 }
       );
@@ -141,7 +163,11 @@ export async function POST(request: Request) {
       owner_subscriber_id: operatorId,
       owner_parent_id: operatorId ? null : parentId,
       invite_code: code,
+      zip_code: zip,
+      join_policy: JOIN_SET.has(String(body?.join_policy)) ? String(body.join_policy) : 'both',
       approval_required: body?.approval_required === true,
+      // The clock starts now: they have just looked at it.
+      owner_last_active_at: new Date().toISOString(),
     })
     .select('id, name, area, invite_code')
     .single();
@@ -159,6 +185,8 @@ export async function POST(request: Request) {
       subscriber_id: operatorId,
       role: 'both',
       status: 'active',
+      joined_via: 'founder',
+      zip_matched: true,
       invited_by_subscriber_id: operatorId,
     });
   }

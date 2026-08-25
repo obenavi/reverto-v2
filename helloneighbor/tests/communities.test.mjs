@@ -17,6 +17,8 @@ const m = await import('data:text/javascript;base64,' + Buffer.from(js).toString
 const {
   normalizeInviteCode, looksLikeStreetAddress, canProvide, canBook,
   bookingAllowed, MEMBER_ROLES, MAX_OWNED_COMMUNITIES,
+  normalizeZip, zipMatches, decideJoin, ownerIsActive,
+  COMMUNITY_OWNER_MIN_AGE, OWNER_ACTIVITY_DAYS,
 } = m;
 
 let failures = 0;
@@ -91,6 +93,68 @@ check('off, none shared reports null', allow(false, ['a'], ['b']).sharedCommunit
 console.log('\n— limits —');
 check('nobody owns more than a few groups', MAX_OWNED_COMMUNITIES, 3);
 check('the default role is both', MEMBER_ROLES[0].value, 'both');
+
+console.log('\n— postal codes —');
+check('a plain zip normalizes', normalizeZip('02139'), '02139');
+check('zip+4 collapses to the zip', normalizeZip('02139-1234'), '02139');
+check('unhyphenated zip+4 too', normalizeZip('021391234'), '02139');
+check('whitespace is ignored', normalizeZip('  02139 '), '02139');
+check('a Canadian code keeps its area', normalizeZip('M5V 3L9'), 'M5V');
+check('lowercase Canadian works', normalizeZip('m5v3l9'), 'M5V');
+check('nonsense is rejected', normalizeZip('banana'), null);
+check('a four-digit number is rejected', normalizeZip('0213'), null);
+check('empty is rejected', normalizeZip(''), null);
+
+check('the same zip matches', zipMatches('02139', '02139-9999'), true);
+check('a different zip does not', zipMatches('02139', '02138'), false);
+// The important one: a blank zip must never sail through. Failing open would
+// make the filter decorative for anyone who left the field empty.
+check('a missing zip never matches', zipMatches(null, '02139'), false);
+check('two missing zips never match', zipMatches(null, null), false);
+check('an unparseable zip never matches', zipMatches('banana', 'banana'), false);
+
+console.log('\n— who gets in —');
+const join = (over = {}) => decideJoin({
+  policy: 'both', hasValidCode: false,
+  memberZip: '02139', communityZip: '02139', ownerActive: true, ...over,
+});
+
+check('right area, valid code: straight in', join({ hasValidCode: true }).admitted, true);
+check('and it records the code as the route', join({ hasValidCode: true }).via, 'code');
+check('right area, no code: a request', join().status, 'pending');
+check('which is not an admission', join().admitted, false);
+
+// The zip gate applies to a valid code too — a forwarded code that escaped the
+// street must not let somebody three towns over walk in.
+check('wrong area with a valid code: refused', join({ hasValidCode: true, memberZip: '90210' }).admitted, false);
+check('and the reason is the area', join({ hasValidCode: true, memberZip: '90210' }).reason, 'wrong_area');
+check('wrong area, no code: refused', join({ memberZip: '90210' }).reason, 'wrong_area');
+
+console.log('\n— what the owner set —');
+check('code-only refuses a request', join({ policy: 'code' }).reason, 'code_required');
+check('code-only still admits a code', join({ policy: 'code', hasValidCode: true }).admitted, true);
+check('requests-only ignores the code', join({ policy: 'request', hasValidCode: true }).admitted, false);
+check('and queues them instead', join({ policy: 'request', hasValidCode: true }).status, 'pending');
+
+console.log('\n— an absent owner —');
+// Nobody watching means nobody let in unwatched. Fails toward the queue.
+check('a code does not auto-admit while the owner is away',
+  join({ hasValidCode: true, ownerActive: false }).admitted, false);
+check('it becomes a request instead',
+  join({ hasValidCode: true, ownerActive: false }).status, 'pending');
+
+const now = new Date('2026-09-10T12:00:00Z');
+check('active yesterday counts', ownerIsActive('2026-09-09T12:00:00Z', now), true);
+check('exactly a week ago still counts', ownerIsActive('2026-09-03T12:00:00Z', now), true);
+check('eight days ago does not', ownerIsActive('2026-09-02T12:00:00Z', now), false);
+check('never active does not', ownerIsActive(null, now), false);
+check('the window is a week', OWNER_ACTIVITY_DAYS, 7);
+
+console.log('\n— running a group —');
+// Higher than the 18 needed to hold a parent account: an owner sees every
+// booking in the group and decides who is near the children in it.
+check('owners must be 21', COMMUNITY_OWNER_MIN_AGE, 21);
+check('which is stricter than adulthood', COMMUNITY_OWNER_MIN_AGE > 18, true);
 
 console.log('\n— succession —');
 // The rules the routes enforce, restated here so a change to either is caught.

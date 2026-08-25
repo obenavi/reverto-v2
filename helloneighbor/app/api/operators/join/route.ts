@@ -7,6 +7,7 @@ import { DEFAULT_TIMEZONE, isValidTimezone } from '@/lib/curfew';
 import { TERMS_VERSION } from '@/lib/guidelines';
 import { LIABILITY_VERSION } from '@/lib/liability';
 import { phoneIsBanned } from '@/lib/bans';
+import { normalizeZip } from '@/lib/communities';
 import { reviewContent } from '@/lib/supervisor';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { verifyTurnstile } from '@/lib/turnstile';
@@ -138,6 +139,8 @@ export async function POST(request: Request) {
       // anything it sends that this runtime doesn't recognise falls back rather
       // than throwing later, at booking time.
       timezone: isValidTimezone(body.timezone) ? body.timezone : DEFAULT_TIMEZONE,
+      // Used to check a neighborhood group against where they actually live.
+      zip_code: normalizeZip(String(body.zip_code ?? '')),
     })
     .select('id')
     .single();

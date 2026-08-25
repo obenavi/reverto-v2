@@ -20,6 +20,7 @@
  * worse than one whose new owner had not expected it that morning.
  */
 import { supabaseAdmin } from './supabase';
+import { COMMUNITY_OWNER_MIN_AGE } from './communities';
 
 export type SuccessionOutcome =
   | { transferred: true; communityId: string; to: 'subscriber' | 'parent' }
@@ -166,10 +167,13 @@ export async function successorEligible(args: {
   if (!person || person.status !== 'active') {
     return { ok: false, error: 'That account is not active.' };
   }
-  if (person.age < 18) {
+  // They are being lined up to own it, so they clear the owner bar, not the
+  // adult one. Letting a 19-year-old inherit what a 19-year-old could not have
+  // started would make succession the way round the rule.
+  if (person.age < COMMUNITY_OWNER_MIN_AGE) {
     return {
       ok: false,
-      error: 'Running a group means deciding who gets in, so the person taking over has to be an adult.',
+      error: `Whoever takes over runs the group, so they have to be ${COMMUNITY_OWNER_MIN_AGE} or over.`,
     };
   }
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireOperator } from '@/lib/guards';
 import { PAYMENT_METHODS } from '@/lib/catalog';
+import { normalizeZip } from '@/lib/communities';
 import type { PaymentMethod } from '@/lib/types';
 
 const METHODS = new Set(PAYMENT_METHODS.map((m) => m.value));
@@ -26,6 +27,13 @@ export async function PATCH(request: Request) {
   }
   if (typeof body.community_only === 'boolean') {
     subscriberPatch.community_only = body.community_only;
+  }
+  if (typeof body.zip_code === 'string') {
+    const zip = normalizeZip(body.zip_code);
+    if (body.zip_code.trim() && !zip) {
+      return NextResponse.json({ error: 'That zip code does not look right.' }, { status: 400 });
+    }
+    subscriberPatch.zip_code = zip;
   }
 
   if (Array.isArray(body.payment_methods)) {

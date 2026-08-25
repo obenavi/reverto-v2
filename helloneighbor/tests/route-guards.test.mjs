@@ -40,6 +40,8 @@ const PUBLIC_HANDLERS = {
   'app/api/auth/parent/verify-code/route.ts POST': 'exchanging a code for a parent session',
   'app/api/stripe/webhook/route.ts POST':
     'authorized by the Stripe signature, which is verified before the client is built',
+  'app/api/communities/nearby/route.ts GET':
+    'a neighbor with no account looks up their own zip to find a group to ask to join; rate-limited, and returns only a name, a rough area and a head count — never members, bookings or the invite code',
   'app/api/communities/join/route.ts POST':
     'the invite code IS the credential — a neighbor with no account joins with it; the code is rate-limited and answers identically for an unknown code and a closed group',
   'app/api/push/route.ts DELETE':

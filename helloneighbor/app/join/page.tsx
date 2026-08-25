@@ -49,6 +49,7 @@ export default function JoinPage() {
         name: form.get('name'),
         phone: form.get('phone'),
         area: form.get('area'),
+        zip_code: form.get('zip_code'),
         age: Number(form.get('age')),
         email: form.get('email'),
         guardian_name: form.get('guardian_name'),
@@ -129,6 +130,14 @@ export default function JoinPage() {
         <div>
           <label htmlFor="area">Neighborhood</label>
           <input id="area" name="area" required placeholder="Hidden Hills, CA" />
+        </div>
+
+        <div>
+          <label htmlFor="zip_code">Zip code</label>
+          <input id="zip_code" name="zip_code" required placeholder="02139" inputMode="numeric" />
+          <p className="mt-1 text-[12px] text-ink-faint">
+            Used to match you to your own neighborhood group. Never shown to customers.
+          </p>
         </div>
 
         <div>

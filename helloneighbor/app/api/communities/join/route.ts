@@ -3,7 +3,15 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { currentOperatorId } from '@/lib/session';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { normalizePhone } from '@/lib/format';
-import { normalizeInviteCode, type MemberRole } from '@/lib/communities';
+import {
+  decideJoin,
+  normalizeInviteCode,
+  normalizeZip,
+  ownerIsActive,
+  type JoinPolicy,
+  type MemberRole,
+} from '@/lib/communities';
+import { sendSms } from '@/lib/sms';
 import { phoneIsBanned } from '@/lib/bans';
 
 const ROLES = new Set<MemberRole>(['provider', 'neighbor', 'both']);
@@ -26,10 +34,12 @@ export async function POST(request: Request) {
   if (limited) return limited;
 
   const body = await request.json().catch(() => null);
-  const code = normalizeInviteCode(String(body?.code ?? ''));
+  const code = body?.code ? normalizeInviteCode(String(body.code)) : null;
+  const communityId = body?.community_id ? String(body.community_id) : null;
   const requestedRole = String(body?.role ?? 'both') as MemberRole;
 
-  if (!code) {
+  // Either a code, or a group they found by area and want to ask to join.
+  if (!code && !communityId) {
     return NextResponse.json({ error: 'That code does not look right.' }, { status: 400 });
   }
 
@@ -50,16 +60,46 @@ export async function POST(request: Request) {
 
   const db = supabaseAdmin();
 
-  const { data: community } = await db
+  const lookup = db
     .from('communities')
-    .select('id, name, area, invites_open, approval_required, archived_at')
-    .eq('invite_code', code)
-    .maybeSingle();
+    .select(
+      'id, name, area, zip_code, join_policy, invites_open, archived_at, owner_last_active_at, owner_subscriber_id'
+    );
+
+  const { data: community } = code
+    ? await lookup.eq('invite_code', code).maybeSingle()
+    : await lookup.eq('id', communityId!).maybeSingle();
 
   // Deliberately the same message for "no such code" and "invites closed":
   // distinguishing them tells someone brute-forcing which codes are real.
   if (!community || community.archived_at || !community.invites_open) {
     return NextResponse.json({ error: 'That code is not valid.' }, { status: 404 });
+  }
+
+  // Where the joiner lives. A logged-in provider has it on file; a customer
+  // with no account types it, and it is checked against the group's.
+  const joinerZip = operatorId
+    ? (
+        await db.from('subscribers').select('zip_code').eq('id', operatorId).maybeSingle()
+      ).data?.zip_code ?? null
+    : normalizeZip(String(body?.zip_code ?? ''));
+
+  const decision = decideJoin({
+    policy: (community.join_policy ?? 'both') as JoinPolicy,
+    hasValidCode: Boolean(code),
+    memberZip: joinerZip,
+    communityZip: community.zip_code,
+    ownerActive: ownerIsActive(community.owner_last_active_at),
+  });
+
+  if (decision.status === null) {
+    const message =
+      decision.reason === 'wrong_area'
+        ? joinerZip
+          ? 'That group is for a different neighborhood.'
+          : 'Add your zip code first — it is what keeps people from other towns out of your neighborhood.'
+        : 'This group only takes people who have been given the code. Ask a neighbor for one.';
+    return NextResponse.json({ error: message, reason: decision.reason }, { status: 403 });
   }
 
   const existing = await db
@@ -90,8 +130,9 @@ export async function POST(request: Request) {
     subscriber_id: operatorId,
     phone: operatorId ? null : phone,
     role: ROLES.has(requestedRole) ? requestedRole : 'both',
-    // The owner's switch decides whether an invite is enough on its own.
-    status: community.approval_required ? 'pending' : 'active',
+    status: decision.status,
+    joined_via: decision.via,
+    zip_matched: true,
   });
 
   if (error) {
@@ -99,10 +140,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Could not join that group.' }, { status: 500 });
   }
 
+  // The owner is told either way. Approving is their job; knowing who walked
+  // in on a forwarded code is the thing that makes removal possible at all.
+  if (community.owner_subscriber_id) {
+    const { data: owner } = await db
+      .from('subscribers')
+      .select('phone')
+      .eq('id', community.owner_subscriber_id)
+      .maybeSingle();
+
+    if (owner?.phone) {
+      await sendSms(
+        owner.phone,
+        decision.admitted
+          ? `Someone joined "${community.name}" with your group's code. Check who in the app — you can remove anyone.`
+          : `Someone asked to join "${community.name}". Approve or decline in the app.`
+      );
+    }
+  }
+
   return NextResponse.json(
     {
       ok: true,
-      status: community.approval_required ? 'pending' : 'active',
+      status: decision.status,
+      admitted: decision.admitted,
       community: { id: community.id, name: community.name, area: community.area },
     },
     { status: 201 }

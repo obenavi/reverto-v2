@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { OWNER_ACTIVITY_DAYS } from '@/lib/communities';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,5 +42,25 @@ export async function GET(request: Request) {
 
   if (otpError) console.error('[cron:sweep] otp', otpError);
 
-  return NextResponse.json({ ok: true, rateLimitRowsDeleted: swept ?? 0 });
+  // Mark groups whose owner has gone quiet. The route that admits people reads
+  // owner_last_active_at directly, so this does not gate anything on its own —
+  // it exists so the flag is visible to an admin and so the owner can be
+  // nudged, rather than the group silently going cold.
+  const staleBefore = new Date(Date.now() - OWNER_ACTIVITY_DAYS * 86_400_000).toISOString();
+
+  const { data: goneQuiet, error: quietError } = await db
+    .from('communities')
+    .update({ owner_inactive_since: new Date().toISOString() })
+    .lt('owner_last_active_at', staleBefore)
+    .is('owner_inactive_since', null)
+    .is('archived_at', null)
+    .select('id');
+
+  if (quietError) console.error('[cron:sweep] community activity', quietError);
+
+  return NextResponse.json({
+    ok: true,
+    rateLimitRowsDeleted: swept ?? 0,
+    communitiesGoneQuiet: goneQuiet?.length ?? 0,
+  });
 }

@@ -61,6 +61,7 @@ export interface Subscriber {
   timezone: string | null;
   curfew_minutes: number | null;
   community_only: boolean;
+  zip_code: string | null;
   /** Which adult route made this account eligible. See lib/parents.ts. */
   supervision: 'none' | 'waiver' | 'parent_account';
   link_code: string | null;
