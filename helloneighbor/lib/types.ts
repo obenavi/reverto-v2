@@ -43,6 +43,7 @@ export interface Subscriber {
   guardian_email: string | null;
   guardian_relationship: string | null;
   guardian_consent_at: string | null;
+  guardian_consent_sent_at: string | null;
   guardian_consent_name: string | null;
   guardian_consent_ip: string | null;
   /** Age check. No image or biometric template is ever stored — see lib/ageverify.ts. */
@@ -57,6 +58,8 @@ export interface Subscriber {
   plan: 'basic' | 'pro' | 'pro_plus';
   plan_started_at: string | null;
   plan_renews_at: string | null;
+  timezone: string | null;
+  curfew_minutes: number | null;
   /** Which adult route made this account eligible. See lib/parents.ts. */
   supervision: 'none' | 'waiver' | 'parent_account';
   link_code: string | null;

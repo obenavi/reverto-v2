@@ -4,6 +4,8 @@ import { requireAdmin } from '@/lib/guards';
 import { sendSms } from '@/lib/sms';
 import { sendEmail, guardianConsentEmail } from '@/lib/email';
 import { guardianConsentUrl, needsGuardianConsent } from '@/lib/guardian';
+import { startBillingIfReady, supervisionSettled } from '@/lib/billing';
+import type { Supervision } from '@/lib/parents';
 
 const NEXT_STATUS = new Set(['active', 'rejected', 'suspended', 'pending']);
 
@@ -28,7 +30,7 @@ export async function PATCH(request: Request) {
   if (status === 'active') {
     const { data: candidate } = await db
       .from('subscribers')
-      .select('age, guardian_consent_at, guardian_phone, name')
+      .select('age, supervision, guardian_consent_at, guardian_phone, name')
       .eq('id', id)
       .maybeSingle();
 
@@ -40,6 +42,21 @@ export async function PATCH(request: Request) {
           error:
             'This applicant is under 16 and their parent or guardian has not given permission yet.',
           awaitingGuardian: true,
+        },
+        { status: 409 }
+      );
+    }
+
+    // Consent and supervision are different things, and 16- and 17-year-olds
+    // need the second without the first: nobody emails their guardian at
+    // signup, so an adult only arrives once they link a parent account or a
+    // guardian signs the waiver. Approving before that would put an
+    // unsupervised minor in front of customers.
+    if (!supervisionSettled(candidate.age, candidate.supervision as Supervision)) {
+      return NextResponse.json(
+        {
+          error: `${candidate.name} is under 18 and no adult is behind the account yet — they need a parent account linked, or a signed guardian waiver.`,
+          awaitingSupervision: true,
         },
         { status: 409 }
       );
@@ -61,6 +78,10 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Could not update that operator.' }, { status: 500 });
   }
   if (!data) return NextResponse.json({ error: 'Operator not found.' }, { status: 404 });
+
+  // Approval is the last gate for an account that already has an adult behind
+  // it, so this is where most cycles actually begin.
+  if (status === 'active') await startBillingIfReady(id);
 
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? '';
   if (status === 'active') {

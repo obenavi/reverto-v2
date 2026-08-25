@@ -1,5 +1,15 @@
 import { supabaseAdmin } from './supabase';
 
+// The pure constants live in ./parentRoles so client components can import them
+// without pulling this module's service-role client into the browser bundle.
+export {
+  PARENT_RELATIONSHIPS,
+  relationshipLabel,
+  relationshipWord,
+  supervisionSatisfied,
+} from './parentRoles';
+export type { ParentRelationship, Supervision } from './parentRoles';
+
 /**
  * Parent accounts.
  *
@@ -13,23 +23,6 @@ import { supabaseAdmin } from './supabase';
  * What they may not do: post as their child, accept work, reply in a
  * conversation, or change what their child offers. Those are the child's.
  */
-
-export const PARENT_RELATIONSHIPS = [
-  { value: 'mom', label: 'Mom' },
-  { value: 'dad', label: 'Dad' },
-  { value: 'legal_guardian', label: 'Legal guardian' },
-] as const;
-
-export type ParentRelationship = (typeof PARENT_RELATIONSHIPS)[number]['value'];
-
-export function relationshipLabel(value: string): string {
-  return PARENT_RELATIONSHIPS.find((r) => r.value === value)?.label ?? 'guardian';
-}
-
-/** The word a parent uses about themselves in a message to a customer. */
-export function relationshipWord(value: string): string {
-  return value === 'mom' ? 'mom' : value === 'dad' ? 'dad' : 'legal guardian';
-}
 
 /** Children this parent actually supervises. */
 export async function linkedChildren(parentId: string): Promise<string[]> {
@@ -96,12 +89,3 @@ export async function linkCodeFor(subscriberId: string): Promise<string | null> 
   return null;
 }
 
-/**
- * A young person's account is only eligible to go live once an adult is behind
- * it — either a linked parent account, or a signed waiver.
- */
-export type Supervision = 'none' | 'waiver' | 'parent_account';
-
-export function supervisionSatisfied(value: Supervision): boolean {
-  return value !== 'none';
-}

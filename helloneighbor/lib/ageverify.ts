@@ -1,5 +1,6 @@
 import { supabaseAdmin } from './supabase';
 import { CONSENT_AGE_LIMIT } from './guardian';
+import { MINIMUM_AGE } from './ages';
 
 /**
  * Facial age estimation.
@@ -49,7 +50,7 @@ import { CONSENT_AGE_LIMIT } from './guardian';
  * birth rather than an age, and the estimation models cannot resolve six
  * months anyway.
  */
-export const MINIMUM_AGE = 14;
+export { MINIMUM_AGE } from './ages';
 
 /**
  * How far the estimate may sit from the declared age before a human looks.

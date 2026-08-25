@@ -8,6 +8,7 @@ import { operatorCapacity } from '@/lib/capacity';
 import type { PlanId } from '@/lib/plans';
 import DashboardTabs from '@/components/dashboard/DashboardTabs';
 import { operatorCurfew } from '@/lib/curfewPolicy';
+import { billingState } from '@/lib/billing';
 import type {
   BookingRow,
   Conversation,
@@ -109,6 +110,7 @@ export default async function DashboardPage() {
   const planId = (operator.plan ?? 'basic') as PlanId;
   const planCapacity = await operatorCapacity(operatorId, planId);
   const curfew = await operatorCurfew(operatorId);
+  const billing = billingState(operator);
 
   return (
     <DashboardTabs
@@ -127,6 +129,7 @@ export default async function DashboardPage() {
       planId={planId}
       planCapacity={planCapacity}
       curfew={curfew}
+      billing={billing}
     />
   );
 }

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Notice, PageHeader, Shell } from '@/components/ui';
 import Turnstile from '@/components/Turnstile';
-import { PARENT_RELATIONSHIPS } from '@/lib/parents';
+import { PARENT_RELATIONSHIPS } from '@/lib/parentRoles';
 import { GUARDIAN_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
 
 export default function ParentSignupPage() {

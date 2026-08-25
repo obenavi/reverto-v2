@@ -3,7 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { readGuardianToken } from '@/lib/guardian';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { sendSms } from '@/lib/sms';
-import { recordVerification } from '@/lib/ageverify';
+import { MINIMUM_AGE, recordVerification } from '@/lib/ageverify';
+import { startBillingIfReady } from '@/lib/billing';
 
 /** GET /api/consent?token=… — who is this consent for, and is it already given? */
 export async function GET(request: Request) {
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
   const { data: subscriber } = await db
     .from('subscribers')
     .select(
-      'id, name, phone, age, guardian_consent_at, guardian_age_check_sent_at, age_verification_status'
+      'id, name, phone, age, supervision, guardian_consent_at, guardian_age_check_sent_at, age_verification_status'
     )
     .eq('id', subscriberId)
     .maybeSingle();
@@ -78,15 +79,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, alreadyConsented: true });
   }
 
+  const subscriberSupervision = subscriber.supervision as string;
+
   // Is this link also standing in for a failed face check?
   const settlingAge =
     Boolean(subscriber.guardian_age_check_sent_at) &&
     subscriber.age_verification_status !== 'passed';
 
   if (settlingAge) {
-    if (!Number.isInteger(confirmedAge) || confirmedAge! < 13 || confirmedAge! > 120) {
+    if (!Number.isInteger(confirmedAge) || confirmedAge! < MINIMUM_AGE || confirmedAge! > 120) {
       return NextResponse.json(
-        { error: 'Please confirm their age — it has to be 13 or over.' },
+        { error: `Please confirm their age — it has to be ${MINIMUM_AGE} or over.` },
         { status: 400 }
       );
     }
@@ -102,6 +105,9 @@ export async function POST(request: Request) {
       // The responsibility statement is stored separately from the permission,
       // because it is the part that carries legal weight.
       guardian_responsibility_at: now,
+      // A waiver is the weaker of the two supervision routes, so it must not
+      // overwrite a parent account that is already linked.
+      ...(subscriberSupervision === 'parent_account' ? {} : { supervision: 'waiver' }),
       ...(settlingAge
         ? { guardian_confirmed_age: confirmedAge, age: confirmedAge }
         : {}),
@@ -125,7 +131,7 @@ export async function POST(request: Request) {
       estimate: null,
       status: 'passed',
       consistent: null,
-      meetsMinimum: confirmedAge! >= 13,
+      meetsMinimum: confirmedAge! >= MINIMUM_AGE,
       detail: `Confirmed as ${confirmedAge} by ${signedName}, who accepted legal responsibility for the account.`,
     });
   }
@@ -134,6 +140,10 @@ export async function POST(request: Request) {
     subscriber.phone,
     `Good news — your parent or guardian approved your HelloNeighbor account. Our team reviews it next.`
   );
+
+  // An adult is now behind the account, which is what the billing clock waits
+  // for. No-op if an admin has not approved it yet.
+  await startBillingIfReady(subscriberId);
 
   return NextResponse.json({ ok: true });
 }

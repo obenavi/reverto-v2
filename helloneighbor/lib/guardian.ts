@@ -1,4 +1,5 @@
 import { createToken, readToken } from './tokens';
+import { CONSENT_AGE_LIMIT, MINOR_BADGE_LIMIT } from './ages';
 
 /**
  * Guardian consent for operators under 16.
@@ -14,8 +15,9 @@ import { createToken, readToken } from './tokens';
  *                           even though no consent is required
  */
 
-export const CONSENT_AGE_LIMIT = 16;
-export const MINOR_BADGE_LIMIT = 18;
+// Defined in ./ages, which is importable from a client bundle; this module is
+// not, because it signs tokens with node crypto.
+export { CONSENT_AGE_LIMIT, MINOR_BADGE_LIMIT } from './ages';
 
 const PREFIX = 'guardian';
 

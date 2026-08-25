@@ -1,6 +1,8 @@
 'use client';
 
 import { PLANS, PLAN_ORDER, planPrice, type Capacity, type PlanId } from '@/lib/plans';
+import type { BillingState } from '@/lib/billing';
+import { Notice } from '@/components/ui';
 
 /**
  * What the operator is paying for, and where they stand against it this week.
@@ -12,18 +14,33 @@ export default function PlanPanel({
   planId,
   capacity,
   services,
-  renewsAt,
+  billing,
 }: {
   planId: PlanId;
   capacity: Capacity;
   services: number;
-  renewsAt: string | null;
+  billing: BillingState;
 }) {
   const current = PLANS[planId];
   const maxServices = current.maxServices;
+  const renewsAt = billing.renewsAt;
 
   return (
     <div className="space-y-4">
+      {billing.reason === 'awaiting_adult' && (
+        <Notice tone="warn">
+          You&apos;re not being charged. Under 18, your subscription doesn&apos;t start
+          until a parent or guardian is on your account — go to Settings to send them a
+          code. Your first month begins that day, not today.
+        </Notice>
+      )}
+      {billing.reason === 'awaiting_approval' && (
+        <Notice tone="info">
+          You&apos;re not being charged yet. Your first month starts the day we approve
+          your account.
+        </Notice>
+      )}
+
       <section className="card">
         <div className="flex items-start justify-between gap-3">
           <div>

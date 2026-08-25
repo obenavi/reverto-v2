@@ -29,6 +29,7 @@ import AccountPanel from './AccountPanel';
 import ScheduleAlerts from './ScheduleAlerts';
 import PlanPanel from './PlanPanel';
 import type { Capacity, PlanId } from '@/lib/plans';
+import type { BillingState } from '@/lib/billing';
 import CustomerBookingsPanel from './CustomerBookingsPanel';
 
 type ConversationRow = Conversation & { bookings: { id: string; status: string } | null };
@@ -64,6 +65,7 @@ export default function DashboardTabs(props: {
   planId: PlanId;
   planCapacity: Capacity;
   curfew: { timezone: string; curfewMinutes: number | null };
+  billing: BillingState;
 }) {
   const {
     operator,
@@ -81,6 +83,7 @@ export default function DashboardTabs(props: {
     planId,
     planCapacity,
     curfew,
+    billing,
   } = props;
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('bookings');
@@ -173,7 +176,7 @@ export default function DashboardTabs(props: {
             planId={planId}
             capacity={planCapacity}
             services={services.length}
-            renewsAt={operator.plan_renews_at ?? null}
+            billing={billing}
           />
         )}
         {tab === 'account' && (

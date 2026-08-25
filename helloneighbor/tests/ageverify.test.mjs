@@ -11,9 +11,16 @@
 import { readFileSync } from 'fs';
 import { transpileModule, ModuleKind } from 'typescript';
 
+// The thresholds live in lib/ages.ts and are re-exported from lib/ageverify.ts.
+// Inlining that file's real source rather than a copy of the numbers is the
+// whole point: if someone edits the floor, this suite sees the edit.
+const ages = readFileSync(new URL('../lib/ages.ts', import.meta.url), 'utf8');
+
 const src = readFileSync(new URL('../lib/ageverify.ts', import.meta.url), 'utf8')
   .replace(/import[\s\S]*?from '\.\/supabase';/, '')
-  .replace(/import[\s\S]*?from '\.\/guardian';/, 'const CONSENT_AGE_LIMIT = 16;')
+  .replace(/import[\s\S]*?from '\.\/guardian';/, '')
+  .replace(/import[\s\S]*?from '\.\/ages';/, '')
+  .replace(/export \{ MINIMUM_AGE \} from '\.\/ages';/, ages)
   .replace(/export async function recordVerification[\s\S]*?\n}\n/, '');
 
 const js = transpileModule(src, {

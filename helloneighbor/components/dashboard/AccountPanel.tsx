@@ -58,7 +58,11 @@ export default function AccountPanel({
 
   return (
     <div className="space-y-4">
-      <LinkParentPanel supervision={operator.supervision ?? 'none'} />
+      <LinkParentPanel
+        supervision={operator.supervision ?? 'none'}
+        age={operator.age}
+        guardianConsentSentAt={operator.guardian_consent_sent_at ?? null}
+      />
 
       <AgeCheck
         alreadyConsented={Boolean(operator.biometric_consent_at)}

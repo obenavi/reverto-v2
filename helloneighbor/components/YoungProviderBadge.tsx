@@ -1,4 +1,4 @@
-import { MINOR_BADGE_LIMIT } from '@/lib/guardian';
+import { MINOR_BADGE_LIMIT } from '@/lib/ages';
 
 /**
  * Says plainly that a provider is under 18.

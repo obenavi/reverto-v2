@@ -5,6 +5,7 @@ import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { PLANS, type PlanId } from '@/lib/plans';
 import { linkedChildren } from '@/lib/parents';
 import { sendSms } from '@/lib/sms';
+import { startBillingIfReady } from '@/lib/billing';
 
 /**
  * POST /api/parents/link — a parent claims a young person's account using the
@@ -97,6 +98,8 @@ export async function POST(request: Request) {
     .from('subscribers')
     .update({ supervision: 'parent_account' })
     .eq('id', child.id);
+
+  await startBillingIfReady(child.id);
 
   await sendSms(
     child.phone,
