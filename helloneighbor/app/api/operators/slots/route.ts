@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireOperator } from '@/lib/guards';
+import { curfewRefusal } from '@/lib/curfewPolicy';
 
 /** POST /api/operators/slots — open a block of availability. */
 export async function POST(request: Request) {
@@ -20,6 +21,16 @@ export async function POST(request: Request) {
   if (!Number.isFinite(durationMin) || durationMin <= 0) {
     return NextResponse.json({ error: 'How long is the slot?' }, { status: 400 });
   }
+
+  // A slot that ends after curfew could never be worked, so it is refused at
+  // the point it is created rather than silently hidden at booking time.
+  const refusal = await curfewRefusal({
+    operatorId,
+    startsAt,
+    durationMin,
+    audience: 'operator',
+  });
+  if (refusal) return NextResponse.json({ error: refusal }, { status: 400 });
 
   const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
 

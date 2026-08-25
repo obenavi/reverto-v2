@@ -63,6 +63,7 @@ export default function DashboardTabs(props: {
   tightPairs: TightPair[];
   planId: PlanId;
   planCapacity: Capacity;
+  curfew: { timezone: string; curfewMinutes: number | null };
 }) {
   const {
     operator,
@@ -79,6 +80,7 @@ export default function DashboardTabs(props: {
     tightPairs,
     planId,
     planCapacity,
+    curfew,
   } = props;
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('bookings');
@@ -158,7 +160,7 @@ export default function DashboardTabs(props: {
           </div>
         )}
         {tab === 'messages' && <MessagesPanel conversations={conversations} />}
-        {tab === 'schedule' && <SchedulePanel slots={slots} />}
+        {tab === 'schedule' && <SchedulePanel slots={slots} curfew={curfew} />}
         {tab === 'pings' && <PingsPanel pings={pings} />}
         {tab === 'services' && <ServicesPanel services={services} />}
         {tab === 'profile' && <ProfilePanel operator={operator} profile={profile} />}

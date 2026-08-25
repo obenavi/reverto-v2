@@ -13,6 +13,7 @@ import { isBlocked } from '@/lib/blocks';
 import { sendPush, pushTemplates } from '@/lib/push';
 import { blockOverlappingSlots, releaseBlockedSlots } from '@/lib/scheduling';
 import { operatorCapacity } from '@/lib/capacity';
+import { curfewRefusal } from '@/lib/curfewPolicy';
 import type { PlanId } from '@/lib/plans';
 import { verifyTurnstile } from '@/lib/turnstile';
 import type { PaymentMethod } from '@/lib/types';
@@ -147,13 +148,38 @@ export async function POST(request: Request) {
 
   const { data: service } = await db
     .from('services')
-    .select('id, title, price_cents')
+    .select('id, title, price_cents, duration_min')
     .eq('id', serviceId)
     .eq('operator_id', operatorId)
     .eq('active', true)
     .maybeSingle();
 
   if (!service) return NextResponse.json({ error: 'That service is unavailable.' }, { status: 404 });
+
+  // Curfew is about when the job ENDS. A slot may sit comfortably before 9pm
+  // and still be refused because this particular service takes two hours. The
+  // slot's own length is not enough: a neighbour books a service into a slot,
+  // and the service can run longer than the slot the operator opened.
+  const slotForCurfew = await db
+    .from('slots')
+    .select('starts_at, ends_at')
+    .eq('id', slotId)
+    .eq('operator_id', operatorId)
+    .maybeSingle();
+
+  if (slotForCurfew.data) {
+    const slotMinutes = Math.round(
+      (new Date(slotForCurfew.data.ends_at).getTime() -
+        new Date(slotForCurfew.data.starts_at).getTime()) / 60_000
+    );
+    const refusal = await curfewRefusal({
+      operatorId,
+      startsAt: slotForCurfew.data.starts_at,
+      durationMin: Math.max(slotMinutes, service.duration_min),
+      audience: 'neighbor',
+    });
+    if (refusal) return NextResponse.json({ error: refusal }, { status: 409 });
+  }
 
   // Claim the slot first. Filtering on status = 'open' makes this the
   // concurrency guard: whoever's update returns a row wins the slot.

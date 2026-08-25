@@ -7,6 +7,7 @@ import { EmptyState, Notice } from '@/components/ui';
 import { CLIENT_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
 import { PAYMENT_METHODS, serviceKind } from '@/lib/catalog';
 import { formatPrice, formatSlot } from '@/lib/format';
+import { withinCurfew } from '@/lib/curfew';
 import type {
   GalleryPhoto,
   PaymentMethod,
@@ -19,6 +20,8 @@ import CardPayment from './CardPayment';
 import { YoungProviderNotice, YoungProviderPill } from './YoungProviderBadge';
 import type { Capacity } from '@/lib/plans';
 
+type Curfew = { timezone: string; curfewMinutes: number | null };
+
 type Step = 1 | 2 | 3 | 4;
 
 const STEP_LABELS = ['Service', 'Time', 'Details', 'Confirm'];
@@ -30,6 +33,7 @@ export default function BookingFlow({
   gallery,
   reviews,
   capacity,
+  curfew,
 }: {
   operator: Subscriber;
   services: Service[];
@@ -37,6 +41,7 @@ export default function BookingFlow({
   gallery: GalleryPhoto[];
   reviews: Review[];
   capacity: Capacity;
+  curfew: Curfew;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
@@ -56,6 +61,26 @@ export default function BookingFlow({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [chatPath, setChatPath] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  /**
+   * Whether a slot is long enough past curfew to be unbookable.
+   *
+   * Depends on the chosen service, so it can only be answered once step 1 is
+   * done — which is why it lives here and not in the page's query. A slot can
+   * be fine for a 30-minute job and too late for a two-hour one.
+   */
+  const tooLate = (s: Slot) => {
+    if (curfew.curfewMinutes == null || !service) return false;
+    const slotMinutes = Math.round(
+      (new Date(s.ends_at).getTime() - new Date(s.starts_at).getTime()) / 60_000
+    );
+    return !withinCurfew({
+      startsAt: s.starts_at,
+      durationMin: Math.max(slotMinutes, service.duration_min),
+      timezone: curfew.timezone,
+      curfewMinutes: curfew.curfewMinutes,
+    }).allowed;
+  };
 
   const acceptedMethods = PAYMENT_METHODS.filter((m) =>
     operator.payment_methods.includes(m.value)
@@ -249,19 +274,42 @@ export default function BookingFlow({
             />
           ) : (
             <ul className="space-y-2">
-              {slots.map((s) => (
-                <li key={s.id}>
-                  <button
-                    className="card w-full text-left font-semibold hover:border-brand"
-                    onClick={() => {
-                      setSlot(s);
-                      setStep(3);
-                    }}
-                  >
-                    {formatSlot(s.starts_at, s.ends_at)}
-                  </button>
+              {slots.every(tooLate) && (
+                <li>
+                  <Notice tone="warn">
+                    Every open time would run too late for {service?.title}. A shorter
+                    service may still fit — go back and pick one.
+                  </Notice>
                 </li>
-              ))}
+              )}
+              {slots.map((s) => {
+                const late = tooLate(s);
+                return (
+                  <li key={s.id}>
+                    <button
+                      disabled={late}
+                      className={
+                        late
+                          ? 'card w-full cursor-not-allowed text-left font-semibold opacity-50'
+                          : 'card w-full text-left font-semibold hover:border-brand'
+                      }
+                      onClick={() => {
+                        setSlot(s);
+                        setStep(3);
+                      }}
+                    >
+                      {formatSlot(s.starts_at, s.ends_at)}
+                      {late && (
+                        // Deliberately vague. Whether a family set an earlier
+                        // limit is their business, not a stranger's.
+                        <span className="ml-2 text-xs font-normal text-slate-500">
+                          runs too late for this service
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
           <button className="btn-secondary mt-3 w-full" onClick={() => setStep(1)}>

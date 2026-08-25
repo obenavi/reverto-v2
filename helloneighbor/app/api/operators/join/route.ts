@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { normalizePhone } from '@/lib/format';
 import type { ServiceKind } from '@/lib/types';
 import { SERVICE_KINDS, serviceKind } from '@/lib/catalog';
+import { DEFAULT_TIMEZONE, isValidTimezone } from '@/lib/curfew';
 import { TERMS_VERSION } from '@/lib/guidelines';
 import { reviewContent } from '@/lib/supervisor';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
@@ -120,6 +121,10 @@ export async function POST(request: Request) {
       guardian_phone: needsConsent ? guardianPhone : null,
       guardian_email: needsConsent ? guardianEmail : null,
       guardian_relationship: needsConsent ? guardianRelationship : null,
+      // Curfew is a wall-clock rule, so it needs a zone. The browser knows it;
+      // anything it sends that this runtime doesn't recognise falls back rather
+      // than throwing later, at booking time.
+      timezone: isValidTimezone(body.timezone) ? body.timezone : DEFAULT_TIMEZONE,
     })
     .select('id')
     .single();

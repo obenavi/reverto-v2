@@ -6,6 +6,7 @@ import { EmptyState, Notice, Shell, StatusPill } from '@/components/ui';
 import { formatPhone, formatPrice, formatSlot } from '@/lib/format';
 import { paymentLabel } from '@/lib/catalog';
 import { CANCELLATION_WARNING } from '@/lib/parentCancel';
+import { PLATFORM_CURFEW_MINUTES, formatCurfew } from '@/lib/curfew';
 
 type Child = {
   id: string;
@@ -15,6 +16,7 @@ type Child = {
   status: string;
   plan: string;
   supervision: string;
+  curfew_minutes: number | null;
 };
 
 type Booking = {
@@ -50,6 +52,10 @@ export default function ParentDashboard() {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
 
+  const [curfewFor, setCurfewFor] = useState<string | null>(null);
+  const [curfewValue, setCurfewValue] = useState('');
+  const [curfewBusy, setCurfewBusy] = useState(false);
+
   const [linkCode, setLinkCode] = useState('');
   const [linking, setLinking] = useState(false);
 
@@ -72,6 +78,33 @@ export default function ParentDashboard() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /** "20:30" -> 1230. Empty means "clear my limit", not midnight. */
+  async function saveCurfew(childId: string, value: string) {
+    setCurfewBusy(true);
+    setError(null);
+
+    let minutes: number | null = null;
+    if (value) {
+      const [h, m] = value.split(':').map(Number);
+      minutes = h * 60 + m;
+    }
+
+    const res = await fetch('/api/parents/curfew', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscriber_id: childId, curfew_minutes: minutes }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setCurfewBusy(false);
+
+    if (!res.ok) {
+      setError(body.error ?? 'Could not save that.');
+      return;
+    }
+    setCurfewFor(null);
+    load();
+  }
 
   async function linkChild(event: React.FormEvent) {
     event.preventDefault();
@@ -187,6 +220,85 @@ export default function ParentDashboard() {
               <p className="mt-1">
                 <StatusPill status={child.status} />
               </p>
+
+              <p className="mt-2 text-[13px] text-ink-muted">
+                Finishes work by{' '}
+                <span className="font-semibold text-ink">
+                  {formatCurfew(
+                    Math.min(child.curfew_minutes ?? PLATFORM_CURFEW_MINUTES, PLATFORM_CURFEW_MINUTES)
+                  )}
+                </span>
+                {child.curfew_minutes == null && ' (our limit)'}
+              </p>
+
+              {curfewFor === child.id ? (
+                <form
+                  className="mt-2 space-y-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    saveCurfew(child.id, curfewValue);
+                  }}
+                >
+                  <label htmlFor={`curfew-${child.id}`} className="text-[13px]">
+                    Latest they can still be working
+                  </label>
+                  <input
+                    id={`curfew-${child.id}`}
+                    type="time"
+                    value={curfewValue}
+                    max="21:00"
+                    onChange={(e) => setCurfewValue(e.target.value)}
+                  />
+                  <p className="text-[13px] text-ink-faint">
+                    This is when the job has to be <em>finished</em>, not started. A
+                    two-hour job with a {formatCurfew(PLATFORM_CURFEW_MINUTES)} limit can
+                    not start after {formatCurfew(PLATFORM_CURFEW_MINUTES - 120)}. Nobody
+                    under 18 works past {formatCurfew(PLATFORM_CURFEW_MINUTES)} here
+                    whatever you set.
+                  </p>
+                  <div className="flex gap-2">
+                    <button className="btn-primary flex-1" disabled={curfewBusy}>
+                      {curfewBusy ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary flex-1"
+                      onClick={() => setCurfewFor(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {child.curfew_minutes != null && (
+                    <button
+                      type="button"
+                      className="text-[13px] underline"
+                      onClick={() => saveCurfew(child.id, '')}
+                    >
+                      Remove my limit (our {formatCurfew(PLATFORM_CURFEW_MINUTES)} one stays)
+                    </button>
+                  )}
+                  {/* Times already booked are left alone — cancelling one is a
+                      separate, deliberate decision. */}
+                  <p className="text-[13px] text-ink-faint">
+                    Changing this does not cancel anything already booked.
+                  </p>
+                </form>
+              ) : (
+                <button
+                  className="btn-secondary mt-2 w-full"
+                  onClick={() => {
+                    setCurfewFor(child.id);
+                    const m = child.curfew_minutes;
+                    setCurfewValue(
+                      m == null
+                        ? ''
+                        : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+                    );
+                  }}
+                >
+                  Set an earlier finish time
+                </button>
+              )}
             </li>
           ))}
         </ul>

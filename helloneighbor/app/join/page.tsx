@@ -54,6 +54,10 @@ export default function JoinPage() {
         bio: form.get('bio'),
         interests,
         accepted_terms: allAccepted,
+        // Not asked for on the form — the browser already knows, and getting a
+        // teenager to pick an IANA zone from a dropdown is a worse question
+        // than any answer it produces.
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }),
     });
 

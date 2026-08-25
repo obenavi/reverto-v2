@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 import { operatorCapacity } from '@/lib/capacity';
+import { operatorCurfew } from '@/lib/curfewPolicy';
 import type { PlanId } from '@/lib/plans';
 import { Shell } from '@/components/ui';
 import BookingFlow from '@/components/BookingFlow';
@@ -67,6 +68,10 @@ export default async function PublicBookingPage({
     ((operator as { plan?: string }).plan ?? 'basic') as PlanId
   );
 
+  // Sent to the client so times that could never be worked are shown as
+  // unavailable rather than failing at the last step. The route re-checks it.
+  const curfew = await operatorCurfew(operator.id);
+
   return (
     <Shell>
       <BookingFlow
@@ -76,6 +81,7 @@ export default async function PublicBookingPage({
         gallery={(galleryRes.data as GalleryPhoto[]) ?? []}
         reviews={(reviewsRes.data as Review[]) ?? []}
         capacity={capacityNow}
+        curfew={curfew}
       />
     </Shell>
   );

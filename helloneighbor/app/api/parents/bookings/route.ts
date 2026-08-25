@@ -24,7 +24,7 @@ export async function GET() {
   const [profiles, bookings] = await Promise.all([
     db
       .from('subscribers')
-      .select('id, name, age, area, status, plan, supervision')
+      .select('id, name, age, area, status, plan, supervision, curfew_minutes')
       .in('id', children),
     db
       .from('bookings')
