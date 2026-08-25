@@ -4,7 +4,7 @@ import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { verifyTurnstile } from '@/lib/turnstile';
 import { normalizePhone } from '@/lib/format';
 import { TERMS_VERSION } from '@/lib/guidelines';
-import { PARENT_RELATIONSHIPS } from '@/lib/parents';
+import { PARENT_RELATIONSHIPS } from '@/lib/parentRoles';
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RELATIONSHIPS = new Set(PARENT_RELATIONSHIPS.map((r) => r.value));
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   }
   if (!RELATIONSHIPS.has(relationship as never)) {
     return NextResponse.json(
-      { error: 'Tell us whether you are their mom, dad, or legal guardian.' },
+      { error: 'Tell us how you are related to them.' },
       { status: 400 }
     );
   }

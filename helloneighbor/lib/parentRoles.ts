@@ -13,6 +13,7 @@ export const PARENT_RELATIONSHIPS = [
   { value: 'mom', label: 'Mom' },
   { value: 'dad', label: 'Dad' },
   { value: 'legal_guardian', label: 'Legal guardian' },
+  { value: 'sibling', label: 'Older brother or sister' },
 ] as const;
 
 export type ParentRelationship = (typeof PARENT_RELATIONSHIPS)[number]['value'];
@@ -23,7 +24,25 @@ export function relationshipLabel(value: string): string {
 
 /** The word a parent uses about themselves in a message to a customer. */
 export function relationshipWord(value: string): string {
-  return value === 'mom' ? 'mom' : value === 'dad' ? 'dad' : 'legal guardian';
+  if (value === 'mom') return 'mom';
+  if (value === 'dad') return 'dad';
+  if (value === 'sibling') return 'older sibling';
+  return 'legal guardian';
+}
+
+/**
+ * Whether this person can sign the waiver, which asserts legal guardianship
+ * and accepts legal responsibility for everything the young person does here.
+ *
+ * An older sibling usually is not anyone's legal guardian, whatever they are
+ * willing to tick. They can run the account — see bookings, set a curfew,
+ * cancel, hold the card — but the document that says "I am legally responsible
+ * for this child" has to be signed by someone who actually is. Letting a
+ * 19-year-old brother sign it would produce a piece of paper that means
+ * nothing at exactly the moment it needs to mean something.
+ */
+export function canSignGuardianWaiver(relationship: string): boolean {
+  return relationship !== 'sibling';
 }
 
 /**

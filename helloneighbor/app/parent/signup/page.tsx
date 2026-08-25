@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Notice, PageHeader, Shell } from '@/components/ui';
 import Turnstile from '@/components/Turnstile';
-import { PARENT_RELATIONSHIPS } from '@/lib/parentRoles';
+import { PARENT_RELATIONSHIPS, canSignGuardianWaiver } from '@/lib/parentRoles';
 import { GUARDIAN_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
 
 export default function ParentSignupPage() {
   const router = useRouter();
   const [ticked, setTicked] = useState(GUARDIAN_ACKNOWLEDGEMENTS.map(() => false));
   const [confirmsAdult, setConfirmsAdult] = useState(false);
+  const [relationship, setRelationship] = useState<string>('mom');
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +107,13 @@ export default function ParentSignupPage() {
 
         <div>
           <label htmlFor="relationship">You are their…</label>
-          <select id="relationship" name="relationship" defaultValue="mom" required>
+          <select
+            id="relationship"
+            name="relationship"
+            value={relationship}
+            onChange={(e) => setRelationship(e.target.value)}
+            required
+          >
             {PARENT_RELATIONSHIPS.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
@@ -118,9 +125,11 @@ export default function ParentSignupPage() {
         <fieldset className="rounded-card border border-line p-3">
           <legend className="px-1 text-[13px] font-semibold">Proof of age</legend>
           <p className="text-[13px] text-ink-muted">
-            We need to know you&apos;re over 18. After you log in we&apos;ll ask you to
-            confirm it — either with a photo ID check or by review. Your account works
-            for linking straight away; anything involving money waits until that&apos;s done.
+            We need to know you&apos;re over 18. After you log in we&apos;ll ask for two
+            quick things — a card in your name and a selfie — and only fall back to a
+            photo ID if those don&apos;t settle it. No photo or document is ever stored;
+            we keep the answer, not the picture. Your account works for linking straight
+            away; anything involving money waits until that&apos;s done.
           </p>
           <label className="mt-3 flex cursor-pointer items-start gap-2 text-[13px]">
             <input
@@ -130,8 +139,9 @@ export default function ParentSignupPage() {
               onChange={(e) => setConfirmsAdult(e.target.checked)}
             />
             <span className="text-ink-muted">
-              I confirm I am over 18 and the parent or legal guardian of the young person I
-              am about to link.
+              {canSignGuardianWaiver(relationship)
+                ? 'I confirm I am over 18 and the parent or legal guardian of the young person I am about to link.'
+                : 'I confirm I am over 18 and that I am taking responsibility for this account day to day. Their parent or legal guardian still has to be the one to sign anything that says so — an older brother or sister usually is not one.'}
             </span>
           </label>
         </fieldset>

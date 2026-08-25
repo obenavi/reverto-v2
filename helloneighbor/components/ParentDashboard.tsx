@@ -7,6 +7,7 @@ import { formatPhone, formatPrice, formatSlot } from '@/lib/format';
 import { paymentLabel } from '@/lib/catalog';
 import { CANCELLATION_WARNING } from '@/lib/parentCancel';
 import { PLATFORM_CURFEW_MINUTES, formatCurfew } from '@/lib/curfew';
+import AdultCheck from '@/components/AdultCheck';
 
 type Child = {
   id: string;
@@ -183,6 +184,8 @@ export default function ParentDashboard() {
           Cancelled and sent. The customer got: &ldquo;{sent}&rdquo;
         </Notice>
       )}
+
+      <AdultCheck />
 
       <section className="card">
         <p className="font-bold">Link an account</p>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { currentParentId } from '@/lib/session';
 import { supervises } from '@/lib/parents';
+import { isVerifiedAdult } from '@/lib/adultverify';
 import { cancellationMessage, type CancellationScope } from '@/lib/parentCancel';
 import { releaseBlockedSlots } from '@/lib/scheduling';
 import { touchConversation } from '@/lib/conversations';
@@ -23,6 +24,21 @@ import { sendPush, pushTemplates } from '@/lib/push';
 export async function POST(request: Request) {
   const parentId = currentParentId();
   if (!parentId) return NextResponse.json({ error: 'Not logged in.' }, { status: 401 });
+
+  // Cancelling is the one parent power that reaches out and costs a stranger
+  // their afternoon, so it is the one that waits for the adult check. Viewing
+  // and setting a curfew stay open — those are protective, and gating them
+  // would only push families toward the weaker waiver route.
+  if (!(await isVerifiedAdult(parentId))) {
+    return NextResponse.json(
+      {
+        error:
+          'Finish the quick adult check before cancelling — it takes a minute and it is there so nobody else can cancel your child\'s work.',
+        needsAdultCheck: true,
+      },
+      { status: 403 }
+    );
+  }
 
   const body = await request.json().catch(() => null);
   const bookingId = String(body?.booking_id ?? '');
