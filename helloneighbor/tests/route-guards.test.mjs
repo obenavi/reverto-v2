@@ -40,6 +40,8 @@ const PUBLIC_HANDLERS = {
   'app/api/auth/parent/verify-code/route.ts POST': 'exchanging a code for a parent session',
   'app/api/stripe/webhook/route.ts POST':
     'authorized by the Stripe signature, which is verified before the client is built',
+  'app/api/communities/join/route.ts POST':
+    'the invite code IS the credential — a neighbor with no account joins with it; the code is rate-limited and answers identically for an unknown code and a closed group',
   'app/api/push/route.ts DELETE':
     'the push endpoint URL is itself the per-browser secret; a session may have expired by the time someone turns notifications off',
 };

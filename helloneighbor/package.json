@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/route-guards.test.mjs && node tests/plans.test.mjs && node tests/parentcancel.test.mjs && node tests/ageverify.test.mjs && node tests/scheduling.test.mjs && node tests/curfew.test.mjs && node tests/billing.test.mjs && node tests/adultcheck.test.mjs && node tests/documents.test.mjs && node tests/enforcement.test.mjs && node tests/liability.test.mjs"
+    "test": "node tests/route-guards.test.mjs && node tests/plans.test.mjs && node tests/parentcancel.test.mjs && node tests/ageverify.test.mjs && node tests/scheduling.test.mjs && node tests/curfew.test.mjs && node tests/billing.test.mjs && node tests/adultcheck.test.mjs && node tests/documents.test.mjs && node tests/enforcement.test.mjs && node tests/liability.test.mjs && node tests/communities.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

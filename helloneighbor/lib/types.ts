@@ -60,6 +60,7 @@ export interface Subscriber {
   plan_renews_at: string | null;
   timezone: string | null;
   curfew_minutes: number | null;
+  community_only: boolean;
   /** Which adult route made this account eligible. See lib/parents.ts. */
   supervision: 'none' | 'waiver' | 'parent_account';
   link_code: string | null;

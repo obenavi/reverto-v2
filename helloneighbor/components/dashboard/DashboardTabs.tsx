@@ -17,6 +17,7 @@ import type {
 } from '@/lib/types';
 import BookingsPanel from './BookingsPanel';
 import SchedulePanel from './SchedulePanel';
+import CommunitiesPanel from './CommunitiesPanel';
 import PingsPanel from './PingsPanel';
 import ServicesPanel from './ServicesPanel';
 import ProfilePanel from './ProfilePanel';
@@ -39,6 +40,7 @@ type TabId =
   | 'bookings'
   | 'messages'
   | 'schedule'
+  | 'communities'
   | 'pings'
   | 'services'
   | 'profile'
@@ -95,6 +97,7 @@ export default function DashboardTabs(props: {
     { id: 'bookings', label: 'Bookings', badge: upcoming },
     { id: 'messages', label: 'Messages', badge: conversations.length },
     { id: 'schedule', label: 'Schedule' },
+    { id: 'communities', label: 'Groups' },
     { id: 'pings', label: 'Pings', badge: newPings },
     { id: 'services', label: 'Services' },
     { id: 'profile', label: 'Profile' },
@@ -164,6 +167,12 @@ export default function DashboardTabs(props: {
         )}
         {tab === 'messages' && <MessagesPanel conversations={conversations} />}
         {tab === 'schedule' && <SchedulePanel slots={slots} curfew={curfew} />}
+        {tab === 'communities' && (
+          <CommunitiesPanel
+            communityOnly={Boolean(operator.community_only)}
+            isAdult={operator.age >= 18}
+          />
+        )}
         {tab === 'pings' && <PingsPanel pings={pings} />}
         {tab === 'services' && <ServicesPanel services={services} />}
         {tab === 'profile' && <ProfilePanel operator={operator} profile={profile} />}

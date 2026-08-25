@@ -94,6 +94,29 @@ export async function deleteAccount(
     db.from('gallery_photos').delete().eq('operator_id', subscriberId),
     db.from('operator_profiles').delete().eq('operator_id', subscriberId),
     db.from('push_subscriptions').delete().eq('operator_id', subscriberId),
+
+    // Leave every neighborhood group. Membership is what lets someone book or
+    // be booked inside one, so a deleted account keeping it would be a ghost
+    // in a group of people who think they know everyone in it.
+    db
+      .from('community_members')
+      .update({
+        status: 'removed',
+        removed_at: new Date().toISOString(),
+        removed_reason: 'Account deleted',
+      })
+      .eq('subscriber_id', subscriberId)
+      .neq('status', 'removed'),
+
+    // Archive any group they ran. An owner is the only person who can approve
+    // or remove members, so a group that outlives its owner is an unmanaged
+    // group of children — worse than no group. Archiving keeps the record for
+    // any dispute about a booking that happened inside it.
+    db
+      .from('communities')
+      .update({ archived_at: new Date().toISOString(), invites_open: false })
+      .eq('owner_subscriber_id', subscriberId)
+      .is('archived_at', null),
   ]);
 
   return { ok: true };

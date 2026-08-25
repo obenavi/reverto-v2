@@ -24,6 +24,9 @@ export async function PATCH(request: Request) {
   if (typeof body.prefers_advance_payment === 'boolean') {
     subscriberPatch.prefers_advance_payment = body.prefers_advance_payment;
   }
+  if (typeof body.community_only === 'boolean') {
+    subscriberPatch.community_only = body.community_only;
+  }
 
   if (Array.isArray(body.payment_methods)) {
     const methods = body.payment_methods.filter(

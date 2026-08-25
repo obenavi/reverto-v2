@@ -9,6 +9,13 @@ import { reviewInBackground } from '@/lib/supervisor';
 import { TERMS_VERSION } from '@/lib/guidelines';
 import { LIABILITY_VERSION } from '@/lib/liability';
 import { phoneIsBanned } from '@/lib/bans';
+import { COMMUNITY_ONLY_MESSAGE, bookingAllowed } from '@/lib/communities';
+import {
+  bookableIds,
+  membershipsForPhone,
+  membershipsForSubscriber,
+  providableIds,
+} from '@/lib/communityDb';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { currentOperatorId } from '@/lib/session';
 import { isBlocked } from '@/lib/blocks';
@@ -109,7 +116,7 @@ export async function POST(request: Request) {
 
   const { data: operator } = await db
     .from('subscribers')
-    .select('id, name, phone, status, payment_methods, prefers_advance_payment, plan')
+    .select('id, name, phone, status, payment_methods, prefers_advance_payment, plan, community_only')
     .eq('id', operatorId)
     .maybeSingle();
 
@@ -145,6 +152,26 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
+  }
+
+  // A provider can ask to take work only from their own neighborhood groups.
+  // Checked here rather than only hidden in the UI, because the booking page
+  // is public and this is the control that changes who actually turns up.
+  const [providerGroups, customerGroups] = await Promise.all([
+    membershipsForSubscriber(operatorId),
+    bookingAsSubscriberId
+      ? membershipsForSubscriber(bookingAsSubscriberId)
+      : membershipsForPhone(clientPhone),
+  ]);
+
+  const community = bookingAllowed({
+    communityOnly: Boolean(operator.community_only),
+    providerCommunityIds: providableIds(providerGroups),
+    customerCommunityIds: bookableIds(customerGroups),
+  });
+
+  if (!community.allowed) {
+    return NextResponse.json({ error: COMMUNITY_ONLY_MESSAGE, communityOnly: true }, { status: 403 });
   }
 
   // Handles live on the extended profile; a neighbor paying by app needs them.
@@ -231,6 +258,9 @@ export async function POST(request: Request) {
       liability_accepted_at: new Date().toISOString(),
       liability_accepted_version: LIABILITY_VERSION,
       liability_accepted_ip: ip,
+      // Recorded even when the switch is off — it is what a provider's page
+      // can later show as a reason to trust them.
+      community_id: community.sharedCommunityId,
     })
     .select('*')
     .single();
