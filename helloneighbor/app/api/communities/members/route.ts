@@ -55,6 +55,8 @@ export async function GET(request: Request) {
       name: s?.name ?? formatPhone(row.phone ?? ''),
       age: s?.age ?? null,
       hasAccount: Boolean(row.subscriber_id),
+      // An adult member with an account is the only kind who can inherit.
+      canInherit: Boolean(row.subscriber_id) && (s?.age ?? 0) >= 18 && row.status === 'active',
     };
   });
 

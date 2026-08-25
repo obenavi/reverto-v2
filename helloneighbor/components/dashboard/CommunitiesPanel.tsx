@@ -12,6 +12,22 @@ type Owned = {
   invite_code: string;
   invites_open: boolean;
   approval_required: boolean;
+  successor_subscriber_id: string | null;
+  successor_declined_at: string | null;
+  ownership_source: string;
+};
+
+type Nomination = {
+  id: string;
+  name: string;
+  area: string;
+  successor_declined_at: string | null;
+};
+
+type Member = {
+  id: string;
+  name: string;
+  canInherit: boolean;
 };
 
 type Membership = {
@@ -40,6 +56,9 @@ export default function CommunitiesPanel({
   const { mutate, busy, error } = useMutate();
   const [owned, setOwned] = useState<Owned[]>([]);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [nominatedFor, setNominatedFor] = useState<Nomination[]>([]);
+  const [pickingFor, setPickingFor] = useState<string | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
   const [only, setOnly] = useState(communityOnly);
 
   const [joinCode, setJoinCode] = useState('');
@@ -57,6 +76,7 @@ export default function CommunitiesPanel({
     const body = await res.json();
     setOwned(body.owned ?? []);
     setMemberships(body.memberships ?? []);
+    setNominatedFor(body.nominatedFor ?? []);
   }, []);
 
   useEffect(() => {
@@ -97,6 +117,32 @@ export default function CommunitiesPanel({
       setCreating(false);
       load();
     }
+  }
+
+  async function openPicker(communityId: string) {
+    setPickingFor(communityId);
+    setMembers([]);
+    const res = await fetch(`/api/communities/members?community_id=${communityId}`);
+    if (res.ok) setMembers((await res.json()).members ?? []);
+  }
+
+  async function nominate(communityId: string, memberId: string | null) {
+    const ok = await mutate('/api/communities/successor', {
+      method: 'POST',
+      body: { community_id: communityId, member_id: memberId },
+    });
+    if (ok) {
+      setPickingFor(null);
+      load();
+    }
+  }
+
+  async function decline(communityId: string) {
+    const ok = await mutate(
+      `/api/communities/successor?community_id=${communityId}`,
+      { method: 'DELETE' }
+    );
+    if (ok) load();
   }
 
   async function copy(code: string) {
@@ -140,6 +186,24 @@ export default function CommunitiesPanel({
 
       {error && <Notice tone="error">{error}</Notice>}
       {joined && <Notice tone="success">{joined}</Notice>}
+
+      {nominatedFor.filter((n) => !n.successor_declined_at).map((n) => (
+        <section key={n.id} className="card border-brand">
+          <p className="font-bold">You&apos;re the backup owner of {n.name}</p>
+          <p className="mt-1 text-[13px] text-ink-muted">
+            If whoever runs it can no longer do so, the group passes to you — which means
+            deciding who joins and who gets removed. It is a real responsibility, and you
+            can say no.
+          </p>
+          <button
+            className="btn-secondary mt-2 w-full"
+            disabled={busy}
+            onClick={() => decline(n.id)}
+          >
+            No thanks — take my name off
+          </button>
+        </section>
+      ))}
 
       <section className="card">
         <p className="font-bold">Join a group</p>
@@ -217,6 +281,75 @@ export default function CommunitiesPanel({
                 <p className="mt-2 text-[12px] text-ink-faint">
                   Only give this to people you actually know. Whoever has it can join.
                 </p>
+
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <p className="text-[13px] font-semibold">If you can&apos;t run it</p>
+                  <p className="mt-1 text-[13px] text-ink-muted">
+                    Name another adult in the group. If your account is ever closed or
+                    suspended, the group passes to them instead of shutting down. Without
+                    someone named, it closes — and everyone in it loses it.
+                  </p>
+
+                  {c.successor_subscriber_id && !c.successor_declined_at && (
+                    <p className="mt-2 text-[13px]">
+                      <span className="pill bg-success text-white">named</span>{' '}
+                      <button
+                        className="ml-1 text-[13px] underline"
+                        onClick={() => nominate(c.id, null)}
+                      >
+                        change
+                      </button>
+                    </p>
+                  )}
+
+                  {c.successor_declined_at && (
+                    <div className="mt-2">
+                      <Notice tone="warn">
+                        The person you named said no. Pick someone else — without a backup
+                        this group closes if your account does.
+                      </Notice>
+                    </div>
+                  )}
+
+                  {pickingFor === c.id ? (
+                    <div className="mt-2 space-y-2">
+                      {members.filter((mem) => mem.canInherit).length === 0 ? (
+                        <p className="text-[13px] text-ink-faint">
+                          No adult members yet. Whoever takes over has to be an adult with
+                          an account, already in the group.
+                        </p>
+                      ) : (
+                        members
+                          .filter((mem) => mem.canInherit)
+                          .map((mem) => (
+                            <button
+                              key={mem.id}
+                              className="btn-secondary w-full text-left"
+                              disabled={busy}
+                              onClick={() => nominate(c.id, mem.id)}
+                            >
+                              {mem.name}
+                            </button>
+                          ))
+                      )}
+                      <button
+                        className="text-[13px] underline"
+                        onClick={() => setPickingFor(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="btn-secondary mt-2 w-full"
+                      onClick={() => openPicker(c.id)}
+                    >
+                      {c.successor_subscriber_id && !c.successor_declined_at
+                        ? 'Name someone else'
+                        : 'Name a backup owner'}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

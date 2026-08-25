@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireAdmin } from '@/lib/guards';
 import { sendSms } from '@/lib/sms';
+import { handOverOwnedCommunities } from '@/lib/succession';
 import {
   SUSPENSION_DAYS,
   categoryLabel,
@@ -111,6 +112,17 @@ export async function POST(request: Request) {
   if (error) {
     console.error('[enforcement]', error);
     return NextResponse.json({ error: 'Could not record that.' }, { status: 500 });
+  }
+
+  // Someone who cannot be trusted with an account cannot be trusted to decide
+  // who joins a group of children. Their groups pass to the successor they
+  // named, or close if they named nobody.
+  if (subscriberId && (action === 'ban' || action === 'suspension')) {
+    await handOverOwnedCommunities({
+      ownerColumn: 'owner_subscriber_id',
+      ownerId: subscriberId,
+      reason: 'This group closed because the person running it is no longer on HelloNeighbor.',
+    });
   }
 
   // The listing has to come down with the account, or a banned provider stays

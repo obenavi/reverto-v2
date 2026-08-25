@@ -25,13 +25,25 @@ export async function GET() {
 
   const owned = await db
     .from('communities')
-    .select('id, name, area, description, invite_code, invites_open, approval_required, created_at')
+    .select('id, name, area, description, invite_code, invites_open, approval_required, created_at, successor_subscriber_id, successor_declined_at, ownership_source')
     .is('archived_at', null)
     .eq(operatorId ? 'owner_subscriber_id' : 'owner_parent_id', operatorId ?? parentId!);
 
   const memberships = operatorId ? await membershipsForSubscriber(operatorId) : [];
 
-  return NextResponse.json({ owned: owned.data ?? [], memberships });
+  // Groups where someone has lined THIS person up to take over. They should
+  // find out from their own screen, not only from a text message.
+  const nominatedFor = operatorId
+    ? (
+        await db
+          .from('communities')
+          .select('id, name, area, successor_declined_at')
+          .eq('successor_subscriber_id', operatorId)
+          .is('archived_at', null)
+      ).data ?? []
+    : [];
+
+  return NextResponse.json({ owned: owned.data ?? [], memberships, nominatedFor });
 }
 
 /**

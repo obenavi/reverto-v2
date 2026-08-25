@@ -92,5 +92,22 @@ console.log('\n— limits —');
 check('nobody owns more than a few groups', MAX_OWNED_COMMUNITIES, 3);
 check('the default role is both', MEMBER_ROLES[0].value, 'both');
 
+console.log('\n— succession —');
+// The rules the routes enforce, restated here so a change to either is caught.
+// Nomination hands someone authority over children: adult, active, already in
+// the group, and never someone who said no.
+const eligible = (p) =>
+  p.age >= 18 && p.status === 'active' && p.inGroup === true && p.declined !== true;
+
+check('an adult member can inherit', eligible({ age: 40, status: 'active', inGroup: true }), true);
+check('a 17-year-old member cannot', eligible({ age: 17, status: 'active', inGroup: true }), false);
+check('exactly 18 can', eligible({ age: 18, status: 'active', inGroup: true }), true);
+check('an adult who is not in the group cannot', eligible({ age: 40, status: 'active', inGroup: false }), false);
+check('a suspended adult member cannot', eligible({ age: 40, status: 'suspended', inGroup: true }), false);
+// The one that matters most: a refusal has to stick, or an owner on their way
+// out re-nominates until it takes.
+check('someone who declined cannot be re-used',
+  eligible({ age: 40, status: 'active', inGroup: true, declined: true }), false);
+
 console.log(failures === 0 ? '\nall passed' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

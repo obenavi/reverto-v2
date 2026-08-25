@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from './supabase';
+import { handOverOwnedCommunities } from './succession';
 
 /**
  * Account deletion.
@@ -108,15 +109,15 @@ export async function deleteAccount(
       .eq('subscriber_id', subscriberId)
       .neq('status', 'removed'),
 
-    // Archive any group they ran. An owner is the only person who can approve
-    // or remove members, so a group that outlives its owner is an unmanaged
-    // group of children — worse than no group. Archiving keeps the record for
-    // any dispute about a booking that happened inside it.
-    db
-      .from('communities')
-      .update({ archived_at: new Date().toISOString(), invites_open: false })
-      .eq('owner_subscriber_id', subscriberId)
-      .is('archived_at', null),
+    // Hand over any group they ran, to whoever they named. Only groups with
+    // no usable successor are archived — an owner is the only person who can
+    // approve or remove members, so a group that outlives its owner with
+    // nobody in charge is worse than no group.
+    handOverOwnedCommunities({
+      ownerColumn: 'owner_subscriber_id',
+      ownerId: subscriberId,
+      reason: 'This group closed because the person running it left HelloNeighbor.',
+    }),
   ]);
 
   return { ok: true };
