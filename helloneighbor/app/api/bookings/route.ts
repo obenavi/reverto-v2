@@ -8,6 +8,7 @@ import { openConversationForBooking } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
 import { TERMS_VERSION } from '@/lib/guidelines';
 import { LIABILITY_VERSION } from '@/lib/liability';
+import { consentContext, missingConsents, recordConsents } from '@/lib/consent';
 import { phoneIsBanned } from '@/lib/bans';
 import { COMMUNITY_ONLY_MESSAGE, bookingAllowed } from '@/lib/communities';
 import {
@@ -82,6 +83,19 @@ export async function POST(request: Request) {
   }
   // Both parties agree to the same terms; the neighbor's acceptance is recorded
   // on the booking so a dispute can be judged against the text they saw.
+  // Checked against the canonical list server-side. A form can be edited, and
+  // "did they agree" is the one question the form is not entitled to answer.
+  const acceptedConsents: string[] = Array.isArray(body.accepted_consents)
+    ? body.accepted_consents.map(String)
+    : [];
+  const missing = missingConsents('customer', acceptedConsents);
+  if (missing.length > 0) {
+    return NextResponse.json(
+      { error: 'You need to tick every box to book.', missing },
+      { status: 400 }
+    );
+  }
+
   if (body.accepted_terms !== true) {
     return NextResponse.json(
       { error: 'You need to accept the community guidelines to book.' },
@@ -271,6 +285,17 @@ export async function POST(request: Request) {
     await db.from('slots').update({ status: 'open' }).eq('id', slot.id);
     return NextResponse.json({ error: 'Could not save that booking.' }, { status: 500 });
   }
+
+  await recordConsents({
+    audience: 'customer',
+    acceptedIds: acceptedConsents,
+    subject: {
+      phone: clientPhone,
+      subscriberId: bookingAsSubscriberId,
+      bookingId: booking.id,
+    },
+    context: consentContext(request, ip),
+  });
 
   // One person cannot be in two places at once: close every other slot of
   // theirs that overlaps this one. Reversed if the booking is cancelled.

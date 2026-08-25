@@ -6,6 +6,7 @@ import { SERVICE_KINDS, serviceKind } from '@/lib/catalog';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '@/lib/curfew';
 import { TERMS_VERSION } from '@/lib/guidelines';
 import { LIABILITY_VERSION } from '@/lib/liability';
+import { consentContext, missingConsents, recordConsents } from '@/lib/consent';
 import { phoneIsBanned } from '@/lib/bans';
 import { normalizeZip } from '@/lib/communities';
 import { reviewContent } from '@/lib/supervisor';
@@ -106,6 +107,19 @@ export async function POST(request: Request) {
     ? body.interests.filter((k: unknown): k is ServiceKind => typeof k === 'string' && known.has(k as ServiceKind))
     : [];
 
+  const acceptedConsents: string[] = Array.isArray(body.accepted_consents)
+    ? body.accepted_consents.map(String)
+    : [];
+  const missing = missingConsents('provider', acceptedConsents);
+  // A young person's own assent is a separate acceptance in their own name.
+  const missingMinor = age < 18 ? missingConsents('minor', acceptedConsents) : [];
+  if (missing.length > 0 || missingMinor.length > 0) {
+    return NextResponse.json(
+      { error: 'You need to tick every box to apply.', missing: [...missing, ...missingMinor] },
+      { status: 400 }
+    );
+  }
+
   // A ban that lets someone sign up again the next day is not a ban.
   const banned = await phoneIsBanned(phone);
   if (banned.blocked) {
@@ -155,6 +169,23 @@ export async function POST(request: Request) {
     console.error('[join] insert failed', error);
     return NextResponse.json({ error: 'Could not save your application.' }, { status: 500 });
   }
+
+  await Promise.all([
+    recordConsents({
+      audience: 'provider',
+      acceptedIds: acceptedConsents,
+      subject: { subscriberId: subscriber.id },
+      context: consentContext(request, ip),
+    }),
+    age < 18
+      ? recordConsents({
+          audience: 'minor',
+          acceptedIds: acceptedConsents,
+          subject: { subscriberId: subscriber.id },
+          context: consentContext(request, ip),
+        })
+      : Promise.resolve(),
+  ]);
 
   // Seed inactive draft services from what they picked, so the dashboard isn't
   // empty on first login. They set real prices before switching these on.

@@ -5,6 +5,7 @@ import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { sendSms } from '@/lib/sms';
 import { MINIMUM_AGE, recordVerification } from '@/lib/ageverify';
 import { startBillingIfReady } from '@/lib/billing';
+import { consentContext, missingConsents, recordConsents } from '@/lib/consent';
 
 /** GET /api/consent?token=… — who is this consent for, and is it already given? */
 export async function GET(request: Request) {
@@ -57,6 +58,21 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const signedName = String(body?.name ?? '').trim();
   const confirmedAge = body?.confirmed_age === undefined ? null : Number(body.confirmed_age);
+
+  const acceptedConsents: string[] = Array.isArray(body?.accepted_consents)
+    ? body.accepted_consents.map(String)
+    : [];
+  // Only enforced once the form is sending ids; an older cached page still
+  // works through the accepted flag below rather than failing on a deploy.
+  if (acceptedConsents.length > 0) {
+    const missing = missingConsents('guardian', acceptedConsents);
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { error: 'You need to tick every box.', missing },
+        { status: 400 }
+      );
+    }
+  }
 
   if (body?.accepted !== true) {
     return NextResponse.json({ error: 'You need to tick every box.' }, { status: 400 });
@@ -140,6 +156,13 @@ export async function POST(request: Request) {
     subscriber.phone,
     `Good news — your parent or guardian approved your HelloNeighbor account. Our team reviews it next.`
   );
+
+  await recordConsents({
+    audience: 'guardian',
+    acceptedIds: acceptedConsents,
+    subject: { subscriberId, phone: null },
+    context: consentContext(request, ip),
+  });
 
   // An adult is now behind the account, which is what the billing clock waits
   // for. No-op if an admin has not approved it yet.

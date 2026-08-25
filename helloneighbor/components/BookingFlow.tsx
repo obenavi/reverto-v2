@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EmptyState, Notice } from '@/components/ui';
-import { CUSTOMER_WAIVER, LIABILITY_VERSION } from '@/lib/liability';
+import { LIABILITY_VERSION, consentsFor } from '@/lib/liability';
 import { PAYMENT_METHODS, serviceKind } from '@/lib/catalog';
 import { formatPrice, formatSlot } from '@/lib/format';
 import { withinCurfew } from '@/lib/curfew';
@@ -57,8 +57,16 @@ export default function BookingFlow({
   // taps is friction, and here the friction is the point: a tick against a
   // sentence someone read is worth something, and a tick against a paragraph
   // they scrolled past is worth nothing at all.
-  const [waiver, setWaiver] = useState<boolean[]>(() => CUSTOMER_WAIVER.map(() => false));
-  const acceptedTerms = waiver.every(Boolean);
+  // Each consent is ticked and recorded on its own, and the ids are what get
+  // submitted — a single "I agree" proves somebody clicked, not what they read.
+  const customerConsents = consentsFor('customer');
+  const [ticked, setTicked] = useState<Record<string, boolean>>({});
+  const acceptedTerms = customerConsents
+    .filter((c) => c.required)
+    .every((c) => ticked[c.id]);
+  const acceptedConsentIds = customerConsents
+    .filter((c) => ticked[c.id])
+    .map((c) => c.id);
   const [noteConfirmed, setNoteConfirmed] = useState(false);
 
   const [busy, setBusy] = useState(false);
@@ -109,6 +117,7 @@ export default function BookingFlow({
         notes,
         payment_method: method,
         accepted_terms: acceptedTerms,
+        accepted_consents: acceptedConsentIds,
       }),
     });
     const body = await res.json();
@@ -461,22 +470,25 @@ export default function BookingFlow({
                   .
                 </p>
                 <div className="space-y-2">
-                  {CUSTOMER_WAIVER.map((text, i) => (
+                  {customerConsents.map((c) => (
                     <label
-                      key={i}
+                      key={c.id}
                       className="flex cursor-pointer items-start gap-2 text-[13px]"
                     >
                       <input
                         type="checkbox"
                         className="!mt-0.5 !w-auto"
-                        checked={waiver[i]}
-                        onChange={(e) => {
-                          const next = [...waiver];
-                          next[i] = e.target.checked;
-                          setWaiver(next);
-                        }}
+                        checked={Boolean(ticked[c.id])}
+                        onChange={(e) =>
+                          setTicked((prev) => ({ ...prev, [c.id]: e.target.checked }))
+                        }
                       />
-                      <span className="text-ink-muted">{text}</span>
+                      <span className="text-ink-muted">
+                        {c.text}
+                        {!c.required && (
+                          <span className="ml-1 text-ink-faint">(optional)</span>
+                        )}
+                      </span>
                     </label>
                   ))}
                 </div>

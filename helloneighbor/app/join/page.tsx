@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { SERVICE_KINDS } from '@/lib/catalog';
 import { OPERATOR_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
-import { PROVIDER_WAIVER, LIABILITY_VERSION } from '@/lib/liability';
+import { LIABILITY_VERSION, consentsFor } from '@/lib/liability';
 import { Notice, PageHeader, Shell } from '@/components/ui';
 import Turnstile from '@/components/Turnstile';
 
@@ -17,11 +17,13 @@ export default function JoinPage() {
     OPERATOR_ACKNOWLEDGEMENTS.map(() => false)
   );
 
-  const [waiver, setWaiver] = useState<boolean[]>(() => PROVIDER_WAIVER.map(() => false));
+  // The provider's consents, plus the young person's own assent when they are
+  // under 18 — a separate acceptance in their own name, not folded into their
+  // guardian's.
+  const providerConsents = consentsFor('provider');
+  const minorConsents = consentsFor('minor');
+  const [ticked, setTicked] = useState<Record<string, boolean>>({});
 
-  // Two separate documents, so both have to be ticked through before the form
-  // will submit.
-  const allAccepted = accepted.every(Boolean) && waiver.every(Boolean);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [age, setAge] = useState('');
 
@@ -29,6 +31,17 @@ export default function JoinPage() {
   // 16- and 17-year-olds do not, but customers are still told their age.
   const needsConsent = age !== '' && Number(age) < 16;
   const isYoung = age !== '' && Number(age) < 18;
+
+  // Guidelines and consents are separate documents, so both have to be ticked
+  // through. A young person's own assent is added to their own list rather
+  // than folded into their guardian's consent.
+  const applicableConsents = [...providerConsents, ...(isYoung ? minorConsents : [])];
+  const allAccepted =
+    accepted.every(Boolean) &&
+    applicableConsents.filter((c) => c.required).every((c) => ticked[c.id]);
+  const acceptedConsentIds = applicableConsents
+    .filter((c) => ticked[c.id])
+    .map((c) => c.id);
 
   function toggle(kind: string) {
     setInterests((prev) =>
@@ -60,6 +73,7 @@ export default function JoinPage() {
         bio: form.get('bio'),
         interests,
         accepted_terms: allAccepted,
+        accepted_consents: acceptedConsentIds,
         // Not asked for on the form — the browser already knows, and getting a
         // teenager to pick an IANA zone from a dropdown is a worse question
         // than any answer it produces.
@@ -309,19 +323,20 @@ export default function JoinPage() {
             .
           </p>
           <div className="space-y-2">
-            {PROVIDER_WAIVER.map((text, i) => (
-              <label key={i} className="flex cursor-pointer items-start gap-2 text-[13px]">
+            {applicableConsents.map((c) => (
+              <label key={c.id} className="flex cursor-pointer items-start gap-2 text-[13px]">
                 <input
                   type="checkbox"
                   className="!mt-0.5 !w-auto"
-                  checked={waiver[i]}
-                  onChange={(e) => {
-                    const next = [...waiver];
-                    next[i] = e.target.checked;
-                    setWaiver(next);
-                  }}
+                  checked={Boolean(ticked[c.id])}
+                  onChange={(e) =>
+                    setTicked((prev) => ({ ...prev, [c.id]: e.target.checked }))
+                  }
                 />
-                <span className="text-ink-muted">{text}</span>
+                <span className="text-ink-muted">
+                  {c.text}
+                  {!c.required && <span className="ml-1 text-ink-faint">(optional)</span>}
+                </span>
               </label>
             ))}
           </div>
