@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Notice } from '@/components/ui';
-import { LATE_OPTIONS, lateLabel, type LateMinutes, type TightPair } from '@/lib/scheduling';
+import { LATE_OPTIONS, lateLabel, type LateMinutes, type TightPair } from '@/lib/schedulingRules';
 import { formatSlot } from '@/lib/format';
 
 /**

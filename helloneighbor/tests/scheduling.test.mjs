@@ -7,7 +7,7 @@
 import { readFileSync } from 'fs';
 import { transpileModule, ModuleKind } from 'typescript';
 
-const src = readFileSync(new URL('../lib/scheduling.ts', import.meta.url), 'utf8')
+const src = readFileSync(new URL('../lib/schedulingRules.ts', import.meta.url), 'utf8')
   .replace(/import[\s\S]*?from '\.\/supabase';/, '')
   .replace(/export async function blockOverlappingSlots[\s\S]*?\n}\n/, '')
   .replace(/export async function releaseBlockedSlots[\s\S]*?\n}\n/, '');

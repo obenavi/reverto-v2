@@ -15,8 +15,8 @@ function load(path, strip = []) {
   }).outputText;
 }
 
-// parentCancel imports only relationshipWord from parents; inline it.
-const js = load('../lib/parentCancel.ts', [/import[\s\S]*?from '\.\/parents';/]).replace(
+// parentCancel imports only relationshipWord from parentRoles; inline it.
+const js = load('../lib/parentCancel.ts', [/import[\s\S]*?from '\.\/parentRoles';/]).replace(
   'export function cancellationMessage',
   `function relationshipWord(v) { return v === 'mom' ? 'mom' : v === 'dad' ? 'dad' : 'legal guardian'; }
 export function cancellationMessage`

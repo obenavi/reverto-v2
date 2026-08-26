@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shell, StatusPill } from '@/components/ui';
-import type { TightPair } from '@/lib/scheduling';
+import type { TightPair } from '@/lib/schedulingRules';
 import type {
   BookingRow,
   Conversation,
@@ -18,6 +18,7 @@ import type {
 import BookingsPanel from './BookingsPanel';
 import SchedulePanel from './SchedulePanel';
 import CommunitiesPanel from './CommunitiesPanel';
+import EmergencyContactsPanel from './EmergencyContactsPanel';
 import PingsPanel from './PingsPanel';
 import ServicesPanel from './ServicesPanel';
 import ProfilePanel from './ProfilePanel';
@@ -41,6 +42,7 @@ type TabId =
   | 'messages'
   | 'schedule'
   | 'communities'
+  | 'safety'
   | 'pings'
   | 'services'
   | 'profile'
@@ -98,6 +100,7 @@ export default function DashboardTabs(props: {
     { id: 'messages', label: 'Messages', badge: conversations.length },
     { id: 'schedule', label: 'Schedule' },
     { id: 'communities', label: 'Groups' },
+    { id: 'safety', label: 'Safety' },
     { id: 'pings', label: 'Pings', badge: newPings },
     { id: 'services', label: 'Services' },
     { id: 'profile', label: 'Profile' },
@@ -167,6 +170,7 @@ export default function DashboardTabs(props: {
         )}
         {tab === 'messages' && <MessagesPanel conversations={conversations} />}
         {tab === 'schedule' && <SchedulePanel slots={slots} curfew={curfew} />}
+        {tab === 'safety' && <EmergencyContactsPanel isMinor={operator.age < 18} />}
         {tab === 'communities' && (
           <CommunitiesPanel
             communityOnly={Boolean(operator.community_only)}

@@ -1,4 +1,4 @@
-import { relationshipWord } from './parents';
+import { relationshipWord } from './parentRoles';
 
 /**
  * The message a parent's cancellation sends to the customer.
