@@ -12,7 +12,12 @@ import { transpileModule, ModuleKind } from 'typescript';
 const src = readFileSync(new URL('../lib/billing.ts', import.meta.url), 'utf8')
   .replace(/^import .*$/gm, '')
   .replace(/export async function startBillingIfReady[\s\S]*$/m, '')
-  + '\nconst MINOR_BADGE_LIMIT = 18;\n';
+  + '\nconst MINOR_BADGE_LIMIT = 18;\n'
+  // billingState calls isFree from lib/promos; inline the real implementation
+  // rather than a stub, so a change to it shows up here.
+  + readFileSync(new URL('../lib/promos.ts', import.meta.url), 'utf8')
+      .match(/export function isFree[\s\S]*?\n}/)[0]
+      .replace('export ', '');
 
 const js = transpileModule(src, {
   compilerOptions: { module: ModuleKind.ESNext, target: 'ES2020' },
@@ -67,6 +72,28 @@ check('anchor set: charging', billingState(row({
 // being able to work, and must stop reading as "billing".
 check('losing the adult stops the charge reading', billingState(row({
   supervision: 'none', plan_started_at: '2026-08-01T00:00:00Z',
+})).reason, 'awaiting_adult');
+
+console.log('\n— a free period —');
+const future = new Date(Date.now() + 30 * 86400000).toISOString();
+const past = new Date(Date.now() - 1 * 86400000).toISOString();
+
+check('inside a promo reads as free', billingState(row({
+  supervision: 'waiver', plan_started_at: '2026-08-01T00:00:00Z', free_until: future,
+})).reason, 'free_period');
+check('and reports the date', billingState(row({
+  supervision: 'waiver', free_until: future,
+})).freeUntil, future);
+check('an expired promo goes back to billing', billingState(row({
+  supervision: 'waiver', plan_started_at: '2026-08-01T00:00:00Z', free_until: past,
+})).reason, 'billing');
+check('no promo is unaffected', billingState(row({
+  supervision: 'waiver', plan_started_at: '2026-08-01T00:00:00Z',
+})).reason, 'billing');
+// The one that matters: a promo does not let an unsupervised minor operate.
+// It only means nobody is charged for an account they cannot use.
+check('supervision still comes first', billingState(row({
+  supervision: 'none', free_until: future,
 })).reason, 'awaiting_adult');
 
 console.log(failures === 0 ? '\nall passed' : `\n${failures} FAILED`);

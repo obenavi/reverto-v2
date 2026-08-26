@@ -19,10 +19,13 @@
 import { supabaseAdmin } from './supabase';
 import { MINOR_BADGE_LIMIT } from './guardian';
 import type { Supervision } from './parents';
+import { isFree } from './promos';
 
 export type BillingReason =
   /** Charging, or about to. */
   | 'billing'
+  /** Inside a free period from a promo code. */
+  | 'free_period'
   /** Under 18 with no adult behind the account. Not charged, cannot go live. */
   | 'awaiting_adult'
   /** Adult is confirmed, but an admin has not approved the account yet. */
@@ -32,6 +35,8 @@ export type BillingState = {
   reason: BillingReason;
   startedAt: string | null;
   renewsAt: string | null;
+  /** Set while a promo period is running. */
+  freeUntil: string | null;
 };
 
 /** Whether this account is old enough or supervised enough to be charged. */
@@ -72,12 +77,21 @@ export function billingState(row: {
   status: string;
   plan_started_at: string | null;
   plan_renews_at: string | null;
+  free_until?: string | null;
 }): BillingState {
-  const base = { startedAt: row.plan_started_at, renewsAt: row.plan_renews_at };
+  const base = {
+    startedAt: row.plan_started_at,
+    renewsAt: row.plan_renews_at,
+    freeUntil: row.free_until ?? null,
+  };
 
+  // Supervision comes first even inside a free period. A minor with no adult
+  // behind them cannot take work, and a promo code does not change that — it
+  // only means nobody is being charged for the account they cannot use.
   if (!supervisionSettled(row.age, row.supervision)) {
     return { reason: 'awaiting_adult', ...base };
   }
+  if (isFree(row.free_until)) return { reason: 'free_period', ...base };
   if (!row.plan_started_at) return { reason: 'awaiting_approval', ...base };
   return { reason: 'billing', ...base };
 }
@@ -94,7 +108,7 @@ export async function startBillingIfReady(subscriberId: string): Promise<Billing
 
   const { data } = await db
     .from('subscribers')
-    .select('id, age, supervision, status, plan_started_at, plan_renews_at')
+    .select('id, age, supervision, status, plan_started_at, plan_renews_at, free_until')
     .eq('id', subscriberId)
     .maybeSingle();
 
@@ -108,7 +122,14 @@ export async function startBillingIfReady(subscriberId: string): Promise<Billing
 
   const now = new Date();
   const startedAt = now.toISOString();
-  const renewsAt = addMonth(now).toISOString();
+
+  // A free period defers the first renewal rather than running alongside it.
+  // Charging on the natural date while somebody is inside a promo would make
+  // the promo meaningless, and starting the clock afterwards would quietly
+  // shorten it.
+  const natural = addMonth(now).toISOString();
+  const free = data.free_until;
+  const renewsAt = free && free > natural ? free : natural;
 
   const { error } = await db
     .from('subscribers')
@@ -122,5 +143,10 @@ export async function startBillingIfReady(subscriberId: string): Promise<Billing
     return current;
   }
 
-  return { reason: 'billing', startedAt, renewsAt };
+  return {
+    reason: isFree(free) ? 'free_period' : 'billing',
+    startedAt,
+    renewsAt,
+    freeUntil: free ?? null,
+  };
 }

@@ -3,6 +3,7 @@
 import { PLANS, PLAN_ORDER, planPrice, type Capacity, type PlanId } from '@/lib/plans';
 import type { BillingState } from '@/lib/billing';
 import { Notice } from '@/components/ui';
+import PromoCode from './PromoCode';
 
 /**
  * What the operator is paying for, and where they stand against it this week.
@@ -34,12 +35,20 @@ export default function PlanPanel({
           code. Your first month begins that day, not today.
         </Notice>
       )}
+      {billing.reason === 'free_period' && (
+        <Notice tone="success">
+          You&apos;re on a free period. Nothing is charged until it ends, and we will tell
+          you before it does.
+        </Notice>
+      )}
       {billing.reason === 'awaiting_approval' && (
         <Notice tone="info">
           You&apos;re not being charged yet. Your first month starts the day we approve
           your account.
         </Notice>
       )}
+
+      <PromoCode freeUntil={billing.freeUntil} />
 
       <section className="card">
         <div className="flex items-start justify-between gap-3">
