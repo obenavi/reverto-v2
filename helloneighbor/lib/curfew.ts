@@ -35,9 +35,22 @@ export function formatCurfew(minutes: number): string {
  */
 export function effectiveCurfewMinutes(
   age: number,
-  parentCurfewMinutes: number | null | undefined
+  parentCurfewMinutes: number | null | undefined,
+  /**
+   * The floor for the state this person is in, from lib/jurisdictions.
+   * Falls back to the platform default when a caller has no jurisdiction —
+   * which is only the case in tests and in code that predates per-state rules.
+   */
+  stateCurfewMinutes?: number | null
 ): number | null {
-  const platform = age < CURFEW_AGE_LIMIT ? PLATFORM_CURFEW_MINUTES : null;
+  const floor =
+    stateCurfewMinutes !== undefined
+      ? stateCurfewMinutes
+      : age < CURFEW_AGE_LIMIT
+        ? PLATFORM_CURFEW_MINUTES
+        : null;
+
+  const platform = floor;
 
   if (parentCurfewMinutes == null) return platform;
   if (platform == null) return parentCurfewMinutes;

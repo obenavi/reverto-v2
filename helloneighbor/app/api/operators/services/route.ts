@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireOperator } from '@/lib/guards';
+import { jurisdictionFor, kindAllowedIn } from '@/lib/jurisdictions';
 import { SERVICE_KINDS } from '@/lib/catalog';
 import { reviewContent } from '@/lib/supervisor';
 import { PLANS, kindAllowedOnPlan, type PlanId } from '@/lib/plans';
@@ -34,9 +35,22 @@ export async function POST(request: Request) {
   // What the operator's plan allows.
   const { data: account } = await supabaseAdmin()
     .from('subscribers')
-    .select('plan')
+    .select('plan, state')
     .eq('id', operatorId)
     .maybeSingle();
+
+  // The state gate runs before the plan gate. A category their state does not
+  // allow is not something a paid upgrade can unlock.
+  const lookup = jurisdictionFor(account?.state);
+  if (!lookup.enabled) {
+    return NextResponse.json({ error: lookup.message, stateNotEnabled: true }, { status: 403 });
+  }
+  if (!kindAllowedIn(lookup.jurisdiction, kind)) {
+    return NextResponse.json(
+      { error: `That service is not available in ${lookup.jurisdiction.name}.` },
+      { status: 403 }
+    );
+  }
 
   const planId = (account?.plan ?? 'basic') as PlanId;
   const planDef = PLANS[planId];

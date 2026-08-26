@@ -7,6 +7,7 @@
  * bundle.
  */
 import { supabaseAdmin } from '@/lib/supabase';
+import { jurisdictionCurfew, jurisdictionFor } from '@/lib/jurisdictions';
 import {
   DEFAULT_TIMEZONE,
   effectiveCurfewMinutes,
@@ -25,15 +26,23 @@ export type OperatorCurfew = {
 export async function operatorCurfew(operatorId: string): Promise<OperatorCurfew> {
   const { data } = await supabaseAdmin()
     .from('subscribers')
-    .select('age, timezone, curfew_minutes')
+    .select('age, timezone, curfew_minutes, state')
     .eq('id', operatorId)
     .maybeSingle();
 
   if (!data) return { timezone: DEFAULT_TIMEZONE, curfewMinutes: null };
 
+  // The platform floor now comes from the state rather than a constant. A
+  // jurisdiction with a stricter curfew than 9pm tightens it for everyone
+  // there; a parent can tighten it further and never loosen it.
+  const lookup = jurisdictionFor(data.state);
+  const stateCurfew = lookup.enabled
+    ? jurisdictionCurfew(lookup.jurisdiction, data.age)
+    : null;
+
   return {
     timezone: data.timezone ?? DEFAULT_TIMEZONE,
-    curfewMinutes: effectiveCurfewMinutes(data.age, data.curfew_minutes),
+    curfewMinutes: effectiveCurfewMinutes(data.age, data.curfew_minutes, stateCurfew),
   };
 }
 

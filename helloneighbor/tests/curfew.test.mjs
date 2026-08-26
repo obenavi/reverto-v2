@@ -58,6 +58,19 @@ check('a parent limit still binds an 18-year-old they set it on', effectiveCurfe
 check('17 is capped', effectiveCurfewMinutes(17, null), 21 * 60);
 check('18 is not', effectiveCurfewMinutes(18, null), null);
 
+console.log('\n— the floor can come from the state —');
+// A state stricter than the 9pm default tightens it for everyone there.
+check('a 7pm state floor beats the default', effectiveCurfewMinutes(15, null, 19 * 60), 19 * 60);
+// And a parent can still tighten it further.
+check('a parent tightens a state floor', effectiveCurfewMinutes(15, 18 * 60, 19 * 60), 18 * 60);
+check('but cannot loosen it', effectiveCurfewMinutes(15, 23 * 60, 19 * 60), 19 * 60);
+// A state with no floor for this age leaves only whatever a parent set.
+check('no state floor, no parent limit: none', effectiveCurfewMinutes(19, null, null), null);
+check('no state floor but a parent limit: the parent', effectiveCurfewMinutes(19, 20 * 60, null), 20 * 60);
+// Omitting the argument entirely keeps the old behaviour for callers that
+// predate per-state rules.
+check('omitting it falls back to the platform default', effectiveCurfewMinutes(15, null), 21 * 60);
+
 console.log('\n— reading the clock in the right zone —');
 check('8pm EDT reads as 8pm', localMinutes(new Date(summer(20)), NY), 20 * 60);
 check('8pm EST reads as 8pm too', localMinutes(new Date(winter(20)), NY), 20 * 60);

@@ -49,9 +49,20 @@ Feature gating exists for these, and is what a jurisdiction row turns on:
 - payment method (per-provider, and the card path is off)
 - licensing requirements (regulated categories blocked outright)
 
-Not yet built: per-state feature flags. Today the age floors and the prohibited
-list are global constants, which is safe only because one jurisdiction is live.
-**Enabling a second state requires this to exist first.**
+These are now per-state, in `lib/jurisdictions.ts`. A state with no entry there
+is not enabled and nothing works for anyone in it — absence means "no", never
+"default to California".
+
+**No jurisdiction currently has a counsel sign-off**, and an entry without one
+is refused in production. As things stand a production deploy refuses every
+signup in every state. That is the intended behaviour: the fix is a lawyer's
+name in that file, not a code change.
+
+One gap remains. The jurisdiction is taken from the provider's state as a proxy
+for where the work happens. Bookings are zip-matched into neighborhood groups
+and providers work near home, so the two are the same in almost every case — but
+a genuinely cross-border booking would need the customer's address to decide.
+**Close this before enabling two adjacent states.**
 
 ## Launch gating
 
@@ -99,7 +110,7 @@ before launch**, and clause 16 must be updated the day cover exists.
 - [ ] Incident-response plan, written down
 - [ ] Moderator access controls and training notes
 - [ ] Written enforcement standards and periodic review for inconsistency
-- [ ] Per-state feature flags
+- [x] Per-state feature flags
 - [ ] Appeal workflow surfaced in the app rather than by email
 
 ## Recommended sequence

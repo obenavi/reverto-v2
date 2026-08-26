@@ -5,8 +5,11 @@ import Link from 'next/link';
 import { SERVICE_KINDS } from '@/lib/catalog';
 import { OPERATOR_ACKNOWLEDGEMENTS } from '@/lib/guidelines';
 import { LIABILITY_VERSION, consentsFor } from '@/lib/liability';
+import { complianceNotes, enabledJurisdictions } from '@/lib/jurisdictions';
 import { Notice, PageHeader, Shell } from '@/components/ui';
 import Turnstile from '@/components/Turnstile';
+
+const STATES = enabledJurisdictions();
 
 export default function JoinPage() {
   const [submitting, setSubmitting] = useState(false);
@@ -26,11 +29,17 @@ export default function JoinPage() {
 
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [age, setAge] = useState('');
+  const [state, setState] = useState('');
 
   // Under-16s need a guardian's approval before the account can be approved.
   // 16- and 17-year-olds do not, but customers are still told their age.
   const needsConsent = age !== '' && Number(age) < 16;
   const isYoung = age !== '' && Number(age) < 18;
+
+  // What this state requires of a young person, shown while they choose it
+  // rather than buried in the terms.
+  const chosen = STATES.find((j) => j.code === state);
+  const stateNotes = chosen && isYoung ? complianceNotes(chosen) : [];
 
   // Guidelines and consents are separate documents, so both have to be ticked
   // through. A young person's own assent is added to their own list rather
@@ -63,6 +72,7 @@ export default function JoinPage() {
         phone: form.get('phone'),
         area: form.get('area'),
         zip_code: form.get('zip_code'),
+        state: form.get('state'),
         age: Number(form.get('age')),
         email: form.get('email'),
         guardian_name: form.get('guardian_name'),
@@ -144,6 +154,33 @@ export default function JoinPage() {
         <div>
           <label htmlFor="area">Neighborhood</label>
           <input id="area" name="area" required placeholder="Hidden Hills, CA" />
+        </div>
+
+        <div>
+          <label htmlFor="state">State</label>
+          <select id="state" name="state" value={state} onChange={(e) => setState(e.target.value)} required>
+            <option value="">Pick your state</option>
+            {STATES.map((j) => (
+              <option key={j.code} value={j.code}>
+                {j.name}
+              </option>
+            ))}
+          </select>
+          {/* The list IS the feature flag. A state that is not open does not
+              appear, rather than appearing and failing on submit. */}
+          <p className="mt-1 text-[12px] text-ink-faint">
+            We open one state at a time, after checking the rules that apply to young
+            people working there. If yours is not here yet, it is coming.
+          </p>
+          {stateNotes.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {stateNotes.map((note, i) => (
+                <p key={i} className="text-[12px] text-warning">
+                  {note}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
 
         <div>

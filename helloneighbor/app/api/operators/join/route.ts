@@ -9,6 +9,7 @@ import { LIABILITY_VERSION } from '@/lib/liability';
 import { consentContext, missingConsents, recordConsents } from '@/lib/consent';
 import { phoneIsBanned } from '@/lib/bans';
 import { normalizeZip } from '@/lib/communities';
+import { jurisdictionFor, providerAgeAllowed, kindAllowedIn } from '@/lib/jurisdictions';
 import { reviewContent } from '@/lib/supervisor';
 import { clientIp, enforceRateLimit } from '@/lib/ratelimit';
 import { verifyTurnstile } from '@/lib/turnstile';
@@ -42,8 +43,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'That phone number does not look right.' }, { status: 400 });
   }
   if (!area) return NextResponse.json({ error: 'Neighborhood is required.' }, { status: 400 });
-  if (!Number.isInteger(age) || age < 14 || age > 120) {
-    return NextResponse.json({ error: 'You need to be at least 14 to sign up.' }, { status: 400 });
+  // Shape only. The real floor is the jurisdiction's, checked below once we
+  // know which state's rules apply — a hardcoded 14 here would quietly become
+  // the answer in a state whose floor is higher.
+  if (!Number.isInteger(age) || age < 1 || age > 120) {
+    return NextResponse.json({ error: 'How old are you?' }, { status: 400 });
   }
   if (body.accepted_terms !== true) {
     return NextResponse.json(
@@ -120,6 +124,29 @@ export async function POST(request: Request) {
     );
   }
 
+  // Which state's rules apply. Fails closed: an unlisted or unreviewed state
+  // refuses rather than inheriting somebody else's numbers.
+  const lookup = jurisdictionFor(String(body.state ?? ''));
+  if (!lookup.enabled) {
+    return NextResponse.json({ error: lookup.message, stateNotEnabled: true }, { status: 403 });
+  }
+  const jurisdiction = lookup.jurisdiction;
+
+  // The age floor comes from the jurisdiction now, not a global constant.
+  const ageAllowed = providerAgeAllowed(jurisdiction, age);
+  if (!ageAllowed.ok) {
+    return NextResponse.json({ error: ageAllowed.error }, { status: 400 });
+  }
+
+  // A category permitted in one state is not permitted everywhere.
+  const blocked = interests.filter((kind) => !kindAllowedIn(jurisdiction, kind));
+  if (blocked.length > 0) {
+    return NextResponse.json(
+      { error: `Some of those are not available in ${jurisdiction.name}.`, blocked },
+      { status: 400 }
+    );
+  }
+
   // A ban that lets someone sign up again the next day is not a ban.
   const banned = await phoneIsBanned(phone);
   if (banned.blocked) {
@@ -155,6 +182,7 @@ export async function POST(request: Request) {
       timezone: isValidTimezone(body.timezone) ? body.timezone : DEFAULT_TIMEZONE,
       // Used to check a neighborhood group against where they actually live.
       zip_code: normalizeZip(String(body.zip_code ?? '')),
+      state: jurisdiction.code,
     })
     .select('id')
     .single();
