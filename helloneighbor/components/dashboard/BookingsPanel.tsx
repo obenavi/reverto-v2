@@ -6,6 +6,7 @@ import { paymentLabel } from '@/lib/catalog';
 import type { BookingRow } from '@/lib/types';
 import { useMutate } from './useMutate';
 import CustomerCard, { ReviewCustomer } from './CustomerCard';
+import SafetyButton from './SafetyButton';
 
 export default function BookingsPanel({ bookings }: { bookings: BookingRow[] }) {
   const { mutate, busy, error } = useMutate();
@@ -75,6 +76,8 @@ export default function BookingsPanel({ bookings }: { bookings: BookingRow[] }) 
           {booking.status === 'completed' && (
             <ReviewCustomer bookingId={booking.id} name={booking.client_name} />
           )}
+
+          {booking.status === 'confirmed' && <SafetyButton bookingId={booking.id} />}
 
           {booking.status === 'confirmed' && (
             <div className="mt-3 flex gap-2">

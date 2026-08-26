@@ -21,6 +21,11 @@ export const LIMITS = {
   ping: { windowSeconds: 3600, max: 10 },
   message: { windowSeconds: 60, max: 20 },
   sms: { windowSeconds: 3600, max: 20 },
+  // Deliberately the loosest limit here. Somebody pressing the help button
+  // five times is frightened, not abusive, and refusing the fifth press to
+  // protect an SMS bill would be the wrong trade by an enormous margin. The
+  // cap exists only to stop a runaway loop, not to police a person.
+  safety: { windowSeconds: 3600, max: 30 },
 } as const satisfies Record<string, Limit>;
 
 /**
