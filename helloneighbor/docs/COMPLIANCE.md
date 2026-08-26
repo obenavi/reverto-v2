@@ -94,7 +94,7 @@ before launch**, and clause 16 must be updated the day cover exists.
 - [x] One-tap safety reporting from an active booking
 - [x] Emergency contact and guardian escalation path
 - [x] Check-in / check-out, which is what makes the curfew observable
-- [ ] Documented message-retention job enforcing the two-year period in clause 18
+- [x] Documented message-retention job enforcing the two-year period in clause 18
 - [ ] Law-enforcement request process, written down
 - [ ] Incident-response plan, written down
 - [ ] Moderator access controls and training notes

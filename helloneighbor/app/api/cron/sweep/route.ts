@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { OWNER_ACTIVITY_DAYS } from '@/lib/communities';
 import { OVERDUE_GRACE_MINUTES } from '@/lib/attendance';
 import { escalate } from '@/lib/escalation';
+import { retentionCutoff, retentionDecision } from '@/lib/retention';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,9 +103,75 @@ export async function GET(request: Request) {
     escalated += 1;
   }
 
+  // Clause 18 says booking messages are kept for two years, and longer only
+  // while something needs them. A promise with a number in it that nothing
+  // enforces is worse than the vague version it replaced.
+  const cutoff = retentionCutoff();
+
+  const { data: expiring, error: expiringError } = await db
+    .from('conversations')
+    .select('id, booking_id, bookings (id, slots (ends_at))')
+    .lt('last_message_at', cutoff)
+    .limit(200);
+
+  if (expiringError) console.error('[cron:sweep] retention lookup', expiringError);
+
+  let purged = 0;
+  let held = 0;
+
+  for (const conversation of expiring ?? []) {
+    const booking = conversation.bookings as unknown as {
+      id: string;
+      slots: { ends_at: string } | null;
+    } | null;
+    if (!booking?.slots) continue;
+
+    // Holds are read per conversation rather than joined, because getting this
+    // wrong deletes the messages a live dispute turns on.
+    const [dispute, report, enforcement] = await Promise.all([
+      db.from('disputes').select('status, resolved_at').eq('booking_id', booking.id).maybeSingle(),
+      db
+        .from('reports')
+        .select('status')
+        .eq('subject_id', booking.id)
+        .eq('subject_type', 'booking')
+        .neq('status', 'dismissed')
+        .limit(1),
+      db.from('enforcement_actions').select('id').eq('dispute_id', booking.id).limit(1),
+    ]);
+
+    const decision = retentionDecision({
+      bookingEndedAt: booking.slots.ends_at,
+      hasOpenDispute: dispute.data?.status === 'open',
+      hasOpenReport: (report.data ?? []).some((r) => r.status !== 'actioned'),
+      resolvedAt: dispute.data?.resolved_at ?? null,
+      hasEnforcement: (enforcement.data ?? []).length > 0,
+    });
+
+    if (!decision.deleteMessages) {
+      held += 1;
+      continue;
+    }
+
+    // Bodies go; the conversation and the booking stay. Those are the other
+    // party's record too, and clause 18 says exactly that.
+    const { error: purgeError } = await db
+      .from('messages')
+      .delete()
+      .eq('conversation_id', conversation.id);
+
+    if (purgeError) {
+      console.error('[cron:sweep] purge', purgeError);
+      continue;
+    }
+    purged += 1;
+  }
+
   return NextResponse.json({
     ok: true,
     rateLimitRowsDeleted: swept ?? 0,
+    conversationsPurged: purged,
+    conversationsHeld: held,
     overdueEscalated: escalated,
     communitiesGoneQuiet: goneQuiet?.length ?? 0,
   });
