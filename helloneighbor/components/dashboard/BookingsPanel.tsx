@@ -7,6 +7,7 @@ import type { BookingRow } from '@/lib/types';
 import { useMutate } from './useMutate';
 import CustomerCard, { ReviewCustomer } from './CustomerCard';
 import SafetyButton from './SafetyButton';
+import CheckInOut from './CheckInOut';
 
 export default function BookingsPanel({ bookings }: { bookings: BookingRow[] }) {
   const { mutate, busy, error } = useMutate();
@@ -75,6 +76,17 @@ export default function BookingsPanel({ bookings }: { bookings: BookingRow[] }) 
 
           {booking.status === 'completed' && (
             <ReviewCustomer bookingId={booking.id} name={booking.client_name} />
+          )}
+
+          {booking.slots && (
+            <CheckInOut
+              bookingId={booking.id}
+              status={booking.status}
+              startsAt={booking.slots.starts_at}
+              endsAt={booking.slots.ends_at}
+              checkedInAt={booking.checked_in_at ?? null}
+              checkedOutAt={booking.checked_out_at ?? null}
+            />
           )}
 
           {booking.status === 'confirmed' && <SafetyButton bookingId={booking.id} />}

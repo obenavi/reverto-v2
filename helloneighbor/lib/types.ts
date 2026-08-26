@@ -180,6 +180,8 @@ export interface OperatorProfile {
 
 /** A booking joined with the bits of its service and slot the UI displays. */
 export type BookingRow = Booking & {
+  checked_in_at?: string | null;
+  checked_out_at?: string | null;
   services: { title: string; kind: string } | null;
   slots: { starts_at: string; ends_at: string } | null;
 };
