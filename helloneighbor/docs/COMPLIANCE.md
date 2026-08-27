@@ -68,10 +68,15 @@ than one state's entry being taken wholesale. Neither legislature wrote its
 number expecting the other's to override it, so picking one would silently relax
 something. Both states must be open or the booking is refused.
 
-Remaining known limit: the work state is what the customer selects, not a
-verified property of the address. A customer who picks the wrong one gets the
-wrong rules. Geocoding the address would close that, and is worth doing before
-two adjacent states are open.
+The work state is derived from the customer's zip code where the zip falls in
+an allocated block, and only falls back to what they selected when it does not.
+The ranges are in `lib/zipstate.ts`.
+
+Remaining known limit: a range table cannot see the handful of zip prefixes that
+genuinely straddle a state line, and it says nothing about whether the address
+within that zip is real. A geocoder would close both. Worth doing before two
+adjacent states are open; a mismatch today is flagged for review rather than
+refused, so nobody living on a county line is locked out.
 
 ## Launch gating
 

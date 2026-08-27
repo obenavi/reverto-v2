@@ -24,7 +24,8 @@ import { sendPush, pushTemplates } from '@/lib/push';
 import { blockOverlappingSlots, releaseBlockedSlots } from '@/lib/scheduling';
 import { operatorCapacity } from '@/lib/capacity';
 import { curfewRefusal } from '@/lib/curfewPolicy';
-import { customerAgeAllowed, jurisdictionForWork, kindAllowedIn } from '@/lib/jurisdictions';
+import { jurisdictionForWork, kindAllowedIn } from '@/lib/jurisdictions';
+import { stateForZip } from '@/lib/zipstate';
 import type { PlanId } from '@/lib/plans';
 import { verifyTurnstile } from '@/lib/turnstile';
 import type { PaymentMethod } from '@/lib/types';
@@ -211,7 +212,12 @@ export async function POST(request: Request) {
   // side and mows a lawn on the other is working under the other state's child
   // labor law. Both states have to be open, and where they differ the stricter
   // of each rule applies.
-  const workState = String(body.work_state ?? '').trim().toUpperCase() || operator.state;
+  // Derived from the customer's zip where we can, rather than trusted from the
+  // dropdown. A selected state is a claim; a zip is at least checkable, and
+  // this is the field that decides which child labor law applies.
+  const claimedState = String(body.work_state ?? '').trim().toUpperCase();
+  const zipDerived = stateForZip(String(body.work_zip ?? ''));
+  const workState = zipDerived.known ? zipDerived.state : claimedState || operator.state;
 
   const governingLookup = jurisdictionForWork({
     providerState: operator.state,

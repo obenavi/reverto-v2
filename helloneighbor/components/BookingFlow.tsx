@@ -59,6 +59,7 @@ export default function BookingFlow({
   // exception is a job across a state line, and there the other state's rules
   // are the ones that protect the young person turning up.
   const [workState, setWorkState] = useState<string>(operator.state ?? '');
+  const [workZip, setWorkZip] = useState('');
   const [notes, setNotes] = useState('');
   const [method, setMethod] = useState<PaymentMethod>(operator.payment_methods[0] ?? 'cash');
 
@@ -124,6 +125,7 @@ export default function BookingFlow({
         client_phone: phone,
         client_address: address,
         work_state: workState,
+        work_zip: workZip,
         notes,
         payment_method: method,
         accepted_terms: acceptedTerms,
@@ -368,6 +370,21 @@ export default function BookingFlow({
           <div>
             <label htmlFor="caddr">Address</label>
             <input id="caddr" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="czip">Zip code</label>
+            <input
+              id="czip"
+              value={workZip}
+              onChange={(e) => setWorkZip(e.target.value)}
+              inputMode="numeric"
+              placeholder="02139"
+            />
+            {/* The zip decides which state's rules apply to the job, which is
+                why it is asked rather than inferred from the address text. */}
+            <p className="mt-1 text-[12px] text-ink-faint">
+              Tells us which state&apos;s rules apply to this job.
+            </p>
           </div>
           {WORK_STATES.length > 1 && (
             <div>

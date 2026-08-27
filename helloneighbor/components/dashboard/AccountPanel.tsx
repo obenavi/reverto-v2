@@ -8,6 +8,7 @@ import type { BookingRow, Subscriber } from '@/lib/types';
 import { useMutate } from './useMutate';
 import AgeCheck from '@/components/AgeCheck';
 import LinkParentPanel from './LinkParentPanel';
+import AddressPanel from './AddressPanel';
 
 /**
  * Earnings, blocked contacts, and account deletion — the three things an
@@ -58,6 +59,11 @@ export default function AccountPanel({
 
   return (
     <div className="space-y-4">
+      <AddressPanel
+        currentZip={operator.zip_code ?? null}
+        currentState={operator.state ?? null}
+      />
+
       <LinkParentPanel
         supervision={operator.supervision ?? 'none'}
         age={operator.age}
