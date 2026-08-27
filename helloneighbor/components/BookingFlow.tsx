@@ -8,6 +8,7 @@ import { LIABILITY_VERSION, consentsFor } from '@/lib/liability';
 import { PAYMENT_METHODS, serviceKind } from '@/lib/catalog';
 import { formatPrice, formatSlot } from '@/lib/format';
 import { withinCurfew } from '@/lib/curfew';
+import { enabledJurisdictions } from '@/lib/jurisdictions';
 import type {
   GalleryPhoto,
   PaymentMethod,
@@ -25,6 +26,10 @@ type Curfew = { timezone: string; curfewMinutes: number | null };
 type Step = 1 | 2 | 3 | 4;
 
 const STEP_LABELS = ['Service', 'Time', 'Details', 'Confirm'];
+
+// Only rendered as a choice when more than one state is open; with one it is
+// not a question worth asking.
+const WORK_STATES = enabledJurisdictions();
 
 export default function BookingFlow({
   operator,
@@ -50,6 +55,10 @@ export default function BookingFlow({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  // Defaults to the provider's state, which is right almost every time. The
+  // exception is a job across a state line, and there the other state's rules
+  // are the ones that protect the young person turning up.
+  const [workState, setWorkState] = useState<string>(operator.state ?? '');
   const [notes, setNotes] = useState('');
   const [method, setMethod] = useState<PaymentMethod>(operator.payment_methods[0] ?? 'cash');
 
@@ -114,6 +123,7 @@ export default function BookingFlow({
         client_name: name,
         client_phone: phone,
         client_address: address,
+        work_state: workState,
         notes,
         payment_method: method,
         accepted_terms: acceptedTerms,
@@ -359,6 +369,27 @@ export default function BookingFlow({
             <label htmlFor="caddr">Address</label>
             <input id="caddr" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
+          {WORK_STATES.length > 1 && (
+            <div>
+              <label htmlFor="cstate">State</label>
+              <select
+                id="cstate"
+                value={workState}
+                onChange={(e) => setWorkState(e.target.value)}
+                required
+              >
+                {WORK_STATES.map((j) => (
+                  <option key={j.code} value={j.code}>
+                    {j.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[12px] text-ink-faint">
+                Where the work happens decides the rules that apply to it — which matters
+                if you and {operator.name} are on different sides of a state line.
+              </p>
+            </div>
+          )}
           <div>
             <label htmlFor="cnotes">
               A note for {operator.name} <span className="font-normal text-ink-faint">(optional)</span>

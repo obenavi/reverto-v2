@@ -24,6 +24,7 @@ import { sendPush, pushTemplates } from '@/lib/push';
 import { blockOverlappingSlots, releaseBlockedSlots } from '@/lib/scheduling';
 import { operatorCapacity } from '@/lib/capacity';
 import { curfewRefusal } from '@/lib/curfewPolicy';
+import { customerAgeAllowed, jurisdictionForWork, kindAllowedIn } from '@/lib/jurisdictions';
 import type { PlanId } from '@/lib/plans';
 import { verifyTurnstile } from '@/lib/turnstile';
 import type { PaymentMethod } from '@/lib/types';
@@ -130,7 +131,7 @@ export async function POST(request: Request) {
 
   const { data: operator } = await db
     .from('subscribers')
-    .select('id, name, phone, status, payment_methods, prefers_advance_payment, plan, community_only')
+    .select('id, name, phone, status, payment_methods, prefers_advance_payment, plan, community_only, state')
     .eq('id', operatorId)
     .maybeSingle();
 
@@ -197,13 +198,39 @@ export async function POST(request: Request) {
 
   const { data: service } = await db
     .from('services')
-    .select('id, title, price_cents, duration_min')
+    .select('id, title, price_cents, duration_min, kind')
     .eq('id', serviceId)
     .eq('operator_id', operatorId)
     .eq('active', true)
     .maybeSingle();
 
   if (!service) return NextResponse.json({ error: 'That service is unavailable.' }, { status: 404 });
+
+  // The state the work happens in governs the job — not the one the provider
+  // lives in. It matters at a state line: a fifteen-year-old who lives one
+  // side and mows a lawn on the other is working under the other state's child
+  // labor law. Both states have to be open, and where they differ the stricter
+  // of each rule applies.
+  const workState = String(body.work_state ?? '').trim().toUpperCase() || operator.state;
+
+  const governingLookup = jurisdictionForWork({
+    providerState: operator.state,
+    workState,
+  });
+  if (!governingLookup.ok) {
+    return NextResponse.json(
+      { error: governingLookup.message, stateNotEnabled: true },
+      { status: 403 }
+    );
+  }
+  const governing = governingLookup.governing;
+
+  if (!kindAllowedIn(governing, service.kind)) {
+    return NextResponse.json(
+      { error: `That service is not available in ${governing.name}.` },
+      { status: 403 }
+    );
+  }
 
   // Curfew is about when the job ENDS. A slot may sit comfortably before 9pm
   // and still be refused because this particular service takes two hours. The
@@ -226,6 +253,9 @@ export async function POST(request: Request) {
       startsAt: slotForCurfew.data.starts_at,
       durationMin: Math.max(slotMinutes, service.duration_min),
       audience: 'neighbor',
+      // The curfew that applies is the work's, already merged with the
+      // provider's home state to the stricter of the two.
+      workState,
     });
     if (refusal) return NextResponse.json({ error: refusal }, { status: 409 });
   }
@@ -275,6 +305,7 @@ export async function POST(request: Request) {
       // Recorded even when the switch is off — it is what a provider's page
       // can later show as a reason to trust them.
       community_id: community.sharedCommunityId,
+      work_state: governing.code,
     })
     .select('*')
     .single();

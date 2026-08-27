@@ -7,7 +7,7 @@
  * bundle.
  */
 import { supabaseAdmin } from '@/lib/supabase';
-import { jurisdictionCurfew, jurisdictionFor } from '@/lib/jurisdictions';
+import { jurisdictionCurfew, jurisdictionFor, jurisdictionForWork } from '@/lib/jurisdictions';
 import {
   DEFAULT_TIMEZONE,
   effectiveCurfewMinutes,
@@ -22,8 +22,18 @@ export type OperatorCurfew = {
   curfewMinutes: number | null;
 };
 
-/** The curfew in force for one operator, platform cap and parent limit merged. */
-export async function operatorCurfew(operatorId: string): Promise<OperatorCurfew> {
+/**
+ * The curfew in force for one operator, floor and parent limit merged.
+ *
+ * `workState` overrides where the floor comes from. A job across a state line
+ * is governed by the state it happens in, not the one the provider lives in —
+ * and the merge in jurisdictionForWork already took the stricter of the two,
+ * so passing it here is what makes that reach the actual check.
+ */
+export async function operatorCurfew(
+  operatorId: string,
+  workState?: string | null
+): Promise<OperatorCurfew> {
   const { data } = await supabaseAdmin()
     .from('subscribers')
     .select('age, timezone, curfew_minutes, state')
@@ -35,10 +45,17 @@ export async function operatorCurfew(operatorId: string): Promise<OperatorCurfew
   // The platform floor now comes from the state rather than a constant. A
   // jurisdiction with a stricter curfew than 9pm tightens it for everyone
   // there; a parent can tighten it further and never loosen it.
-  const lookup = jurisdictionFor(data.state);
-  const stateCurfew = lookup.enabled
-    ? jurisdictionCurfew(lookup.jurisdiction, data.age)
-    : null;
+  const lookup = workState
+    ? jurisdictionForWork({ providerState: data.state, workState })
+    : jurisdictionFor(data.state);
+
+  const governing = 'governing' in lookup && lookup.ok
+    ? lookup.governing
+    : 'enabled' in lookup && lookup.enabled
+      ? lookup.jurisdiction
+      : null;
+
+  const stateCurfew = governing ? jurisdictionCurfew(governing, data.age) : null;
 
   return {
     timezone: data.timezone ?? DEFAULT_TIMEZONE,
@@ -59,9 +76,11 @@ export async function curfewRefusal(args: {
   startsAt: string | Date;
   durationMin: number;
   audience: 'operator' | 'neighbor';
+  /** Where the work happens, when it differs from where the provider lives. */
+  workState?: string | null;
   curfew?: OperatorCurfew;
 }): Promise<string | null> {
-  const curfew = args.curfew ?? (await operatorCurfew(args.operatorId));
+  const curfew = args.curfew ?? (await operatorCurfew(args.operatorId, args.workState));
   if (curfew.curfewMinutes == null) return null;
 
   const check = withinCurfew({

@@ -58,11 +58,20 @@ is refused in production. As things stand a production deploy refuses every
 signup in every state. That is the intended behaviour: the fix is a lawyer's
 name in that file, not a code change.
 
-One gap remains. The jurisdiction is taken from the provider's state as a proxy
-for where the work happens. Bookings are zip-matched into neighborhood groups
-and providers work near home, so the two are the same in almost every case — but
-a genuinely cross-border booking would need the customer's address to decide.
-**Close this before enabling two adjacent states.**
+The jurisdiction of a job is the state the **work** happens in, recorded per
+booking from the customer's address — not the provider's home state. It matters
+at a state line: a young person who lives one side and works the other is under
+the other state's child labor law.
+
+Where the two differ, the stricter of each rule applies field by field, rather
+than one state's entry being taken wholesale. Neither legislature wrote its
+number expecting the other's to override it, so picking one would silently relax
+something. Both states must be open or the booking is refused.
+
+Remaining known limit: the work state is what the customer selects, not a
+verified property of the address. A customer who picks the wrong one gets the
+wrong rules. Geocoding the address would close that, and is worth doing before
+two adjacent states are open.
 
 ## Launch gating
 

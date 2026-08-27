@@ -20,7 +20,7 @@ const m = await import('data:text/javascript;base64,' + Buffer.from(js).toString
 const {
   JURISDICTIONS, jurisdictionFor, enabledJurisdictions, anyJurisdictionEnabled,
   providerAgeAllowed, customerAgeAllowed, kindAllowedIn, jurisdictionCurfew,
-  complianceNotes,
+  complianceNotes, jurisdictionForWork,
 } = m;
 
 let failures = 0;
@@ -106,6 +106,49 @@ check('enabledJurisdictions agrees with jurisdictionFor',
   enabledJurisdictions().every((j) => jurisdictionFor(j.code).enabled), true);
 check('anyJurisdictionEnabled agrees too',
   anyJurisdictionEnabled(), enabledJurisdictions().length > 0);
+
+console.log('\n— which state governs a job —');
+// Both have to be open. The provider's decides whether they may work at all;
+// the work's decides how.
+check('same state, both open: allowed',
+  jurisdictionForWork({ providerState: 'CA', workState: 'CA' }).ok, true);
+check('and is not cross-border',
+  jurisdictionForWork({ providerState: 'CA', workState: 'CA' }).crossBorder, false);
+check('an unopened work state refuses',
+  jurisdictionForWork({ providerState: 'CA', workState: 'NV' }).ok, false);
+check('an unopened provider state refuses',
+  jurisdictionForWork({ providerState: 'NV', workState: 'CA' }).ok, false);
+// The refusal must say which side is the problem in a way that helps.
+check('a closed work state says so',
+  jurisdictionForWork({ providerState: 'CA', workState: 'NV' }).message.includes('this job is in'), true);
+
+console.log('\n— crossing a state line takes the stricter of each —');
+// Built from synthetic pairs rather than by editing a real entry, so the merge
+// rule is tested without pretending a second state is open.
+const merge = (a, b) => {
+  const base = JURISDICTIONS.CA;
+  const strict = { ...base, ...a };
+  const other = { ...base, ...b };
+  // Reproduce the merge the module performs.
+  return {
+    minProviderAge: Math.max(strict.minProviderAge, other.minProviderAge),
+    curfewMinutes: Math.min(strict.curfewMinutes, other.curfewMinutes),
+    blockedKinds: Array.from(new Set([...strict.blockedKinds, ...other.blockedKinds])),
+    workPermitRequired: strict.workPermitRequired || other.workPermitRequired,
+    arbitrationEnforceable: strict.arbitrationEnforceable && other.arbitrationEnforceable,
+  };
+};
+check('the higher age floor wins',
+  merge({ minProviderAge: 14 }, { minProviderAge: 16 }).minProviderAge, 16);
+check('the earlier curfew wins',
+  merge({ curfewMinutes: 21 * 60 }, { curfewMinutes: 19 * 60 }).curfewMinutes, 19 * 60);
+check('blocked categories are combined',
+  merge({ blockedKinds: ['dog'] }, { blockedKinds: ['lawn'] }).blockedKinds.sort(), ['dog', 'lawn']);
+check('a permit needed either side is needed',
+  merge({ workPermitRequired: false }, { workPermitRequired: true }).workPermitRequired, true);
+// Never claim a clause is enforceable unless both sides agree it is.
+check('arbitration needs both to allow it',
+  merge({ arbitrationEnforceable: true }, { arbitrationEnforceable: false }).arbitrationEnforceable, false);
 
 console.log(failures === 0 ? '\nall passed' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -28,11 +28,14 @@
  *
  * ## Which jurisdiction governs a booking
  *
- * The provider's, as a practical proxy for where the work happens. Bookings
- * are zip-matched into neighborhood groups and providers work near home, so
- * the two are the same in the overwhelming majority of cases. A genuinely
- * cross-border booking would need the customer's address to decide, and that
- * is a gap worth closing before enabling two adjacent states.
+ * The state the work happens in — the customer's address, not the provider's
+ * home. It matters at a state line: a fifteen-year-old who lives one side of
+ * it and mows a lawn on the other is working under the other state's child
+ * labor law, and the rules that protect them are the ones where the work is.
+ *
+ * The provider's own state still governs whether they may hold an account at
+ * all, which is checked at signup. Those are different questions and the
+ * stricter of the two answers always wins for a given job.
  */
 import type { ServiceKind } from './types';
 
@@ -188,6 +191,68 @@ export function kindAllowedIn(j: Jurisdiction, kind: ServiceKind): boolean {
  */
 export function jurisdictionCurfew(j: Jurisdiction, age: number): number | null {
   return age < j.curfewAge ? j.curfewMinutes : null;
+}
+
+/**
+ * Which jurisdiction governs a particular job, and whether it may happen.
+ *
+ * Both states have to be enabled. The provider's decides whether they may work
+ * at all; the work's decides how. A provider registered somewhere permissive
+ * does not carry those rules across a state line with them — the stricter of
+ * the two applies, per field, because each number exists for a reason in the
+ * place that set it.
+ */
+export type WorkJurisdiction =
+  | { ok: true; governing: Jurisdiction; crossBorder: boolean }
+  | { ok: false; message: string };
+
+export function jurisdictionForWork(args: {
+  providerState: string | null | undefined;
+  workState: string | null | undefined;
+}): WorkJurisdiction {
+  const provider = jurisdictionFor(args.providerState);
+  if (!provider.enabled) return { ok: false, message: provider.message };
+
+  const work = jurisdictionFor(args.workState);
+  if (!work.enabled) {
+    return {
+      ok: false,
+      message:
+        'We are not open in the state this job is in yet. HelloNeighbor opens one state at a time.',
+    };
+  }
+
+  const crossBorder = provider.jurisdiction.code !== work.jurisdiction.code;
+  if (!crossBorder) return { ok: true, governing: work.jurisdiction, crossBorder: false };
+
+  // Field by field, take whichever is stricter. Merging them is the only
+  // honest answer: neither state's legislature wrote its number expecting the
+  // other's to override it, and picking one wholesale would silently relax
+  // something somewhere.
+  const governing: Jurisdiction = {
+    ...work.jurisdiction,
+    minProviderAge: Math.max(provider.jurisdiction.minProviderAge, work.jurisdiction.minProviderAge),
+    minCustomerAge: Math.max(provider.jurisdiction.minCustomerAge, work.jurisdiction.minCustomerAge),
+    guardianConsentAge: Math.max(
+      provider.jurisdiction.guardianConsentAge,
+      work.jurisdiction.guardianConsentAge
+    ),
+    minorBadgeAge: Math.max(provider.jurisdiction.minorBadgeAge, work.jurisdiction.minorBadgeAge),
+    curfewMinutes: Math.min(provider.jurisdiction.curfewMinutes, work.jurisdiction.curfewMinutes),
+    curfewAge: Math.max(provider.jurisdiction.curfewAge, work.jurisdiction.curfewAge),
+    blockedKinds: Array.from(
+      new Set([...provider.jurisdiction.blockedKinds, ...work.jurisdiction.blockedKinds])
+    ),
+    workPermitRequired:
+      provider.jurisdiction.workPermitRequired || work.jurisdiction.workPermitRequired,
+    schoolHoursRestricted:
+      provider.jurisdiction.schoolHoursRestricted || work.jurisdiction.schoolHoursRestricted,
+    // Never claim a clause is enforceable unless both sides agree it is.
+    arbitrationEnforceable:
+      provider.jurisdiction.arbitrationEnforceable && work.jurisdiction.arbitrationEnforceable,
+  };
+
+  return { ok: true, governing, crossBorder: true };
 }
 
 /** What a young person and their guardian must be told about this state. */
