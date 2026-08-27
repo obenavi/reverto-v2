@@ -20,7 +20,10 @@ import type { Config } from 'tailwindcss';
  * Base font size is 14px and spacing is on an 8px unit — see globals.css.
  */
 const config: Config = {
-  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
+  // lib/ is scanned because the category colours live on the service catalog
+  // — Tailwind only compiles classes it can see as literal strings, so the
+  // tone strings have to be written out where the data is.
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}', './lib/**/*.ts'],
   theme: {
     extend: {
       colors: {
@@ -46,6 +49,24 @@ const config: Config = {
         // Blue-cast rather than neutral grey, so it belongs to the same family
         // as everything else on the page.
         mist: '#EAF0F6',
+
+        // --- Category accents -------------------------------------------
+        // One hue per kind of work, so a grid of services reads as a grid of
+        // different things before anybody reads a word of it. Two of the six
+        // are brand and success rather than new hues: the palette should feel
+        // like it has range, not like a paint chart.
+        //
+        // These live in their own layer. They are always shown with an icon
+        // and a label, so they only have to be told apart from EACH OTHER —
+        // unlike warning and danger, which have to be told apart from
+        // everything. Their floor is 30° of hue separation, not 60°.
+        teal: { DEFAULT: '#0B6F6F', light: '#E2F2F2' },
+        // The green that survives on a blue ground. Brand green against brand
+        // blue is 1.07:1 — invisible — so anything green inside the hero, or
+        // on the app icon, is this instead.
+        mint: '#6FD79C',
+        violet: { DEFAULT: '#6A3FA0', light: '#F0EAFA' },
+        berry: { DEFAULT: '#A8327D', light: '#FBE9F3' },
         // Input borders, which a person does have to see: 3:1 per WCAG 1.4.11.
         field: '#8492A0',
         // A hair of blue in the page ground, so white cards lift off it.

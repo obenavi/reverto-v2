@@ -1,19 +1,115 @@
 import type { PaymentMethod, PaymentTiming, ServiceKind } from './types';
 
-/** The service types the prototype shipped with, used for icons and defaults. */
+/**
+ * The service types the prototype shipped with, used for icons and defaults.
+ *
+ * Each kind also carries its own colour. A customer scanning a grid of six
+ * services should be able to tell them apart before reading any of the labels,
+ * and colour does that faster than an emoji alone.
+ *
+ * The classes are written out in full rather than built from the tone name
+ * because Tailwind compiles only the class strings it can literally see —
+ * `bg-${tone}-light` would produce no CSS at all.
+ */
+export type ServiceTone = {
+  /** Tinted chip: the icon square on a card, a category pill. */
+  chip: string;
+  /** Solid fill: a colour stripe down a card, a filled badge. */
+  bar: string;
+  /** The colour as text, on white. */
+  text: string;
+  /** Ring shown when a card is hovered or chosen. */
+  ring: string;
+};
+
 export const SERVICE_KINDS: {
   kind: ServiceKind;
   label: string;
   emoji: string;
   defaultPriceCents: number;
   defaultDurationMin: number;
+  tone: ServiceTone;
 }[] = [
-  { kind: 'trash', label: 'Trash cans', emoji: '🗑️', defaultPriceCents: 1000, defaultDurationMin: 15 },
-  { kind: 'car', label: 'Car wash', emoji: '🚗', defaultPriceCents: 2500, defaultDurationMin: 60 },
-  { kind: 'dog', label: 'Dog walking', emoji: '🐕', defaultPriceCents: 1500, defaultDurationMin: 30 },
-  { kind: 'tutor', label: 'Tutoring', emoji: '📚', defaultPriceCents: 2000, defaultDurationMin: 60 },
-  { kind: 'lawn', label: 'Lawn care', emoji: '🌱', defaultPriceCents: 3000, defaultDurationMin: 60 },
-  { kind: 'other', label: 'Something else', emoji: '✨', defaultPriceCents: 1500, defaultDurationMin: 30 },
+  {
+    kind: 'trash',
+    label: 'Trash cans',
+    emoji: '🗑️',
+    defaultPriceCents: 1000,
+    defaultDurationMin: 15,
+    tone: {
+      chip: 'bg-teal-light text-teal',
+      bar: 'bg-teal',
+      text: 'text-teal',
+      ring: 'hover:border-teal',
+    },
+  },
+  {
+    kind: 'car',
+    label: 'Car wash',
+    emoji: '🚗',
+    defaultPriceCents: 2500,
+    defaultDurationMin: 60,
+    tone: {
+      chip: 'bg-brand-light text-brand',
+      bar: 'bg-brand',
+      text: 'text-brand',
+      ring: 'hover:border-brand',
+    },
+  },
+  {
+    kind: 'dog',
+    label: 'Dog walking',
+    emoji: '🐕',
+    defaultPriceCents: 1500,
+    defaultDurationMin: 30,
+    tone: {
+      chip: 'bg-berry-light text-berry',
+      bar: 'bg-berry',
+      text: 'text-berry',
+      ring: 'hover:border-berry',
+    },
+  },
+  {
+    kind: 'tutor',
+    label: 'Tutoring',
+    emoji: '📚',
+    defaultPriceCents: 2000,
+    defaultDurationMin: 60,
+    tone: {
+      chip: 'bg-violet-light text-violet',
+      bar: 'bg-violet',
+      text: 'text-violet',
+      ring: 'hover:border-violet',
+    },
+  },
+  {
+    kind: 'lawn',
+    label: 'Lawn care',
+    emoji: '🌱',
+    defaultPriceCents: 3000,
+    defaultDurationMin: 60,
+    tone: {
+      chip: 'bg-success-light text-success',
+      bar: 'bg-success',
+      text: 'text-success',
+      ring: 'hover:border-success',
+    },
+  },
+  {
+    kind: 'other',
+    label: 'Something else',
+    emoji: '✨',
+    defaultPriceCents: 1500,
+    defaultDurationMin: 30,
+    // Deliberately the neutral: "something else" is the absence of a category,
+    // and giving it a hue of its own would say it was one.
+    tone: {
+      chip: 'bg-mist text-ink-muted',
+      bar: 'bg-ink-muted',
+      text: 'text-ink-muted',
+      ring: 'hover:border-ink-faint',
+    },
+  },
 ];
 
 export function serviceKind(kind: ServiceKind) {

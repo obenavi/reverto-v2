@@ -24,11 +24,11 @@ export function YoungProviderNotice({ name, age }: { name: string; age: number }
   if (!isYoungProvider(age)) return null;
 
   return (
-    <div className="rounded-card border border-warning bg-warning-light p-3">
+    <div className="rounded-card border-l-4 border-warning bg-warning-light p-3">
       <p className="text-[13px] font-bold text-warning">
-        🌱 {name} is {age}
+        🌱 What booking {name} at {age} means
       </p>
-      <ul className="mt-1 space-y-1 text-[13px] text-warning">
+      <ul className="mt-1 space-y-1 text-[13px] text-ink-muted">
         <li>
           Prices are lower than a professional service, and the work reflects that — this
           is a young person building a reputation, not a licensed contractor.

@@ -107,6 +107,25 @@ for (const [tone, note] of [
 }
 pair('white', 'success-dark', 4.5, 'the success button being hovered');
 
+// --- Category accents --------------------------------------------------------
+// One hue per kind of work. Each is used three ways: as text on a card, inside
+// its own tinted chip, and as a solid stripe or filled badge.
+for (const [tone, note] of [
+  ['teal', 'trash cans'],
+  ['violet', 'tutoring'],
+  ['berry', 'dog walking'],
+]) {
+  pair(tone, 'white', 4.5, `${note}, as text`);
+  pair(tone, `${tone}-light`, 4.5, `${note}, in a tinted chip`);
+  pair('white', tone, 4.5, `${note}, on a solid fill`);
+}
+
+// mint is the green that works on a blue ground — the hero and the app icon.
+// Only ever used at 18.66px bold or larger, where the AA floor is 3:1.
+pair('mint', 'brand', 3, 'a hero headline');
+pair('mint', 'brand-dark', 3, 'the darker end of the hero gradient');
+pair('mint', 'teal', 3, 'the far end of the hero gradient');
+
 // --- Non-text contrast, WCAG 1.4.11 -----------------------------------------
 // An input has to be findable as an input, so its border is not decoration.
 pair('field', 'white', 3, 'an input border on a card');
@@ -138,6 +157,16 @@ apart('brand', 'warning', 60);
 apart('success', 'warning', 60);
 apart('success', 'danger', 60);
 apart('brand', 'danger', 60);
+
+// The category accents are held to a lower bar on purpose. They never appear
+// without an icon and a label beside them, so they only have to be told apart
+// from each other — not from everything, the way a warning does.
+const CATEGORY_HUES = ['teal', 'brand', 'berry', 'violet', 'success'];
+for (let i = 0; i < CATEGORY_HUES.length; i += 1) {
+  for (let j = i + 1; j < CATEGORY_HUES.length; j += 1) {
+    apart(CATEGORY_HUES[i], CATEGORY_HUES[j], 30);
+  }
+}
 
 // --- The config still holds the tokens the stylesheet uses -------------------
 const css = readFileSync(join(root, 'app', 'globals.css'), 'utf8');

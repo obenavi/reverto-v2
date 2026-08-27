@@ -109,6 +109,24 @@ export default function BookingFlow({
     operator.payment_methods.includes(m.value)
   );
 
+  /**
+   * The star line in the header.
+   *
+   * Null rather than "0.0" when there are no reviews yet: an empty rating reads
+   * as a bad rating, and a new provider has not earned one either way. The count
+   * is always shown next to the average, because "5.0" off one review and "4.6"
+   * off forty are not the same claim.
+   */
+  const ratingSummary =
+    reviews.length > 0
+      ? {
+          average: (
+            reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+          ).toFixed(1),
+          count: reviews.length,
+        }
+      : null;
+
   async function confirmBooking() {
     if (!service || !slot) return;
     setBusy(true);
@@ -189,25 +207,52 @@ export default function BookingFlow({
 
   return (
     <>
-      <header className="mb-5 flex items-center gap-3">
-        {operator.photo_url ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={operator.photo_url}
-            alt={operator.name}
-            className="h-14 w-14 rounded-full object-cover"
-          />
-        ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-light text-xl font-extrabold text-brand">
-            {operator.name.charAt(0).toUpperCase()}
+      {/* The first thing a neighbor sees after tapping a link from someone on
+          their street. It has about two seconds to look like a real business
+          rather than a form, which is why it is the one card here with colour
+          of its own. */}
+      <header className="hero mb-5 rounded-card">
+        <div className="flex items-center gap-3 p-5">
+          {operator.photo_url ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={operator.photo_url}
+              alt={operator.name}
+              className="h-16 w-16 rounded-full border-2 border-white/70 object-cover"
+            />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-white/40 bg-white/15 text-2xl font-extrabold text-white">
+              {operator.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="text-2xl font-extrabold leading-tight">{operator.name}</h1>
+            <p className="text-[13px] text-white/85">{operator.area}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {ratingSummary && (
+                <span className="pill bg-white text-brand-dark">
+                  <span aria-hidden>★</span>
+                  <span className="ml-1 font-extrabold">{ratingSummary.average}</span>
+                  <span className="ml-1 font-normal">
+                    ({ratingSummary.count})
+                  </span>
+                </span>
+              )}
+              <YoungProviderPill age={operator.age} />
+            </div>
           </div>
-        )}
-        <div>
-          <h1 className="text-xl font-extrabold">{operator.name}</h1>
-          <p className="text-ink-muted">
-            {operator.area} <YoungProviderPill age={operator.age} />
-          </p>
         </div>
+        {services.length > 0 && (
+          <p className="border-t border-white/20 px-5 py-3 text-[13px] text-white/85">
+            {services.length} service{services.length === 1 ? '' : 's'} · from{' '}
+            <span className="font-bold text-mint">
+              {formatPrice(Math.min(...services.map((x) => x.price_cents)))}
+            </span>
+            {acceptedMethods.length > 0 && (
+              <> · pays by {acceptedMethods.map((m) => m.label.toLowerCase()).join(', ')}</>
+            )}
+          </p>
+        )}
       </header>
 
       <div className="mb-4">
@@ -245,28 +290,43 @@ export default function BookingFlow({
             <EmptyState title={`${operator.name} isn't offering anything right now.`} />
           ) : (
             <ul className="space-y-2">
-              {services.map((s) => (
-                <li key={s.id}>
-                  <button
-                    className="card flex w-full items-center justify-between text-left hover:border-brand"
-                    onClick={() => {
-                      setService(s);
-                      setStep(2);
-                    }}
-                  >
-                    <span>
-                      <span className="font-bold">
-                        <span aria-hidden>{serviceKind(s.kind).emoji}</span> {s.title}
+              {services.map((s) => {
+                const kind = serviceKind(s.kind);
+                return (
+                  <li key={s.id}>
+                    <button
+                      className={`card card-lift flex w-full items-stretch gap-3 overflow-hidden !p-0 text-left ${kind.tone.ring}`}
+                      onClick={() => {
+                        setService(s);
+                        setStep(2);
+                      }}
+                    >
+                      {/* A stripe rather than a border, so the colour survives
+                          the hover state changing the border. */}
+                      <span className={`w-1.5 shrink-0 ${kind.tone.bar}`} aria-hidden />
+                      <span className={`tile-icon my-3 self-center ${kind.tone.chip}`} aria-hidden>
+                        {kind.emoji}
                       </span>
-                      {s.description && (
-                        <span className="block text-ink-muted">{s.description}</span>
-                      )}
-                      <span className="block text-[13px] text-ink-faint">{s.duration_min} min</span>
-                    </span>
-                    <span className="shrink-0 font-bold">{formatPrice(s.price_cents)}</span>
-                  </button>
-                </li>
-              ))}
+                      <span className="min-w-0 flex-1 py-3">
+                        <span className="block font-bold">{s.title}</span>
+                        {s.description && (
+                          <span className="block text-[13px] text-ink-muted">
+                            {s.description}
+                          </span>
+                        )}
+                        <span className="mt-1 block text-[12px] font-semibold uppercase tracking-wide text-ink-faint">
+                          {kind.label} · {s.duration_min} min
+                        </span>
+                      </span>
+                      <span className="shrink-0 py-3 pr-4 text-right">
+                        <span className={`block text-xl font-extrabold ${kind.tone.text}`}>
+                          {formatPrice(s.price_cents)}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -328,7 +388,7 @@ export default function BookingFlow({
                       {late && (
                         // Deliberately vague. Whether a family set an earlier
                         // limit is their business, not a stranger's.
-                        <span className="ml-2 text-xs font-normal text-slate-500">
+                        <span className="ml-2 text-xs font-normal text-ink-faint">
                           runs too late for this service
                         </span>
                       )}
@@ -565,9 +625,7 @@ export default function BookingFlow({
 
       {gallery.length > 0 && step === 1 && (
         <section className="mt-6">
-          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-ink-faint">
-            Recent work
-          </h2>
+          <h2 className="section-label">Recent work</h2>
           <ul className="grid grid-cols-3 gap-2">
             {gallery.slice(0, 6).map((photo) => (
               <li key={photo.id}>
@@ -586,15 +644,21 @@ export default function BookingFlow({
 
       {reviews.length > 0 && step === 1 && (
         <section className="mt-6">
-          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-ink-faint">
-            What neighbors say
-          </h2>
+          <h2 className="section-label">What neighbors say</h2>
           <ul className="space-y-2">
             {reviews.map((review) => (
               <li key={review.id} className="card">
-                <p className="text-warning">
-                  {'★'.repeat(review.rating)}
-                  <span className="text-ink-faint">{'★'.repeat(5 - review.rating)}</span>
+                {/* The number is next to the stars, not instead of them: a
+                    rating carried by colour alone is a rating some people
+                    cannot read. */}
+                <p className="flex items-center gap-2">
+                  <span className="text-warning" aria-hidden>
+                    {'★'.repeat(review.rating)}
+                    <span className="text-line">{'★'.repeat(5 - review.rating)}</span>
+                  </span>
+                  <span className="text-[13px] font-bold text-ink-muted">
+                    {review.rating} out of 5
+                  </span>
                 </p>
                 {review.public_comment && <p className="mt-1">{review.public_comment}</p>}
                 {review.operator_reply && (

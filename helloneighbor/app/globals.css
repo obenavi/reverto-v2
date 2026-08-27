@@ -63,4 +63,68 @@
   .pill {
     @apply inline-flex items-center rounded-full px-2 py-[2px] text-[12px] font-semibold;
   }
+
+  /* The one place the palette is allowed to be loud. Blue into teal rather
+     than blue into green: straight through cyan the midpoint goes muddy,
+     and this way the green stays a colour that means something elsewhere. */
+  .hero {
+    @apply relative overflow-hidden text-white;
+    background: linear-gradient(135deg, #0D47A1 0%, #1565C0 52%, #0B6F6F 100%);
+  }
+
+  /* Faint house silhouettes behind the hero copy — the logo used as texture
+     rather than repeated as a second logo. */
+  .hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='168' height='168' viewBox='0 0 120 120' fill='%23ffffff' fill-opacity='0.045' fill-rule='evenodd'%3E%3Cpath d='M8 66 L25 46 L35.4 62 L35.4 88 L13 88 L13 66 Z M19 71 H28 V80 H19 Z'/%3E%3Cpath d='M62 63 L73.4 51 L89 66 L84 66 L84 88 L62 88 Z M69 73 H77 V81 H69 Z'/%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+
+  .hero > * {
+    @apply relative;
+  }
+
+  /* Cards that are a link or a button lift on hover. Cards that only hold
+     text do not — a thing that moves when you point at it is claiming to be
+     tappable, and it should be telling the truth. */
+  .card-lift {
+    @apply transition duration-150 hover:-translate-y-0.5
+           hover:border-transparent hover:shadow-lg hover:shadow-brand/10;
+  }
+
+  /* A square tinted tile for a category icon. Colour comes from the service
+     catalog, which is why none is set here. */
+  .tile-icon {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-btn text-xl;
+  }
+
+  /* One fact and its label, used in rows across the hero and the footer. */
+  .stat-value {
+    @apply text-xl font-extrabold leading-none;
+  }
+
+  .stat-label {
+    @apply mt-1 text-[12px] font-semibold uppercase tracking-wide;
+  }
+}
+
+@layer utilities {
+  /* Section headings. Small, coloured, and spaced — they mark the page out
+     into parts without competing with the headline for attention. */
+  .section-label {
+    @apply mb-3 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-faint;
+  }
+
+  .section-label::before {
+    content: '';
+    @apply h-[3px] w-5 rounded-full bg-brand;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card-lift {
+      @apply transition-none hover:translate-y-0 hover:shadow-none;
+    }
+  }
 }
