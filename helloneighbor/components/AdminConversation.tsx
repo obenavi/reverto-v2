@@ -62,7 +62,7 @@ export default function AdminConversation({ bookingId }: { bookingId: string }) 
           </p>
 
           {data.conversation.bookings?.notes && (
-            <p className="mb-2 rounded-btn bg-gray-50 px-2 py-1 text-[12px]">
+            <p className="mb-2 rounded-btn bg-canvas px-2 py-1 text-[12px]">
               Booking note: {data.conversation.bookings.notes}
             </p>
           )}
@@ -85,7 +85,7 @@ export default function AdminConversation({ bookingId }: { bookingId: string }) 
                   {relativeTime(message.created_at)}
                 </span>
                 {message.kind !== 'text' && (
-                  <span className="pill ml-2 bg-gray-100 text-ink-muted">{message.kind}</span>
+                  <span className="pill ml-2 bg-mist text-ink-muted">{message.kind}</span>
                 )}
                 <p className="whitespace-pre-wrap">{message.body}</p>
               </li>

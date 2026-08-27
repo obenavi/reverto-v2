@@ -32,7 +32,7 @@ export default function LinkPanel({ operatorId }: { operatorId: string }) {
           Anyone with this link can see your services and book a time. No account needed.
         </p>
 
-        <div className="mt-3 break-all rounded-btn bg-gray-50 px-3 py-2 font-mono text-[13px]">
+        <div className="mt-3 break-all rounded-btn bg-canvas px-3 py-2 font-mono text-[13px]">
           {origin ? url : 'Loading…'}
         </div>
 

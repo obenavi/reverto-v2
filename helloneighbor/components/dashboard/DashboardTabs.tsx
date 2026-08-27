@@ -141,7 +141,7 @@ export default function DashboardTabs(props: {
                 onClick={() => setTab(t.id)}
                 aria-current={tab === t.id ? 'page' : undefined}
                 className={`whitespace-nowrap rounded-btn px-3 py-[7px] font-semibold transition-colors ${
-                  tab === t.id ? 'bg-brand text-white' : 'text-ink-muted hover:bg-gray-100'
+                  tab === t.id ? 'bg-brand text-white' : 'text-ink-muted hover:bg-mist'
                 }`}
               >
                 {t.label}

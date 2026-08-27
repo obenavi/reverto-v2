@@ -54,7 +54,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 export function StatusPill({ status }: { status: string }) {
   return (
-    <span className={`pill ${STATUS_STYLES[status] ?? 'bg-gray-100 text-ink-muted'}`}>
+    <span className={`pill ${STATUS_STYLES[status] ?? 'bg-mist text-ink-muted'}`}>
       {status.replace(/_/g, ' ')}
     </span>
   );

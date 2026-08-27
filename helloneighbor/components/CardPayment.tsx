@@ -82,7 +82,7 @@ export default function CardPayment(props: {
       stripe={stripePromise}
       options={{
         clientSecret: props.clientSecret,
-        appearance: { variables: { colorPrimary: '#185FA5', borderRadius: '8px' } },
+        appearance: { variables: { colorPrimary: '#1565C0', borderRadius: '8px' } },
       }}
     >
       <CardForm

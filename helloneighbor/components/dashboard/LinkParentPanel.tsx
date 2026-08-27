@@ -128,7 +128,7 @@ export default function LinkParentPanel({
             </div>
           )}
 
-          <p className="mt-3 select-all rounded-btn bg-gray-50 px-3 py-3 text-center font-mono text-xl tracking-widest">
+          <p className="mt-3 select-all rounded-btn bg-canvas px-3 py-3 text-center font-mono text-xl tracking-widest">
             {code ?? '········'}
           </p>
 
@@ -142,7 +142,7 @@ export default function LinkParentPanel({
           </p>
 
           {!waived && (
-            <div className="mt-4 border-t border-gray-100 pt-3">
+            <div className="mt-4 border-t border-line pt-3">
               {sent || guardianConsentSentAt ? (
                 <Notice tone="info">
                   We emailed your guardian. Your profile goes live once they open the link

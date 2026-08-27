@@ -8,13 +8,13 @@
   }
 
   body {
-    @apply bg-white text-ink font-sans antialiased;
+    @apply bg-canvas text-ink font-sans antialiased;
   }
 
   input,
   select,
   textarea {
-    @apply w-full rounded-btn border border-line px-2 py-2 text-base outline-none;
+    @apply w-full rounded-btn border border-field px-2 py-2 text-base outline-none;
   }
 
   input:focus,
@@ -40,11 +40,11 @@
   }
 
   .btn-secondary {
-    @apply btn border border-line bg-white text-ink hover:bg-gray-50;
+    @apply btn border border-line bg-white text-ink hover:bg-brand-light;
   }
 
   .btn-success {
-    @apply btn bg-success text-white hover:brightness-110;
+    @apply btn bg-success text-white hover:bg-success-dark;
   }
 
   .btn-danger {
@@ -53,6 +53,11 @@
 
   .card {
     @apply rounded-card border border-line bg-white p-4;
+  }
+
+  /* Header/footer bands. Blue is the frame; the page inside it is white. */
+  .band {
+    @apply border-b border-line bg-white;
   }
 
   .pill {

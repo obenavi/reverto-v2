@@ -293,7 +293,7 @@ export default function CommunitiesPanel({
           </button>
         </form>
 
-        <div className="mt-3 border-t border-gray-100 pt-3">
+        <div className="mt-3 border-t border-line pt-3">
           <p className="text-[13px] font-semibold">No code?</p>
           {zip ? (
             <>
@@ -382,7 +382,7 @@ export default function CommunitiesPanel({
               <li key={c.id} className="card">
                 <p className="font-semibold">{c.name}</p>
                 <p className="text-[13px] text-ink-muted">{c.area}</p>
-                <p className="mt-2 select-all rounded-btn bg-gray-50 px-3 py-2 text-center font-mono tracking-widest">
+                <p className="mt-2 select-all rounded-btn bg-canvas px-3 py-2 text-center font-mono tracking-widest">
                   {c.invite_code}
                 </p>
                 <button
@@ -450,7 +450,7 @@ export default function CommunitiesPanel({
                   </div>
                 )}
 
-                <div className="mt-3 border-t border-gray-100 pt-3">
+                <div className="mt-3 border-t border-line pt-3">
                   <p className="text-[13px] font-semibold">If you can&apos;t run it</p>
                   <p className="mt-1 text-[13px] text-ink-muted">
                     Name another adult in the group. If your account is ever closed or

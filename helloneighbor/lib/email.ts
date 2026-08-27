@@ -92,9 +92,9 @@ Questions: safety@helloneighbor.app`;
   <p style="color:#4b5563"><strong>${esc(args.operatorName)}</strong> (age ${args.operatorAge}, in ${esc(args.area)}) signed up for HelloNeighbor and listed you as their parent or guardian.</p>
   <p style="color:#4b5563">HelloNeighbor is a neighborhood app where young people take small local jobs — trash cans, car washes, dog walking, tutoring, yard work. Babysitting and other care work are not allowed.</p>
   <p style="color:#4b5563">Nothing on their account goes live until you approve it.</p>
-  <p style="margin:24px 0"><a href="${esc(args.consentUrl)}" style="background:#185FA5;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block">Review and give permission</a></p>
+  <p style="margin:24px 0"><a href="${esc(args.consentUrl)}" style="background:#1565C0;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block">Review and give permission</a></p>
   <p style="color:#6b7280;font-size:13px">That link is unique to this request. If you were not expecting this email you can ignore it — without your approval the account stays on hold and is never visible to anyone.</p>
-  <p style="color:#6b7280;font-size:13px">Questions: <a href="mailto:safety@helloneighbor.app" style="color:#185FA5">safety@helloneighbor.app</a></p>
+  <p style="color:#6b7280;font-size:13px">Questions: <a href="mailto:safety@helloneighbor.app" style="color:#1565C0">safety@helloneighbor.app</a></p>
 </body></html>`;
 
   return { subject, text, html };
@@ -134,10 +134,10 @@ Questions: safety@helloneighbor.app`;
   <p style="color:#4b5563"><strong>${esc(args.operatorName)}</strong>, in ${esc(args.area)}, signed up for HelloNeighbor and told us they are <strong>${args.operatorAge}</strong>.</p>
   <p style="color:#4b5563">Our automatic age check could not confirm that, so we are asking you instead.</p>
   <p style="color:#4b5563">HelloNeighbor is a neighborhood app where young people take small local jobs — trash cans, car washes, dog walking, tutoring, yard work. Babysitting and other care work are not allowed.</p>
-  <p style="margin:24px 0"><a href="${esc(args.consentUrl)}" style="background:#185FA5;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block">Confirm their age and give permission</a></p>
+  <p style="margin:24px 0"><a href="${esc(args.consentUrl)}" style="background:#1565C0;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block">Confirm their age and give permission</a></p>
   <p style="color:#6b7280;font-size:13px">You will be asked to confirm that you are their legal guardian and that you take responsibility for their activity in the app. Their account stays on hold until you do.</p>
   <p style="color:#6b7280;font-size:13px">If you were not expecting this email, ignore it — the account will not go live.</p>
-  <p style="color:#6b7280;font-size:13px">Questions: <a href="mailto:safety@helloneighbor.app" style="color:#185FA5">safety@helloneighbor.app</a></p>
+  <p style="color:#6b7280;font-size:13px">Questions: <a href="mailto:safety@helloneighbor.app" style="color:#1565C0">safety@helloneighbor.app</a></p>
 </body></html>`;
 
   return { subject, text, html };

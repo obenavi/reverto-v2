@@ -24,7 +24,7 @@ type Profile = {
 };
 
 const TONE: Record<CustomerLabel, string> = {
-  new: 'bg-gray-100 text-ink-muted',
+  new: 'bg-mist text-ink-muted',
   known: 'bg-brand-light text-brand',
   established: 'bg-success-light text-success',
   attention: 'bg-warning-light text-warning',
@@ -114,7 +114,7 @@ export default function CustomerCard({ bookingId }: { bookingId: string }) {
       )}
 
       {reviews.length > 0 && (
-        <ul className="mt-3 space-y-2 border-t border-gray-100 pt-2">
+        <ul className="mt-3 space-y-2 border-t border-line pt-2">
           {reviews.map((r) => (
             <li key={r.id} className="text-[13px]">
               <span className="font-semibold">{'★'.repeat(r.rating)}</span>{' '}
@@ -175,7 +175,7 @@ export function ReviewCustomer({ bookingId, name }: { bookingId: string; name: s
           <button
             key={n}
             type="button"
-            className={`text-2xl ${n <= rating ? 'text-warning' : 'text-gray-300'}`}
+            className={`text-2xl ${n <= rating ? 'text-warning' : 'text-line'}`}
             onClick={() => setRating(n)}
             aria-label={`${n} star${n === 1 ? '' : 's'}`}
           >

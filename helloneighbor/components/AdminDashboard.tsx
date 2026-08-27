@@ -83,7 +83,7 @@ export default function AdminDashboard({
                 onClick={() => setTab(t.id)}
                 aria-current={tab === t.id ? 'page' : undefined}
                 className={`rounded-btn px-3 py-[7px] font-semibold ${
-                  tab === t.id ? 'bg-brand text-white' : 'text-ink-muted hover:bg-gray-100'
+                  tab === t.id ? 'bg-brand text-white' : 'text-ink-muted hover:bg-mist'
                 }`}
               >
                 {t.label}

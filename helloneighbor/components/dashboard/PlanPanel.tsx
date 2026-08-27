@@ -76,7 +76,7 @@ export default function PlanPanel({
             </div>
             {capacity.cap !== null && (
               <div
-                className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-100"
+                className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-mist"
                 role="progressbar"
                 aria-valuenow={capacity.used}
                 aria-valuemin={0}

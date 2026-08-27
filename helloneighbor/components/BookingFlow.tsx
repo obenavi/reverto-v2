@@ -225,7 +225,7 @@ export default function BookingFlow({
                 ? 'bg-brand text-white'
                 : step > i + 1
                   ? 'bg-brand-light text-brand'
-                  : 'bg-gray-100 text-ink-faint'
+                  : 'bg-mist text-ink-muted'
             }`}
           >
             {label}

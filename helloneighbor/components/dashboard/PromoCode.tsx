@@ -108,7 +108,7 @@ export default function PromoCode({ freeUntil }: { freeUntil: string | null }) {
       )}
 
       {redeemed.length > 0 && (
-        <ul className="mt-3 space-y-1 border-t border-gray-100 pt-2">
+        <ul className="mt-3 space-y-1 border-t border-line pt-2">
           {redeemed.map((r) => (
             <li key={r.code} className="text-[12px] text-ink-faint">
               {r.code} · {r.freeDays} days · {new Date(r.at).toLocaleDateString()}

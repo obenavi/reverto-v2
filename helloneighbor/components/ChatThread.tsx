@@ -235,7 +235,7 @@ export default function ChatThread({
               <li key={message.id} className={mine ? 'text-right' : 'text-left'}>
                 <div
                   className={`inline-block max-w-[85%] rounded-card px-3 py-2 text-left ${
-                    mine ? 'bg-brand text-white' : 'bg-gray-100 text-ink'
+                    mine ? 'bg-brand text-white' : 'bg-mist text-ink'
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.body}</p>

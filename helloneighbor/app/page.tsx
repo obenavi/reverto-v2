@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { SERVICE_KINDS } from '@/lib/catalog';
 import { Shell } from '@/components/ui';
+import { Logo } from '@/components/Logo';
 
 const STEPS = [
   { n: 1, title: 'Sign up', body: 'Tell us your name, your neighborhood, and what you can do.' },
@@ -11,9 +12,9 @@ const STEPS = [
 export default function LandingPage() {
   return (
     <>
-      <nav className="border-b border-line">
+      <nav className="band">
         <Shell className="flex items-center justify-between !py-3">
-          <span className="text-lg font-extrabold text-brand">HelloNeighbor</span>
+          <Logo />
           <div className="flex gap-4">
             <Link href="/parent/login" className="text-[13px] font-semibold text-ink-muted">
               Parent login
