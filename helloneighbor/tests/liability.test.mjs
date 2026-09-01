@@ -49,7 +49,13 @@ console.log('\n— the phrases counsel told us to delete —');
 check('no absolute "we are not a money transmitter"',
   /is not a money transmitter/i.test(ALL), false);
 check('money regulation is stated conditionally instead',
-  /whether a particular feature is regulated|does not intend to provide money|holds no funds/i.test(ALL), true);
+  /whether a particular feature is regulated|whether it is depends on how it operates|does not intend to provide money|holds no funds/i.test(ALL), true);
+// The absolute the platform IS entitled to make, because it is a fact about
+// how the software is built rather than a legal conclusion about a feature.
+check('says flatly that no payment passes between users',
+  /does not process payments between users/i.test(ALL), true);
+check('and says why a dispute cannot move money',
+  /we hold nothing|because we hold nothing/i.test(ALL), true);
 check('no sweeping "everything that follows is your responsibility"',
   /everything that follows from that is your responsibility/i.test(ALL), false);
 check('messages are not retained "indefinitely"',

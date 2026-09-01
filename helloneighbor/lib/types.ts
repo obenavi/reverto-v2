@@ -104,7 +104,6 @@ export interface Booking {
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   payment_timing: PaymentTiming | null;
-  stripe_payment_intent_id: string | null;
   status: BookingStatus;
   accepted_terms_at: string | null;
   accepted_terms_version: string | null;

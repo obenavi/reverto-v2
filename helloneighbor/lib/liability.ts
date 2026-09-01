@@ -57,7 +57,7 @@
  */
 
 /** Bump on any material change. Stored against every acceptance. */
-export const LIABILITY_VERSION = '2026-08-25.3';
+export const LIABILITY_VERSION = '2026-09-01.1';
 
 /** The one state with a written addendum so far. Others gate on review. */
 export const LAUNCH_JURISDICTION = 'California';
@@ -243,24 +243,25 @@ export const GENERAL_TERMS: AgreementDoc = {
     {
       n: 14,
       title: 'Disputes between users',
-      plain: 'File in the app with proof. We decide the money for that booking and nothing else.',
+      plain: 'File in the app with proof. We decide what happens to accounts, never who owes whom.',
       body: [
         'Try to settle it in the app first. If that does not work, open a dispute on the booking, say what happened and what you want, and attach your evidence. The other person is told and may respond with their own before anything is decided.',
-        'A person reviews the booking, the messages, and both sides’ evidence, and decides one thing: how the money for that booking is settled. That is the entire scope of what we decide.',
-        'We do not decide fault for an injury, value damaged property, or award damages. We are not a court, an arbitrator between users, or an insurer, and a finding from us is an administrative decision about a payment.',
-        'Our decision on a payment has no effect on any right you have against the other person. You may go to the police, to court, to your insurer, or to a lawyer, with or without our finding. On written request we will give you your own booking record and the messages from that booking.',
+        'A person reviews the booking, the messages, and both sides’ evidence, and decides one thing: what happens to the accounts involved — nothing, a warning, a suspension, or closure. That is the entire scope of what we decide.',
+        'We cannot decide money, and we are not refusing to: we never hold any. You pay the other person directly, so there is no payment for us to release, capture, refund or withhold, and a finding from us moves nothing. Anything owed between you is owed between you.',
+        'We do not decide fault for an injury, value damaged property, or award damages. We are not a court, an arbitrator between users, or an insurer.',
+        'Our finding has no effect on any right you have against the other person. You may go to the police, to court, to your insurer, or to a lawyer, with or without it. On written request we will give you your own booking record and the messages from that booking, which is usually what a small claims court wants to see.',
       ],
     },
     {
       n: 15,
       title: 'Money',
-      plain: 'For cash and payment apps the money never touches us. We are not a bank and we hold nothing.',
+      plain: 'You pay each other directly. The only money we ever take is a provider’s subscription.',
       body: [
+        'HelloNeighbor does not process payments between users. There is no card button, no wallet, no balance, no escrow and no payout. Every payment for a job is made directly from the neighbour to the provider — cash, or an app such as Venmo, Cash App, Zelle or PayPal that the two of you already use. We record which method was agreed and the amount, and that is the whole of our involvement.',
+        'Because we hold nothing, we cannot take a payment, release one, refund one, reverse one, or hold one back while a dispute runs. If someone does not pay, the debt is owed to the other person and is theirs to pursue, in small claims court if it comes to that.',
         'The price shown at booking is the price. Renegotiating off the app is a breach of these terms.',
-        'For cash and app-to-app transfers such as Venmo, Cash App or Zelle, HelloNeighbor records what was agreed and nothing more. We do not hold, transfer, escrow, insure, or guarantee that money, and we are not a party to the payment. If someone does not pay, the debt is owed to the other person and is theirs to pursue.',
-        'HelloNeighbor does not intend to provide money-transmission services. Whether a particular feature is regulated depends on how it operates and on applicable law. Where we add card processing, refunds, credits, balances, holds, or payouts, we will use a licensed third-party processor where appropriate and will not commingle user funds with our operating funds.',
-        'Subscription fees paid to HelloNeighbor buy access to the listing and scheduling tools. They are not a commission on anyone’s work, they do not purchase insurance, and they do not make us a party to any job.',
-        'Fees already paid are not refundable except where we say so in writing or where the law requires it.',
+        'The only money HelloNeighbor takes from anyone is the subscription a provider pays for access to the listing and scheduling tools. It is a fee for software. It is not a commission on anyone’s work, not a booking fee, not a placement fee, not a payment for finding anyone work, and it does not purchase insurance or make us a party to any job. Fees already paid are not refundable except where we say so in writing or where the law requires it.',
+        'If we ever add a feature that moves money between users, we will say so plainly before it goes live, and we will use a licensed third-party processor and keep user funds separate from our own. Nothing in this clause is a promise that any such feature is unregulated — whether it is depends on how it operates and on the law that applies to it.',
       ],
     },
     {
@@ -738,11 +739,15 @@ export const CONSENTS: Consent[] = [
     text: 'I agree that claims against HelloNeighbor go to individual arbitration and not a class action, where the law allows — and I understand I can opt out within 30 days, use small claims court, and that this does not affect any claim against the other person.',
   },
   {
-    id: 'customer.payment.v1',
+    // v2: the platform used to be able to release or refund a card hold, and
+    // v1 said so. It cannot any more — it never touches the money — so the
+    // sentence somebody ticks had to change with the fact. Old bookings keep
+    // the v1 id, because what they agreed to is what they were shown.
+    id: 'customer.payment.v2',
     audience: 'customer',
     required: true,
     refers: 'General Terms 14, 15',
-    text: 'I understand HelloNeighbor decides only how the money for a booking is settled, holds no funds for cash or app-to-app payments, provides no insurance — and that I keep every other right I have, including going to the police or to court.',
+    text: 'I understand I pay the provider directly, that HelloNeighbor never holds, moves or refunds that money and cannot settle a money dispute for me, that there is no insurance — and that I keep every other right I have, including going to the police or to court.',
   },
   {
     id: 'customer.sms.service.v1',
@@ -787,6 +792,13 @@ export const CONSENTS: Consent[] = [
     required: true,
     refers: 'General Terms 6',
     text: 'I will not offer or accept babysitting or any care work, driving, regulated trades, ladder or roof work, or anything else on the prohibited list — whatever a customer asks for or offers to pay.',
+  },
+  {
+    id: 'provider.payment.v1',
+    audience: 'provider',
+    required: true,
+    refers: 'General Terms 15',
+    text: 'I collect my own money from the customer, HelloNeighbor never holds it for me, and if someone does not pay, chasing it is mine to do.',
   },
   {
     id: 'provider.tax.v1',

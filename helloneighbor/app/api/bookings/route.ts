@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { normalizePhone, formatSlot } from '@/lib/format';
 import { sendSms, smsTemplates } from '@/lib/sms';
-import { ensurePaymentIntent } from '@/lib/payments';
 import { ALL_PAYMENT_METHODS, PAYMENT_METHODS } from '@/lib/catalog';
 import { openConversationForBooking } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
@@ -71,13 +70,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Choose how you want to pay.' }, { status: 400 });
   }
   // Enforced here as well as in the UI — the offerable list is a presentation
-  // concern and this route is public.
+  // concern and this route is public. 'stripe' lands here: it is a label on
+  // historical rows, not something a new booking may choose, because the
+  // platform does not handle money between two users.
   if (!OFFERABLE_METHODS.has(paymentMethod)) {
     return NextResponse.json(
       {
         error:
           paymentMethod === 'stripe'
-            ? 'Card payments are paused. Pick cash or a payment app.'
+            ? 'Card payments through HelloNeighbor are not offered. Pay them directly — cash or a payment app.'
             : 'That payment method is not available right now.',
       },
       { status: 400 }
@@ -344,19 +345,6 @@ export async function POST(request: Request) {
     endsAt: slot.ends_at,
   });
 
-  let clientSecret: string | null = null;
-  if (paymentMethod === 'stripe') {
-    try {
-      clientSecret = await ensurePaymentIntent(booking.id);
-    } catch (err) {
-      console.error('[bookings:intent]', err);
-      await db.from('bookings').update({ status: 'cancelled', payment_status: 'failed' }).eq('id', booking.id);
-      await db.from('slots').update({ status: 'open' }).eq('id', slot.id);
-      await releaseBlockedSlots(booking.id);
-      return NextResponse.json({ error: 'Could not start the card payment.' }, { status: 502 });
-    }
-  }
-
   // Open the thread before replying: the client is sent straight into it, so
   // it has to exist by the time they land.
   const conversation = await openConversationForBooking({
@@ -394,7 +382,7 @@ export async function POST(request: Request) {
   ]);
 
   return NextResponse.json(
-    { booking, clientSecret, chatPath: conversation?.path ?? null },
+    { booking, chatPath: conversation?.path ?? null },
     { status: 201 }
   );
 }

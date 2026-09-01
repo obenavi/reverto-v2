@@ -17,7 +17,6 @@ import type {
   Slot,
   Subscriber,
 } from '@/lib/types';
-import CardPayment from './CardPayment';
 import { YoungProviderNotice, YoungProviderPill } from './YoungProviderBadge';
 import type { Capacity } from '@/lib/plans';
 
@@ -81,7 +80,6 @@ export default function BookingFlow({
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [chatPath, setChatPath] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
@@ -159,13 +157,6 @@ export default function BookingFlow({
     }
 
     setChatPath(body.chatPath ?? null);
-
-    if (body.clientSecret) {
-      // Card: the booking exists but the hold isn't placed until the neighbor
-      // confirms below.
-      setClientSecret(body.clientSecret);
-      return;
-    }
     finish(body.chatPath ?? null);
   }
 
@@ -503,123 +494,120 @@ export default function BookingFlow({
             <p className="mt-2 text-xl font-extrabold">{formatPrice(service.price_cents)}</p>
           </div>
 
-          {!clientSecret && (
-            <fieldset className="card">
-              <legend className="mb-2 block text-[13px] font-semibold">How do you want to pay?</legend>
-              <div className="space-y-2">
-                {acceptedMethods.map((m) => (
-                  <label
-                    key={m.value}
-                    className={`flex cursor-pointer items-center gap-2 rounded-btn border px-3 py-2 ${
-                      method === m.value ? 'border-brand bg-brand-light' : 'border-line'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="payment"
-                      className="!w-auto"
-                      checked={method === m.value}
-                      onChange={() => setMethod(m.value)}
-                    />
-                    <span>
-                      <span className="font-semibold">{m.label}</span>
-                      <span className="block text-[12px] text-ink-muted">{m.note}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          )}
+          <fieldset className="card">
+            <legend className="mb-2 block text-[13px] font-semibold">
+              How do you want to pay {operator.name}?
+            </legend>
+            <div className="space-y-2">
+              {acceptedMethods.map((m) => (
+                <label
+                  key={m.value}
+                  className={`flex cursor-pointer items-center gap-2 rounded-btn border px-3 py-2 ${
+                    method === m.value ? 'border-brand bg-brand-light' : 'border-line'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="payment"
+                    className="!w-auto"
+                    checked={method === m.value}
+                    onChange={() => setMethod(m.value)}
+                  />
+                  <span>
+                    <span className="font-semibold">{m.label}</span>
+                    <span className="block text-[12px] text-ink-muted">{m.note}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {/* Said here rather than only in the terms. This is the moment the
+                neighbour forms an expectation about who is holding their money,
+                and the answer is nobody. */}
+            <p className="mt-3 rounded-btn bg-mist px-3 py-2 text-[12px] text-ink-muted">
+              You pay {operator.name} directly. HelloNeighbor never takes, holds or
+              refunds this money — we are recording what the two of you agreed, and
+              nothing more.
+            </p>
+          </fieldset>
 
-          {clientSecret ? (
-            <CardPayment
-              clientSecret={clientSecret}
-              amountCents={service.price_cents}
-              onSuccess={() => finish(chatPath)}
-              onError={setError}
-            />
-          ) : (
-            <>
-              {!notes.trim() && !noteConfirmed && (
-                <div className="card border-warning bg-warning-light">
-                  <p className="font-bold text-warning">One last thing</p>
-                  <p className="mt-1 text-[13px] text-warning">
-                    You haven&apos;t left a note. Is there anything {operator.name} needs to
-                    know before they show up — a gate code, where something is kept, a dog
-                    in the yard, how you want it done?
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    <button className="btn-secondary flex-1" onClick={() => setStep(3)}>
-                      Add a note
-                    </button>
-                    <button
-                      className="btn-secondary flex-1"
-                      onClick={() => setNoteConfirmed(true)}
-                    >
-                      Nothing to add
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <fieldset className="card">
-                <legend className="mb-2 block text-[13px] font-semibold">
-                  Before you book
-                </legend>
-                <p className="mb-3 text-[13px] text-ink-muted">
-                  Please tick each of these —{' '}
-                  <Link href="/terms" target="_blank" className="font-semibold text-brand">
-                    the full terms are here
-                  </Link>
-                  , and the{' '}
-                  <Link href="/guidelines" target="_blank" className="font-semibold text-brand">
-                    community guidelines here
-                  </Link>
-                  .
-                </p>
-                <div className="space-y-2">
-                  {customerConsents.map((c) => (
-                    <label
-                      key={c.id}
-                      className="flex cursor-pointer items-start gap-2 text-[13px]"
-                    >
-                      <input
-                        type="checkbox"
-                        className="!mt-0.5 !w-auto"
-                        checked={Boolean(ticked[c.id])}
-                        onChange={(e) =>
-                          setTicked((prev) => ({ ...prev, [c.id]: e.target.checked }))
-                        }
-                      />
-                      <span className="text-ink-muted">
-                        {c.text}
-                        {!c.required && (
-                          <span className="ml-1 text-ink-faint">(optional)</span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                <p className="mt-3 text-[12px] text-ink-faint">
-                  Terms version {LIABILITY_VERSION}. We record which version you accepted
-                  and when, so a dispute is judged against the words you actually saw.
-                </p>
-              </fieldset>
-
-              <div className="flex gap-2">
-                <button className="btn-secondary" onClick={() => setStep(3)} disabled={busy}>
-                  Back
+          {!notes.trim() && !noteConfirmed && (
+            <div className="card border-warning bg-warning-light">
+              <p className="font-bold text-warning">One last thing</p>
+              <p className="mt-1 text-[13px] text-warning">
+                You haven&apos;t left a note. Is there anything {operator.name} needs to
+                know before they show up — a gate code, where something is kept, a dog
+                in the yard, how you want it done?
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button className="btn-secondary flex-1" onClick={() => setStep(3)}>
+                  Add a note
                 </button>
                 <button
-                  className="btn-primary flex-1"
-                  onClick={confirmBooking}
-                  disabled={busy || !acceptedTerms || (!notes.trim() && !noteConfirmed)}
+                  className="btn-secondary flex-1"
+                  onClick={() => setNoteConfirmed(true)}
                 >
-                  {busy ? 'Booking…' : 'Confirm booking'}
+                  Nothing to add
                 </button>
               </div>
-            </>
+            </div>
           )}
+
+          <fieldset className="card">
+            <legend className="mb-2 block text-[13px] font-semibold">
+              Before you book
+            </legend>
+            <p className="mb-3 text-[13px] text-ink-muted">
+              Please tick each of these —{' '}
+              <Link href="/terms" target="_blank" className="font-semibold text-brand">
+                the full terms are here
+              </Link>
+              , and the{' '}
+              <Link href="/guidelines" target="_blank" className="font-semibold text-brand">
+                community guidelines here
+              </Link>
+              .
+            </p>
+            <div className="space-y-2">
+              {customerConsents.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex cursor-pointer items-start gap-2 text-[13px]"
+                >
+                  <input
+                    type="checkbox"
+                    className="!mt-0.5 !w-auto"
+                    checked={Boolean(ticked[c.id])}
+                    onChange={(e) =>
+                      setTicked((prev) => ({ ...prev, [c.id]: e.target.checked }))
+                    }
+                  />
+                  <span className="text-ink-muted">
+                    {c.text}
+                    {!c.required && (
+                      <span className="ml-1 text-ink-faint">(optional)</span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-3 text-[12px] text-ink-faint">
+              Terms version {LIABILITY_VERSION}. We record which version you accepted
+              and when, so a dispute is judged against the words you actually saw.
+            </p>
+          </fieldset>
+
+          <div className="flex gap-2">
+            <button className="btn-secondary" onClick={() => setStep(3)} disabled={busy}>
+              Back
+            </button>
+            <button
+              className="btn-primary flex-1"
+              onClick={confirmBooking}
+              disabled={busy || !acceptedTerms || (!notes.trim() && !noteConfirmed)}
+            >
+              {busy ? 'Booking…' : 'Confirm booking'}
+            </button>
+          </div>
         </section>
       )}
 

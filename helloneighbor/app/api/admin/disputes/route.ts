@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireAdmin } from '@/lib/guards';
-import { stripe, isStripeConfigured } from '@/lib/stripe';
 
 const RESOLUTIONS = new Set(['resolved_operator', 'resolved_neighbor', 'closed']);
 
@@ -28,7 +27,7 @@ export async function PATCH(request: Request) {
   const db = supabaseAdmin();
   const { data: dispute } = await db
     .from('disputes')
-    .select('id, status, bookings (id, payment_method, payment_status, stripe_payment_intent_id)')
+    .select('id, status, bookings (id, payment_method, payment_status)')
     .eq('id', id)
     .maybeSingle();
 
@@ -37,45 +36,12 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'That dispute is already resolved.' }, { status: 409 });
   }
 
-  const booking = dispute.bookings as unknown as {
-    id: string;
-    payment_method: string;
-    payment_status: string;
-    stripe_payment_intent_id: string | null;
-  } | null;
-
-  if (
-    booking?.payment_method === 'stripe' &&
-    booking.stripe_payment_intent_id &&
-    status !== 'closed'
-  ) {
-    if (!isStripeConfigured()) {
-      return NextResponse.json(
-        { error: 'Stripe is not configured, so the payment cannot be settled.' },
-        { status: 503 }
-      );
-    }
-    try {
-      const client = stripe();
-      if (status === 'resolved_operator') {
-        if (booking.payment_status === 'held') {
-          await client.paymentIntents.capture(booking.stripe_payment_intent_id);
-        }
-        await db.from('bookings').update({ payment_status: 'captured' }).eq('id', booking.id);
-      } else {
-        if (booking.payment_status === 'captured') {
-          await client.refunds.create({ payment_intent: booking.stripe_payment_intent_id });
-          await db.from('bookings').update({ payment_status: 'refunded' }).eq('id', booking.id);
-        } else {
-          await client.paymentIntents.cancel(booking.stripe_payment_intent_id);
-          await db.from('bookings').update({ payment_status: 'released' }).eq('id', booking.id);
-        }
-      }
-    } catch (err) {
-      console.error('[admin:disputes:stripe]', err);
-      return NextResponse.json({ error: 'The payment could not be settled.' }, { status: 502 });
-    }
-  }
+  // Resolving a dispute moves no money. It never could: the neighbour paid the
+  // provider directly, and HelloNeighbor was never holding anything to release
+  // or refund. What a resolution does is put a finding on the record and, where
+  // one is warranted, an enforcement action against the account — see clause 14
+  // of the General Terms. Anything owed between the two of them stays between
+  // the two of them.
 
   const { error } = await db
     .from('disputes')

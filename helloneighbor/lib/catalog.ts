@@ -118,31 +118,55 @@ export function serviceKind(kind: ServiceKind) {
   return SERVICE_KINDS.find((s) => s.kind === kind) ?? SERVICE_KINDS[SERVICE_KINDS.length - 1];
 }
 
-/**
- * Every method the schema knows about, including ones not currently offered.
- * Used for labelling existing bookings.
- */
-export const ALL_PAYMENT_METHODS: {
+type PaymentMethodInfo = {
   value: PaymentMethod;
   label: string;
   note: string;
   handle: boolean;
-}[] = [
+};
+
+/**
+ * How a neighbour pays the person who did the work.
+ *
+ * Every one of these is settled directly between the two of them. The app
+ * records which one was agreed and, where there is one, shows the handle to
+ * send to. It does not hold, move, escrow, or refund a cent of it.
+ *
+ * That is a deliberate limit, not a missing feature. Passing a customer's
+ * money on to a provider is money transmission: a licence in nearly every
+ * state, FinCEN registration, surety bonds, and the platform standing between
+ * two people as the party that owes the money. A card button is not worth any
+ * of that, and it would not reduce the risk that actually matters here, which
+ * is a young person going to a stranger's house.
+ */
+export const PAYMENT_METHODS: PaymentMethodInfo[] = [
   { value: 'cash', label: 'Cash', note: 'Hand it over in person', handle: false },
   { value: 'venmo', label: 'Venmo', note: 'Send to their handle', handle: true },
   { value: 'cashapp', label: 'Cash App', note: 'Send to their $cashtag', handle: true },
   { value: 'zelle', label: 'Zelle', note: 'Send to their phone or email', handle: true },
   { value: 'paypal', label: 'PayPal', note: 'Send to their PayPal', handle: true },
-  { value: 'stripe', label: 'Card', note: 'Held now, charged after the job', handle: false },
 ];
 
 /**
- * What an operator can actually offer today. Card payments are off while the
- * Stripe Connect question — operators are minors, and Connect requires account
- * holders to be 18+ — is unresolved. The code path stays in the repo; putting
- * 'stripe' back in this list re-enables it.
+ * Methods that only exist to put a label on an old row.
+ *
+ * 'stripe' was a card hold taken by the platform and released to the provider
+ * on completion. It was never switched on for customers, and migration 028
+ * removed both the column that stored the hold and the value from the
+ * bookings check constraint, so the database will not accept one either.
+ *
+ * The label survives for one case only: a database restored from a dump taken
+ * before that migration. Nothing may offer it.
  */
-export const PAYMENT_METHODS = ALL_PAYMENT_METHODS.filter((m) => m.value !== 'stripe');
+const RETIRED_PAYMENT_METHODS: PaymentMethodInfo[] = [
+  { value: 'stripe', label: 'Card (no longer offered)', note: '', handle: false },
+];
+
+/** Every value the schema knows about. For labelling only — never for offering. */
+export const ALL_PAYMENT_METHODS: PaymentMethodInfo[] = [
+  ...PAYMENT_METHODS,
+  ...RETIRED_PAYMENT_METHODS,
+];
 
 /** Methods that need a handle or address before a neighbor can pay. */
 export const HANDLE_METHODS = PAYMENT_METHODS.filter((m) => m.handle).map((m) => m.value);

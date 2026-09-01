@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireOperator } from '@/lib/guards';
-import { stripe, isStripeConfigured } from '@/lib/stripe';
 import { sendSms, smsTemplates } from '@/lib/sms';
 import { formatSlot } from '@/lib/format';
 import { releaseBlockedSlots } from '@/lib/scheduling';
@@ -9,8 +8,9 @@ import { releaseBlockedSlots } from '@/lib/scheduling';
 /**
  * PATCH /api/operators/bookings — mark a booking complete or cancelled.
  *
- * Completing a card booking captures the held payment; cancelling one
- * releases it. Cash-style bookings just change status.
+ * This moves no money, because no money is here to move. The neighbour pays
+ * the provider directly, so payment_status is a record of what the two of them
+ * agreed happened, not the state of a balance HelloNeighbor is holding.
  */
 export async function PATCH(request: Request) {
   const { operatorId, deny } = requireOperator();
@@ -42,30 +42,7 @@ export async function PATCH(request: Request) {
     status: action === 'complete' ? 'completed' : 'cancelled',
   };
 
-  if (booking.payment_method === 'stripe' && booking.stripe_payment_intent_id) {
-    if (!isStripeConfigured()) {
-      return NextResponse.json(
-        { error: 'Stripe is not configured, so this card payment cannot be settled.' },
-        { status: 503 }
-      );
-    }
-    try {
-      if (action === 'complete') {
-        await stripe().paymentIntents.capture(booking.stripe_payment_intent_id);
-        patch.payment_status = 'captured';
-      } else {
-        await stripe().paymentIntents.cancel(booking.stripe_payment_intent_id);
-        patch.payment_status = 'released';
-      }
-    } catch (err) {
-      console.error('[bookings:stripe]', err);
-      return NextResponse.json({ error: 'The card payment could not be settled.' }, { status: 502 });
-    }
-  } else if (action === 'complete') {
-    patch.payment_status = 'captured';
-  } else {
-    patch.payment_status = 'released';
-  }
+  patch.payment_status = action === 'complete' ? 'captured' : 'released';
 
   const { error } = await db.from('bookings').update(patch).eq('id', booking.id);
   if (error) {

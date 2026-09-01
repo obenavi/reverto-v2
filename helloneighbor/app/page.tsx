@@ -178,8 +178,9 @@ export default function LandingPage() {
             </p>
             <p className="mt-1 text-[13px] text-ink-muted">
               Pick a service, pick a time, and pay them however you already pay people —
-              cash, Venmo, Cash App, Zelle, PayPal. Nothing goes through us, so there is
-              nothing extra on top.
+              cash, Venmo, Cash App, Zelle, PayPal. The money goes straight to them. We
+              never hold it, so there is nothing extra on top, and nothing of yours
+              sitting with us.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Link href="/my-bookings" className="btn-primary">

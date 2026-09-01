@@ -30,7 +30,8 @@ anywhere else.
 | Minor consent and disaffirmance | Fam. Code § 6710 | not reviewed |
 | Arbitration and class-waiver limits | Tunkl, 60 Cal. 2d 92 | not reviewed |
 | Privacy and biometric rules | Civ. Code § 1798.100 et seq. | not reviewed |
-| Payment and money-transmission rules | — | not reviewed |
+| Payment and money-transmission rules | see "Money never passes through" below | not reviewed |
+| Fees charged to workers (employment-agency / job-listing statutes) | — | not reviewed |
 | Mandatory reporting obligations | — | not reviewed |
 | Local tax obligations | — | not reviewed |
 
@@ -46,7 +47,7 @@ Feature gating exists for these, and is what a jurisdiction row turns on:
 - provider and customer age (age floors at 14 / 18 / 21)
 - service category (the prohibited list, blocked at listing and at booking)
 - time of day (curfew, checked against the end of the job)
-- payment method (per-provider, and the card path is off)
+- payment method (per-provider; every method settles directly between the two people)
 - licensing requirements (regulated categories blocked outright)
 
 These are now per-state, in `lib/jurisdictions.ts`. A state with no entry there
@@ -78,6 +79,52 @@ within that zip is real. A geocoder would close both. Worth doing before two
 adjacent states are open; a mismatch today is flagged for review rather than
 refused, so nobody living on a county line is locked out.
 
+## Money never passes through the platform
+
+Every payment for a job is settled directly between the neighbour and the
+provider — cash, Venmo, Cash App, Zelle, PayPal. HelloNeighbor records which
+method was agreed and the amount. It does not hold, move, escrow, capture,
+refund or reverse any of it.
+
+This is enforced in three places, deliberately, because it was previously
+enforced in one and that one was a filter on an array:
+
+- `tests/no-customer-payments.test.mjs` fails the build on any code that
+  creates, captures, refunds or transfers a payment, or that takes a card in
+  the app.
+- Migration `028_no_platform_payments.sql` dropped the card-hold column and
+  removed `'stripe'` from the bookings payment-method constraint, so an insert
+  that tries fails at the database.
+- General Terms clause 15 states it, and both a customer and a provider tick a
+  consent to it (`customer.payment.v2`, `provider.payment.v1`).
+
+**What this buys.** It keeps the platform out of money transmission — state
+licensing plus FinCEN MSB registration plus surety bonds — and out of PCI
+scope and chargeback liability. For a product run by one person that is the
+largest single regulatory saving available.
+
+**What it does not buy.** It does nothing about the risk that actually matters
+here, which is a young person going to a stranger's house. Negligent-referral
+and negligent-undertaking claims do not turn on who processed the payment. It
+is a licensing decision, not a safety one, and it should not be described
+internally as though it reduced liability for harm.
+
+**What it costs.** A dispute finding can no longer move money, because there is
+no money to move: there is no hold to release, nothing to refund, and nothing
+to withhold while both sides are heard. A resolution now produces a record and,
+where warranted, an enforcement action against an account. Clause 14 says so.
+That is a real reduction in what the platform can do for a wronged user, and it
+is the trade being made.
+
+**The open question this raises.** The only money HelloNeighbor takes is a
+subscription from the *provider* — the young person or the adult behind their
+account — for the right to be listed and booked. Several states regulate fees
+charged to job seekers by employment agencies and job-listing services, and
+charging the worker rather than the customer is the pattern those statutes
+were written for. Whether they reach a software subscription is exactly the
+kind of question that needs counsel and not a guess. It is now a row in the
+matrix and a line in the gating list below. It is unresolved.
+
 ## Launch gating
 
 Do not enable paid features or minor-provider functionality until every line is
@@ -89,6 +136,7 @@ done. Ticks are for work actually finished, not started.
 - [ ] Child-labor review, including work permits and school hours
 - [ ] Privacy and minor-data review
 - [ ] Payment-regulation review before any card, wallet, balance, refund or payout
+- [ ] Employment-agency / job-listing review of charging the provider a subscription
 - [ ] SMS / TCPA compliance review
 - [ ] Consumer-law review of the release, cap, arbitration clause and class waiver
 - [ ] Tax review
