@@ -25,6 +25,7 @@ import { operatorCapacity } from '@/lib/capacity';
 import { curfewRefusal } from '@/lib/curfewPolicy';
 import { jurisdictionForWork, kindAllowedIn } from '@/lib/jurisdictions';
 import { stateForZip } from '@/lib/zipstate';
+import { jobNearHome } from '@/lib/proximity';
 import type { PlanId } from '@/lib/plans';
 import { verifyTurnstile } from '@/lib/turnstile';
 import type { PaymentMethod } from '@/lib/types';
@@ -133,7 +134,7 @@ export async function POST(request: Request) {
 
   const { data: operator } = await db
     .from('subscribers')
-    .select('id, name, phone, status, payment_methods, prefers_advance_payment, plan, community_only, state')
+    .select('id, name, phone, age, zip_code, status, payment_methods, prefers_advance_payment, plan, community_only, state')
     .eq('id', operatorId)
     .maybeSingle();
 
@@ -200,7 +201,7 @@ export async function POST(request: Request) {
 
   const { data: service } = await db
     .from('services')
-    .select('id, title, price_cents, duration_min, kind')
+    .select('id, title, price_cents, duration_min, kind, location_type')
     .eq('id', serviceId)
     .eq('operator_id', operatorId)
     .eq('active', true)
@@ -235,6 +236,26 @@ export async function POST(request: Request) {
   if (!kindAllowedIn(governing, service.kind)) {
     return NextResponse.json(
       { error: `That service is not available in ${governing.name}.` },
+      { status: 403 }
+    );
+  }
+
+  // The youngest providers work near home. Checked here rather than only in the
+  // UI: the zip arrives from a form, and a form is not entitled to answer
+  // "may this fourteen-year-old travel to this address".
+  const proximity = jobNearHome({
+    providerAge: Number(operator.age),
+    closeToHomeAge: governing.closeToHomeAge,
+    providerZip: operator.zip_code,
+    atProviderHome: service.location_type === 'at_provider',
+    workZip: String(body.work_zip ?? ''),
+    sharedCommunityId: community.sharedCommunityId,
+    providerName: operator.name,
+  });
+
+  if (!proximity.allowed) {
+    return NextResponse.json(
+      { error: proximity.message, tooFarFromHome: true },
       { status: 403 }
     );
   }

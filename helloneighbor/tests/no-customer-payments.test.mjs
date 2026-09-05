@@ -104,6 +104,28 @@ assert.ok(
 );
 checks += 3;
 
+// The guidelines are the plain-language copy everyone reads and ticks, and
+// they described a card hold long after the card path was switched off. They
+// are checked separately from the terms for exactly that reason.
+const guidelines = readFileSync(join(root, 'lib', 'guidelines.ts'), 'utf8');
+assert.ok(
+  !/authorized when the booking is made|charged only after/i.test(guidelines),
+  'the guidelines still describe a card hold the platform no longer takes'
+);
+assert.ok(
+  /not a payment service|no money passes through/i.test(guidelines),
+  'the guidelines should say plainly that HelloNeighbor is not a payment service'
+);
+assert.ok(
+  /only money HelloNeighbor ever takes[^.]*subscription/i.test(guidelines),
+  'the guidelines should name the subscription as the only money the platform takes'
+);
+assert.ok(
+  /decides how the payment is settled/i.test(guidelines) === false,
+  'the guidelines still promise a dispute decides the payment, which it cannot'
+);
+checks += 4;
+
 // --- Report ------------------------------------------------------------------
 if (failures.length > 0) {
   console.error('\nThe platform is handling money between users:\n');

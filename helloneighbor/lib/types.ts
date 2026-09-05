@@ -69,6 +69,36 @@ export interface Subscriber {
   link_code: string | null;
 }
 
+/**
+ * The operator as a stranger on the public booking page may see them.
+ *
+ * The full Subscriber row carries a home zip, a phone number, a guardian's
+ * name, phone, email and consent IP, a plan and a link code. None of that is a
+ * customer's to have, and the signup form promises in as many words that the
+ * zip is never shown to them — so the public page narrows the row to this
+ * before it crosses into the browser, rather than passing the record it read.
+ *
+ * Add a field here only after asking what a stranger does with it.
+ */
+export type PublicOperator = Pick<
+  Subscriber,
+  'id' | 'name' | 'area' | 'age' | 'bio' | 'photo_url' | 'payment_methods' | 'state'
+>;
+
+/** Narrows a row from the database to what may be sent to a browser. */
+export function toPublicOperator(row: Subscriber): PublicOperator {
+  return {
+    id: row.id,
+    name: row.name,
+    area: row.area,
+    age: row.age,
+    bio: row.bio,
+    photo_url: row.photo_url,
+    payment_methods: row.payment_methods,
+    state: row.state,
+  };
+}
+
 export interface Service {
   id: string;
   operator_id: string;

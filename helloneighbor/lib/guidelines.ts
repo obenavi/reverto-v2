@@ -5,7 +5,7 @@
  * acceptance. Bump it whenever the text below changes materially, so a dispute
  * can be judged against the wording each party actually saw.
  */
-export const TERMS_VERSION = '2026-08-21';
+export const TERMS_VERSION = '2026-09-05';
 
 export type GuidelineSection = {
   id: string;
@@ -55,26 +55,30 @@ export const GUIDELINES: GuidelineSection[] = [
   },
   {
     id: 'payment',
-    title: 'Payment',
+    title: 'Payment — no money passes through HelloNeighbor',
     body: [
+      'HelloNeighbor is a place to find each other and agree a time. It is not a payment service. There is no card button, no wallet, no balance, no escrow and no payout, and there is no version of this app where your money sits with us.',
+      'You pay the person who did the work, directly — cash, or an app you already use such as Venmo, Cash App, Zelle or PayPal. The app records which method you agreed and the amount, and that is the whole of our involvement.',
+      'The only money HelloNeighbor ever takes from anyone is the monthly subscription a provider pays for the tools — their booking page, their schedule, their messages. It is a fee for software. It is not a commission, not a booking fee, not a cut of anyone\u2019s work, and it buys no insurance.',
+      'Because we hold nothing, we cannot take a payment, release one, refund one, reverse one, or hold one back while an argument runs. If somebody does not pay, the money is owed to the other person and is theirs to chase.',
       'The price shown at booking is the price. Do not renegotiate off-app.',
-      'For card payments, the amount is authorized when the booking is made and charged only after the provider marks the job complete.',
-      'For cash and app-to-app transfers, HelloNeighbor records what was agreed but does not hold, transfer, or guarantee the money. That is between the two of you.',
+      'Either of you can mark a booking as paid in the app and attach a screenshot or a photo of the receipt. That is a record of what you each say happened, kept in case it is ever needed. It is not us confirming anything, because we are not in a position to.',
     ],
   },
   {
     id: 'disputes',
     title: 'Disputes',
     body: [
-      'Either side can open a dispute on a booking. An administrator reviews the booking record and the in-app messages, then decides how the payment is settled.',
-      'That decision covers the payment for that booking and nothing else. HelloNeighbor does not adjudicate damages, injuries, or anything beyond the amount held for that job.',
+      'Either side can open a dispute on a booking. An administrator reads the booking record, the in-app messages and whatever proof both sides attach, and decides one thing: what happens to the accounts involved — nothing, a warning, a suspension, or closure.',
+      'We cannot decide money, and that is not us refusing to help: we never held any. There is nothing for us to release, refund or withhold, and a decision from us moves nothing between you. Anything owed between the two of you stays between the two of you, and small claims court exists for exactly that.',
+      'HelloNeighbor does not adjudicate damages or injuries either. On written request we will give you your own booking record and the messages from it, which is usually what a court asks to see.',
     ],
   },
   {
     id: 'liability',
     title: 'Limitation of liability',
     body: [
-      'HelloNeighbor is a listing and scheduling tool. We are not an employer, agency, contractor, or supervisor of anyone who offers services here, and we do not direct or control the work.',
+      'HelloNeighbor is a listing and scheduling tool and nothing else. We are not an employer, agency, contractor, or supervisor of anyone who offers services here; we do not direct or control the work; and we do not handle the money for it. Every agreement about a job — what is done, when, for how much, and whether it was done well — is between the two people who made it.',
       'To the fullest extent permitted by law, HelloNeighbor is not liable for any injury, harm, loss, or damage to any person or to any property — belonging to a neighbor, to a service provider, or to anyone else — arising from a booking, a service performed or not performed, or any interaction between users of this app.',
       'We do not run background checks, verify identity documents, confirm insurance, or inspect any property. Approval of a listing means a person glanced at it, nothing more.',
       'Each person using HelloNeighbor is responsible for their own conduct and their own safety, and for deciding whether a particular booking is appropriate for them.',
@@ -87,6 +91,7 @@ export const OPERATOR_ACKNOWLEDGEMENTS = [
   'I have read the community guidelines and agree to follow them.',
   'I understand HelloNeighbor is not responsible for any harm, injury, or damage to people or property arising from a booking.',
   'I will keep all communication with neighbors inside the app.',
+  'I understand HelloNeighbor is only a platform: customers pay me directly, no money for a job ever passes through the app, and the only money HelloNeighbor takes is my subscription. If someone does not pay me, chasing it is mine to do.',
   'If I am under 16, my parent or guardian will be emailed to approve this account before it goes live. If I am under 18, they will know about my bookings.',
 ];
 

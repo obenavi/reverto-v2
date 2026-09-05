@@ -51,6 +51,11 @@ export type Jurisdiction = {
   guardianConsentAge: number;
   /** Below this age an adult must be on the account and customers are told. */
   minorBadgeAge: number;
+  /**
+   * Below this age a job has to be at or near the provider's own home — see
+   * lib/proximity.ts for what "near" can mean without a geocoder.
+   */
+  closeToHomeAge: number;
 
   /** Latest local minute a minor may still be working. */
   curfewMinutes: number;
@@ -91,6 +96,7 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
     minCustomerAge: 18,
     guardianConsentAge: 16,
     minorBadgeAge: 18,
+    closeToHomeAge: 16,
     curfewMinutes: 21 * 60,
     curfewAge: 18,
     // Everything on the global prohibited list is blocked everywhere; this is
@@ -238,6 +244,10 @@ export function jurisdictionForWork(args: {
       work.jurisdiction.guardianConsentAge
     ),
     minorBadgeAge: Math.max(provider.jurisdiction.minorBadgeAge, work.jurisdiction.minorBadgeAge),
+    closeToHomeAge: Math.max(
+      provider.jurisdiction.closeToHomeAge,
+      work.jurisdiction.closeToHomeAge
+    ),
     curfewMinutes: Math.min(provider.jurisdiction.curfewMinutes, work.jurisdiction.curfewMinutes),
     curfewAge: Math.max(provider.jurisdiction.curfewAge, work.jurisdiction.curfewAge),
     blockedKinds: Array.from(

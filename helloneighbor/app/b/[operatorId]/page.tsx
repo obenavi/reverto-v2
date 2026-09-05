@@ -2,9 +2,12 @@ import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 import { operatorCapacity } from '@/lib/capacity';
 import { operatorCurfew } from '@/lib/curfewPolicy';
+import { jurisdictionFor } from '@/lib/jurisdictions';
+import { nearHomeNotice, nearHomeRequired } from '@/lib/proximity';
 import type { PlanId } from '@/lib/plans';
 import { Shell } from '@/components/ui';
 import BookingFlow from '@/components/BookingFlow';
+import { toPublicOperator } from '@/lib/types';
 import type { GalleryPhoto, Review, Service, Slot, Subscriber } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -72,16 +75,27 @@ export default async function PublicBookingPage({
   // unavailable rather than failing at the last step. The route re-checks it.
   const curfew = await operatorCurfew(operator.id);
 
+  // Same reasoning as the curfew: say it on the page rather than let somebody
+  // fill in the whole form and be refused at the end. The provider's own zip
+  // stays on the server — the notice names the rule, never their neighborhood.
+  const jurisdiction = jurisdictionFor((operator as Subscriber).state);
+  const nearHome =
+    jurisdiction.enabled &&
+    nearHomeRequired((operator as Subscriber).age, jurisdiction.jurisdiction.closeToHomeAge)
+      ? nearHomeNotice((operator as Subscriber).name, jurisdiction.jurisdiction.closeToHomeAge)
+      : null;
+
   return (
     <Shell>
       <BookingFlow
-        operator={operator as Subscriber}
+        operator={toPublicOperator(operator as Subscriber)}
         services={(servicesRes.data as Service[]) ?? []}
         slots={(slotsRes.data as Slot[]) ?? []}
         gallery={(galleryRes.data as GalleryPhoto[]) ?? []}
         reviews={(reviewsRes.data as Review[]) ?? []}
         capacity={capacityNow}
         curfew={curfew}
+        nearHome={nearHome}
       />
     </Shell>
   );

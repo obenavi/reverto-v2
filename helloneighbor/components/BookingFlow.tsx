@@ -12,10 +12,10 @@ import { enabledJurisdictions } from '@/lib/jurisdictions';
 import type {
   GalleryPhoto,
   PaymentMethod,
+  PublicOperator,
   Review,
   Service,
   Slot,
-  Subscriber,
 } from '@/lib/types';
 import { YoungProviderNotice, YoungProviderPill } from './YoungProviderBadge';
 import type { Capacity } from '@/lib/plans';
@@ -38,14 +38,22 @@ export default function BookingFlow({
   reviews,
   capacity,
   curfew,
+  nearHome,
 }: {
-  operator: Subscriber;
+  operator: PublicOperator;
   services: Service[];
   slots: Slot[];
   gallery: GalleryPhoto[];
   reviews: Review[];
   capacity: Capacity;
   curfew: Curfew;
+  /**
+   * One sentence, when the provider is young enough that jobs have to be near
+   * where they live. Null otherwise. The rule is enforced server-side at
+   * booking; this exists so nobody fills in a form for an address that was
+   * never going to work.
+   */
+  nearHome: string | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
@@ -246,8 +254,14 @@ export default function BookingFlow({
         )}
       </header>
 
-      <div className="mb-4">
+      <div className="mb-4 space-y-2">
         <YoungProviderNotice name={operator.name} age={operator.age} />
+        {nearHome && (
+          <div className="rounded-card border-l-4 border-teal bg-teal-light p-3">
+            <p className="text-[13px] font-bold text-teal">📍 Close to home only</p>
+            <p className="mt-1 text-[13px] text-ink-muted">{nearHome}</p>
+          </div>
+        )}
       </div>
 
       {operator.bio && <p className="mb-4 text-ink-muted">{operator.bio}</p>}
@@ -434,7 +448,8 @@ export default function BookingFlow({
             {/* The zip decides which state's rules apply to the job, which is
                 why it is asked rather than inferred from the address text. */}
             <p className="mt-1 text-[12px] text-ink-faint">
-              Tells us which state&apos;s rules apply to this job.
+              Tells us which state&apos;s rules apply to this job
+              {nearHome ? `, and whether it is close enough to ${operator.name}'s home` : ''}.
             </p>
           </div>
           {WORK_STATES.length > 1 && (

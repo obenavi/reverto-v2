@@ -8,6 +8,7 @@ import { useMutate } from './useMutate';
 import CustomerCard, { ReviewCustomer } from './CustomerCard';
 import SafetyButton from './SafetyButton';
 import CheckInOut from './CheckInOut';
+import PaymentReceipt from '@/components/PaymentReceipt';
 
 export default function BookingsPanel({ bookings }: { bookings: BookingRow[] }) {
   const { mutate, busy, error } = useMutate();
@@ -104,7 +105,6 @@ export default function BookingsPanel({ bookings }: { bookings: BookingRow[] }) 
                 }
               >
                 Mark done
-                {booking.payment_method === 'stripe' ? ' & charge' : ''}
               </button>
               <button
                 className="btn-secondary"
@@ -121,6 +121,10 @@ export default function BookingsPanel({ bookings }: { bookings: BookingRow[] }) 
               </button>
             </div>
           )}
+
+          {/* Only once the job is done. Before that there is nothing to have
+              been paid for, and a form on every open booking is noise. */}
+          {booking.status === 'completed' && <PaymentReceipt bookingId={booking.id} />}
         </article>
       ))}
     </div>
