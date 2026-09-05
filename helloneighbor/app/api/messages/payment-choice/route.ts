@@ -1,22 +1,29 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { readConversationToken, touchConversation } from '@/lib/conversations';
+import { currentOperatorId } from '@/lib/session';
 import { PAYMENT_METHODS, paymentLabel } from '@/lib/catalog';
 import type { PaymentMethod } from '@/lib/types';
 
 const METHODS = new Set(PAYMENT_METHODS.map((m) => m.value));
 
 /**
- * POST — the neighbor answers the payment poll. Updates the booking's payment
- * method and posts the choice into the thread so the agreement is on record.
+ * POST — answers the payment poll. Updates the booking and posts the choice
+ * into the thread so the agreement is on record.
  *
- * Only the neighbor answers this, so it takes the signed token and not an
- * operator session.
+ * The PROVIDER answers this one now. The neighbour already said at booking
+ * which methods they can do; asking them to narrow it again would be asking
+ * the same person the same question twice. The neighbour's token still works,
+ * because a thread carrying an older poll should not become unanswerable.
+ *
+ * Whose answer it is comes from the credential, never from the request.
  */
 export async function POST(request: Request) {
-  const token = new URL(request.url).searchParams.get('token') ?? undefined;
+  const url = new URL(request.url);
+  const token = url.searchParams.get('token') ?? undefined;
   const conversationId = readConversationToken(token);
-  if (!conversationId) {
+  const operatorId = currentOperatorId();
+  if (!conversationId && !operatorId) {
     return NextResponse.json({ error: 'Not authorized.' }, { status: 401 });
   }
 
@@ -37,14 +44,27 @@ export async function POST(request: Request) {
   }
 
   const db = supabaseAdmin();
+
+  // A provider names the conversation; a neighbour's token already is one.
+  const targetId = conversationId ?? (url.searchParams.get('conversation_id') ?? '');
+  if (!targetId) {
+    return NextResponse.json({ error: 'Missing conversation.' }, { status: 400 });
+  }
+
   const { data: conversation } = await db
     .from('conversations')
-    .select('id, booking_id, bookings (id, status, payment_status, payment_method)')
-    .eq('id', conversationId)
+    .select('id, booking_id, operator_id, bookings (id, status, payment_status, payment_method)')
+    .eq('id', targetId)
     .maybeSingle();
 
   if (!conversation) {
     return NextResponse.json({ error: 'Conversation not found.' }, { status: 404 });
+  }
+
+  // Holding a provider session is authority over your own threads only.
+  const sender: 'client' | 'operator' = conversationId ? 'client' : 'operator';
+  if (sender === 'operator' && conversation.operator_id !== operatorId) {
+    return NextResponse.json({ error: 'Not authorized.' }, { status: 403 });
   }
 
   const booking = conversation.bookings as unknown as {
@@ -70,7 +90,7 @@ export async function POST(request: Request) {
   const { data: poll } = await db
     .from('messages')
     .select('metadata')
-    .eq('conversation_id', conversationId)
+    .eq('conversation_id', conversation.id)
     .eq('kind', 'payment_poll')
     .order('created_at', { ascending: false })
     .limit(1)
@@ -108,13 +128,13 @@ export async function POST(request: Request) {
   const handle = pollMeta.handles?.[choice];
   const label = matchedCustom ?? paymentLabel(choice);
   await db.from('messages').insert({
-    conversation_id: conversationId,
-    sender: 'client',
+    conversation_id: conversation.id,
+    sender,
     kind: 'payment_choice',
     body: handle ? `Let's do ${label} — sending to ${handle}.` : `Let's do ${label}.`,
     metadata: { method: choice, custom: matchedCustom, handle: handle ?? null },
   });
 
-  await touchConversation(conversationId);
+  await touchConversation(conversation.id);
   return NextResponse.json({ ok: true, method: choice });
 }

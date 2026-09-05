@@ -153,7 +153,24 @@ check('separately accepts the release', customerText.includes('i release hellone
 check('separately accepts arbitration', customerText.includes('arbitration'), true);
 check('separately accepts the class waiver', customerText.includes('class action'), true);
 check('separately consents to service SMS', customerText.includes('text messages about my bookings'), true);
-check('is told about the premises duty', customerText.includes('stay at the property'), true);
+check(
+  'is told about the premises duty',
+  customerText.includes('be at the property'),
+  true
+);
+// The rule the whole thing turns on: no booking at an empty house, and no
+// exemption for an adult provider. This checks the exemption has not crept
+// back rather than that some words about presence exist.
+check(
+  'the premises duty has no age exemption',
+  /whenever the provider is under|only when the provider is under/.test(customerText),
+  false
+);
+check(
+  'and a key under the mat is ruled out explicitly',
+  customerText.includes('leave a key'),
+  true
+);
 
 const guardianText = consentsFor('guardian').map((c) => c.text).join(' ').toLowerCase();
 check('the guardian separately authorises', guardianText.includes('authority to make this decision'), true);

@@ -5,7 +5,7 @@
  * acceptance. Bump it whenever the text below changes materially, so a dispute
  * can be judged against the wording each party actually saw.
  */
-export const TERMS_VERSION = '2026-09-05';
+export const TERMS_VERSION = '2026-09-05.1';
 
 export type GuidelineSection = {
   id: string;
@@ -62,7 +62,18 @@ export const GUIDELINES: GuidelineSection[] = [
       'The only money HelloNeighbor ever takes from anyone is the monthly subscription a provider pays for the tools — their booking page, their schedule, their messages. It is a fee for software. It is not a commission, not a booking fee, not a cut of anyone\u2019s work, and it buys no insurance.',
       'Because we hold nothing, we cannot take a payment, release one, refund one, reverse one, or hold one back while an argument runs. If somebody does not pay, the money is owed to the other person and is theirs to chase.',
       'The price shown at booking is the price. Do not renegotiate off-app.',
+      'Payment is handed over in person, when the job is done and you are both there — unless the provider asks to be paid in advance and you agree to it in the messages. When you book you tick every way you could pay them, and they pick one of those.',
       'Either of you can mark a booking as paid in the app and attach a screenshot or a photo of the receipt. That is a record of what you each say happened, kept in case it is ever needed. It is not us confirming anything, because we are not in a position to.',
+    ],
+  },
+  {
+    id: 'presence',
+    title: 'Somebody is always there',
+    body: [
+      'Every booking is one of two things: it happens at the provider’s own place, or it happens at yours and you — or another adult — are there for the whole of it. You say which when you book. There is no third option and no way to book one.',
+      'This does not depend on how old the provider is. A young person alone inside a stranger’s house is exposed, and so is a householder who let a stranger in and went out. Neither of those stops being true the day somebody turns eighteen.',
+      'Do not leave a key, a gate code, or an unlocked door for a provider to let themselves in, and do not arrange it in the messages either. It is a breach of these guidelines and grounds for closing an account.',
+      'A provider can leave, at any point, if they turn up and nobody is there. They do not owe anyone an explanation for that and they should say so in the messages.',
     ],
   },
   {

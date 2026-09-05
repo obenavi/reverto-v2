@@ -57,7 +57,7 @@
  */
 
 /** Bump on any material change. Stored against every acceptance. */
-export const LIABILITY_VERSION = '2026-09-01.1';
+export const LIABILITY_VERSION = '2026-09-05.1';
 
 /** The one state with a written addendum so far. Others gate on review. */
 export const LAUNCH_JURISDICTION = 'California';
@@ -389,13 +389,15 @@ export const CUSTOMER_AGREEMENT: AgreementDoc = {
     },
     {
       n: 2,
-      title: 'When the provider is under 18',
-      plain: 'You stay at the property the whole time, and they do not go inside alone.',
+      title: 'Somebody is always there',
+      plain: 'Every job is at their place, or at yours with you there the whole time. There is no third option.',
       body: [
-        'You or another responsible adult must be present at the property for the whole of any booking with a provider under 18.',
-        'A provider under 18 may not enter your residence when no responsible adult is present. Work should be outdoors or in a visible part of the property wherever the job allows.',
+        'Every booking is one of two arrangements: it happens at the provider’s own place, or it happens at yours and you — or another responsible adult — are there for the whole of it. You confirm which at booking, and it is recorded.',
+        'This is not conditional on the provider’s age. A young person alone inside a stranger’s house is exposed, and so is a householder who let a stranger in and went out; neither stops being true the day somebody turns eighteen.',
+        'A provider may not enter your residence when no responsible adult is present, whatever their age. Work should be outdoors or in a visible part of the property wherever the job allows.',
+        'Do not arrange to leave a key, a gate code, or an unlocked door for a provider to let themselves in. Do not agree it in the messages either — it is a breach of these terms and grounds for closing an account.',
         'Do not transport a provider anywhere. If a job needs something collecting, agree it in the app and handle it yourself.',
-        'Their guardian can see the booking and can cancel it at any time, and the young person can leave at any time without giving a reason.',
+        'Where the provider is under 18, their guardian can see the booking and can cancel it at any time, and the young person can leave at any time without giving a reason.',
       ],
     },
     {
@@ -718,11 +720,15 @@ export const CONSENTS: Consent[] = [
     text: 'I release HelloNeighbor from claims arising from this booking, to the extent the law allows — and I understand this does not cover gross negligence, recklessness or intentional misconduct, and cannot release a minor’s own claims.',
   },
   {
-    id: 'customer.premises.v1',
+    // v2: v1 required the customer's presence only when the provider was under
+    // 18. That line was in the wrong place — the risk it guards against runs
+    // both ways and does not end at a birthday — so it now applies to every
+    // booking at a customer's property, with no exemption to argue about.
+    id: 'customer.premises.v2',
     audience: 'customer',
     required: true,
     refers: 'Customer Agreement 1–2',
-    text: 'I will disclose hazards, secure animals, and stay at the property for the whole booking whenever the provider is under 18. A provider under 18 will not be alone inside my home.',
+    text: 'I will disclose hazards, secure animals, and be at the property — or have another adult there — for the whole of any booking at my home. No provider will be let in when nobody is there, and I will not leave a key or a gate code instead.',
   },
   {
     id: 'customer.emergency.v1',

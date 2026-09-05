@@ -231,6 +231,8 @@ export default function ChatThread({
               handles?: Record<string, string>;
               /** The provider's own ways of being paid, in their own words. */
               custom?: string[];
+              /** Whose turn it is. Payment polls now wait on the provider. */
+              answered_by?: 'client' | 'operator';
             };
             const options = Array.isArray(meta.options) ? meta.options : [];
 
@@ -298,7 +300,7 @@ export default function ChatThread({
 
                   {message.kind === 'payment_poll' && (
                     <div className="mt-2 space-y-1">
-                      {viewer === 'client' && !answered ? (
+                      {viewer === (meta.answered_by ?? 'client') && !answered ? (
                         (options as PaymentMethod[]).map((option) => (
                           <button
                             key={option}
@@ -323,7 +325,7 @@ export default function ChatThread({
                       {/* The provider's own ways of being paid. No handle to
                           show and no note to write for them — they said it in
                           their own words and that is what appears. */}
-                      {viewer === 'client' &&
+                      {viewer === (meta.answered_by ?? 'client') &&
                         !answered &&
                         ((meta.custom as string[] | undefined) ?? []).map((label) => (
                           <button

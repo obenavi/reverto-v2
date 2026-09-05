@@ -196,6 +196,38 @@ const RETIRED_PAYMENT_METHODS: PaymentMethodInfo[] = [
   { value: 'other', label: 'Another way', note: 'However they asked to be paid', handle: false },
 ];
 
+/**
+ * What the customer said they can do, narrowed to what was actually offered.
+ *
+ * The customer ticks as many as they like at booking — they know which apps
+ * they have, and which one gets used is for the two of them at the door. Both
+ * lists are filtered against the provider's own, because a form is not
+ * entitled to add a method the provider never offered.
+ *
+ * Custom labels are matched case-insensitively and returned in the PROVIDER's
+ * casing, so what lands on the booking is their wording rather than whatever
+ * the browser sent.
+ */
+export function agreedPaymentOptions(args: {
+  /** What the customer ticked. */
+  methods: unknown;
+  customs: unknown;
+  /** What the provider offers. */
+  offeredMethods: PaymentMethod[];
+  offeredCustoms: string[];
+}): { methods: PaymentMethod[]; customs: string[] } {
+  const wantedMethods = Array.isArray(args.methods) ? args.methods.map(String) : [];
+  const wantedCustoms = Array.isArray(args.customs) ? args.customs.map(String) : [];
+
+  const methods = args.offeredMethods.filter((m) => wantedMethods.includes(m));
+
+  const customs = args.offeredCustoms.filter((label) =>
+    wantedCustoms.some((wanted) => wanted.trim().toLowerCase() === label.toLowerCase())
+  );
+
+  return { methods, customs };
+}
+
 /** Every value the schema knows about. For labelling only — never for offering. */
 export const ALL_PAYMENT_METHODS: PaymentMethodInfo[] = [
   ...PAYMENT_METHODS,

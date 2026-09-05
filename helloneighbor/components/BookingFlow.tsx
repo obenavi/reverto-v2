@@ -8,6 +8,7 @@ import { LIABILITY_VERSION, consentsFor } from '@/lib/liability';
 import { PAYMENT_METHODS, serviceKind } from '@/lib/catalog';
 import { formatPrice, formatSlot } from '@/lib/format';
 import { withinCurfew } from '@/lib/curfew';
+import { presenceNotice } from '@/lib/presence';
 import { enabledJurisdictions } from '@/lib/jurisdictions';
 import type {
   GalleryPhoto,
@@ -71,6 +72,11 @@ export default function BookingFlow({
   const [workState, setWorkState] = useState<string>(operator.state ?? '');
   const [workZip, setWorkZip] = useState('');
   const [notes, setNotes] = useState('');
+  // Every way the neighbour can pay, not one. They know which apps they have;
+  // which gets used is settled in person when the job is done.
+  const [payMethods, setPayMethods] = useState<PaymentMethod[]>([]);
+  const [payCustoms, setPayCustoms] = useState<string[]>([]);
+  const [willBeHome, setWillBeHome] = useState(false);
 
   // Each line is ticked on its own rather than merged into one sentence. Four
   // taps is friction, and here the friction is the point: a tick against a
@@ -117,6 +123,23 @@ export default function BookingFlow({
     operator.payment_methods.includes(m.value)
   );
 
+  const toggleMethod = (value: PaymentMethod) =>
+    setPayMethods((current) =>
+      current.includes(value) ? current.filter((v) => v !== value) : [...current, value]
+    );
+
+  const toggleCustom = (label: string) =>
+    setPayCustoms((current) =>
+      current.includes(label) ? current.filter((v) => v !== label) : [...current, label]
+    );
+
+  /** A job the provider hosts. Nobody has to be home at the customer's end. */
+  const atProviderPlace = service?.location_type === 'at_provider';
+
+  /** Everything step four needs answered before the booking may be made. */
+  const pickedAWayToPay = payMethods.length > 0 || payCustoms.length > 0;
+  const presenceSettled = atProviderPlace || willBeHome;
+
   /**
    * The star line in the header.
    *
@@ -153,6 +176,9 @@ export default function BookingFlow({
         work_state: workState,
         work_zip: workZip,
         notes,
+        payment_methods_ok: payMethods,
+        payment_customs_ok: payCustoms,
+        will_be_home: willBeHome,
         accepted_terms: acceptedTerms,
         accepted_consents: acceptedConsentIds,
       }),
@@ -508,33 +534,102 @@ export default function BookingFlow({
             <p className="mt-2 text-xl font-extrabold">{formatPrice(service.price_cents)}</p>
           </div>
 
-          {/* Shown, not chosen. Committing to a payment method before you have
-              spoken to the person you are paying is the wrong order, and a
-              radio button here implies the app has something to do with the
-              transaction. It does not — the two of them settle it in the
-              messages, where the thread opens with exactly this list and a tap
-              to pick one. */}
-          <div className="card">
-            <p className="text-[13px] font-semibold">How {operator.name} takes payment</p>
-            <ul className="mt-2 space-y-1">
+          {/* The customer ticks every way they can pay. Which one actually
+              gets used is for the two of them at the door — but "I have Venmo
+              and cash" is something the neighbour knows now, and making them
+              pick exactly one before speaking to anybody was the wrong
+              question. */}
+          <fieldset className="card">
+            <legend className="mb-1 block text-[13px] font-semibold">
+              How could you pay {operator.name}?
+            </legend>
+            <p className="mb-2 text-[12px] text-ink-faint">
+              Tick everything that works for you — they will pick one of them.
+            </p>
+            <div className="space-y-2">
               {acceptedMethods.map((m) => (
-                <li key={m.value} className="flex items-baseline gap-2 text-[13px]">
-                  <span className="pill bg-success-light text-success">{m.label}</span>
-                  <span className="text-ink-muted">{m.note}</span>
-                </li>
+                <label
+                  key={m.value}
+                  className={`flex cursor-pointer items-center gap-2 rounded-btn border px-3 py-2 ${
+                    payMethods.includes(m.value) ? 'border-brand bg-brand-light' : 'border-line'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="!w-auto"
+                    checked={payMethods.includes(m.value)}
+                    onChange={() => toggleMethod(m.value)}
+                  />
+                  <span>
+                    <span className="font-semibold">{m.label}</span>
+                    <span className="block text-[12px] text-ink-muted">{m.note}</span>
+                  </span>
+                </label>
               ))}
               {customMethods.map((label) => (
-                <li key={label} className="flex items-baseline gap-2 text-[13px]">
-                  <span className="pill bg-success-light text-success">{label}</span>
-                  <span className="text-ink-muted">Their own arrangement</span>
-                </li>
+                <label
+                  key={label}
+                  className={`flex cursor-pointer items-center gap-2 rounded-btn border px-3 py-2 ${
+                    payCustoms.includes(label) ? 'border-brand bg-brand-light' : 'border-line'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="!w-auto"
+                    checked={payCustoms.includes(label)}
+                    onChange={() => toggleCustom(label)}
+                  />
+                  <span>
+                    <span className="font-semibold">{label}</span>
+                    <span className="block text-[12px] text-ink-muted">
+                      Their own arrangement
+                    </span>
+                  </span>
+                </label>
               ))}
-            </ul>
+            </div>
             <p className="mt-3 rounded-btn bg-mist px-3 py-2 text-[12px] text-ink-muted">
-              You will agree which one in the messages after you book, and you pay{' '}
-              {operator.name} directly. HelloNeighbor never takes, holds or refunds this
-              money.
+              You hand it over in person when the job is done, straight to {operator.name}.
+              HelloNeighbor never takes, holds or refunds this money.
             </p>
+          </fieldset>
+
+          {/* The one rule with no exemption. Its own block, not a line in the
+              consent list, because it changes what the neighbour has to do on
+              the day rather than what they are agreeing to. */}
+          <div
+            className={`card border-l-4 ${
+              atProviderPlace || willBeHome
+                ? 'border-success bg-success-light'
+                : 'border-brand bg-brand-light'
+            }`}
+          >
+            <p className="text-[13px] font-bold text-ink">
+              {atProviderPlace
+                ? '🏠 At their place'
+                : willBeHome
+                  ? '🏠 Someone will be home'
+                  : '🏠 Someone has to be home'}
+            </p>
+            <p className="mt-1 text-[13px] text-ink-muted">
+              {presenceNotice({
+                location: atProviderPlace ? 'at_provider' : 'at_customer',
+                providerName: operator.name,
+              })}
+            </p>
+            {!atProviderPlace && (
+              <label className="mt-3 flex cursor-pointer items-start gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  className="!mt-0.5 !w-auto"
+                  checked={willBeHome}
+                  onChange={(e) => setWillBeHome(e.target.checked)}
+                />
+                <span className="font-semibold text-ink">
+                  I, or another adult, will be at home for the whole booking.
+                </span>
+              </label>
+            )}
           </div>
 
           {!notes.trim() && !noteConfirmed && (
@@ -603,6 +698,15 @@ export default function BookingFlow({
             </p>
           </fieldset>
 
+          {/* A disabled button with no explanation is a dead end. */}
+          {(!pickedAWayToPay || !presenceSettled) && (
+            <p className="text-[13px] font-semibold text-warning">
+              {!pickedAWayToPay
+                ? `Pick at least one way you could pay ${operator.name}.`
+                : 'Confirm someone will be home for the whole booking.'}
+            </p>
+          )}
+
           <div className="flex gap-2">
             <button className="btn-secondary" onClick={() => setStep(3)} disabled={busy}>
               Back
@@ -610,7 +714,13 @@ export default function BookingFlow({
             <button
               className="btn-primary flex-1"
               onClick={confirmBooking}
-              disabled={busy || !acceptedTerms || (!notes.trim() && !noteConfirmed)}
+              disabled={
+                busy ||
+                !acceptedTerms ||
+                !pickedAWayToPay ||
+                !presenceSettled ||
+                (!notes.trim() && !noteConfirmed)
+              }
             >
               {busy ? 'Booking…' : 'Confirm booking'}
             </button>

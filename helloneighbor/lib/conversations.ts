@@ -67,6 +67,9 @@ export async function openConversationForBooking(args: {
   operatorHandles: Record<string, string>;
   /** The provider's own ways of being paid, written by them. */
   operatorCustomMethods: string[];
+  /** What the customer said at booking that they can actually do. */
+  agreedMethods: PaymentMethod[];
+  agreedCustoms: string[];
   clientName: string;
   clientPhone: string;
   serviceTitle: string;
@@ -101,7 +104,14 @@ export async function openConversationForBooking(args: {
 
   const seed: {
     sender: 'client' | 'operator' | 'system';
-    kind: 'text' | 'payment_poll' | 'timing_poll' | 'timing_choice' | 'payment_memo' | 'system';
+    kind:
+      | 'text'
+      | 'payment_poll'
+      | 'payment_choice'
+      | 'timing_poll'
+      | 'timing_choice'
+      | 'payment_memo'
+      | 'system';
     body: string;
     metadata?: Record<string, unknown>;
   }[] = [
@@ -121,27 +131,42 @@ export async function openConversationForBooking(args: {
     seed.push({ sender: 'client', kind: 'text', body: args.note.trim() });
   }
 
-  // The whole point of the thread opening this way: payment is agreed here,
-  // after the booking, between the two of them — not picked from a form that
-  // implied the app was going to process it.
-  const choiceCount = args.operatorMethods.length + args.operatorCustomMethods.length;
-  seed.push({
-    sender: 'operator',
-    kind: 'payment_poll',
-    body:
-      choiceCount === 1
-        ? `${args.operatorName} takes ${
-            args.operatorMethods.length === 1
-              ? paymentLabel(args.operatorMethods[0])
-              : args.operatorCustomMethods[0]
-          }. Tap to confirm.`
-        : `${args.operatorName} accepts these. Pick whichever works for you:`,
-    metadata: {
-      options: args.operatorMethods,
-      handles: args.operatorHandles,
-      custom: args.operatorCustomMethods,
-    },
-  });
+  // The customer already said which of these they can do, at booking. So the
+  // question left is the provider's, not theirs: pick one of the ways the
+  // neighbour told us they can pay. Asking the neighbour to narrow it again
+  // would be asking the same person the same question twice.
+  const agreedLabels = [
+    ...args.agreedMethods.map((m) => paymentLabel(m)),
+    ...args.agreedCustoms,
+  ];
+
+  if (agreedLabels.length === 1) {
+    // Nothing to choose. Say what was agreed and move on.
+    seed.push({
+      sender: 'client',
+      kind: 'payment_choice',
+      body: `I can pay by ${agreedLabels[0]}.`,
+      metadata: {
+        method: args.agreedMethods[0] ?? 'other',
+        custom: args.agreedCustoms[0] ?? null,
+      },
+    });
+  } else {
+    seed.push({
+      sender: 'client',
+      kind: 'payment_poll',
+      body: `I can pay by ${agreedLabels.slice(0, -1).join(', ')} or ${
+        agreedLabels[agreedLabels.length - 1]
+      }. Whichever suits you — pick one.`,
+      metadata: {
+        options: args.agreedMethods,
+        custom: args.agreedCustoms,
+        handles: args.operatorHandles,
+        // Who the poll is waiting on. The provider answers this one.
+        answered_by: 'operator',
+      },
+    });
+  }
 
   if (args.operatorPrefersAdvance) {
     // The operator has already said, once, in their profile that they want

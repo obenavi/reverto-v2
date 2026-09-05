@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { normalizePhone, formatSlot } from '@/lib/format';
 import { sendSms, smsTemplates } from '@/lib/sms';
-import { ALL_PAYMENT_METHODS, PAYMENT_METHODS } from '@/lib/catalog';
+import { ALL_PAYMENT_METHODS, PAYMENT_METHODS, agreedPaymentOptions } from '@/lib/catalog';
 import { openConversationForBooking } from '@/lib/conversations';
 import { reviewInBackground } from '@/lib/supervisor';
 import { TERMS_VERSION } from '@/lib/guidelines';
@@ -26,6 +26,7 @@ import { curfewRefusal } from '@/lib/curfewPolicy';
 import { jurisdictionForWork, kindAllowedIn } from '@/lib/jurisdictions';
 import { stateForZip } from '@/lib/zipstate';
 import { jobNearHome } from '@/lib/proximity';
+import { checkPresence } from '@/lib/presence';
 import type { PlanId } from '@/lib/plans';
 import { verifyTurnstile } from '@/lib/turnstile';
 import type { PaymentMethod } from '@/lib/types';
@@ -267,6 +268,36 @@ export async function POST(request: Request) {
     );
   }
 
+  // Nobody works at an empty house. Either the job is at the provider's own
+  // place, or the customer is there for the whole of it — and the customer has
+  // to say so rather than have it defaulted for them, because a rule nobody
+  // actively answered is the one that gets argued about at the door.
+  const presence = checkPresence({
+    location: service.location_type === 'at_provider' ? 'at_provider' : 'at_customer',
+    confirmed: body.will_be_home === true,
+    providerName: operator.name,
+  });
+
+  if (!presence.ok) {
+    return NextResponse.json({ error: presence.message, presence: true }, { status: 400 });
+  }
+
+  // Which of the provider's methods the customer can actually do. As many as
+  // they like — settled between them, in person, when the job is done.
+  const agreed = agreedPaymentOptions({
+    methods: body.payment_methods_ok,
+    customs: body.payment_customs_ok,
+    offeredMethods: operator.payment_methods,
+    offeredCustoms: (operatorProfile?.custom_payment_methods as string[] | undefined) ?? [],
+  });
+
+  if (agreed.methods.length === 0 && agreed.customs.length === 0) {
+    return NextResponse.json(
+      { error: `Pick at least one way you can pay ${operator.name}.` },
+      { status: 400 }
+    );
+  }
+
   // Curfew is about when the job ENDS. A slot may sit comfortably before 9pm
   // and still be refused because this particular service takes two hours. The
   // slot's own length is not enough: a neighbour books a service into a slot,
@@ -341,6 +372,9 @@ export async function POST(request: Request) {
       // can later show as a reason to trust them.
       community_id: community.sharedCommunityId,
       work_state: governing.code,
+      presence: presence.presence,
+      payment_methods_ok: agreed.methods,
+      payment_customs_ok: agreed.customs,
     })
     .select('*')
     .single();
@@ -384,6 +418,8 @@ export async function POST(request: Request) {
     operatorHandles: (operatorProfile?.payment_handles as Record<string, string>) ?? {},
     operatorCustomMethods:
       (operatorProfile?.custom_payment_methods as string[] | undefined) ?? [],
+    agreedMethods: agreed.methods,
+    agreedCustoms: agreed.customs,
     clientName,
     clientPhone,
     serviceTitle: service.title,
