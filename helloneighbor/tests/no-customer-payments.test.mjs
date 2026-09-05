@@ -18,6 +18,7 @@
  */
 
 import assert from 'node:assert/strict';
+import ts from 'typescript';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
@@ -37,6 +38,14 @@ function walk(dir, out = []) {
 
 const files = SEARCH_ROOTS.flatMap((d) => (existsSync(join(root, d)) ? walk(join(root, d)) : []));
 assert.ok(files.length > 50, 'expected to find the app source');
+
+/** Runs a TypeScript module without a build step. Type-only imports vanish. */
+function loadModule(file) {
+  const js = ts.transpileModule(readFileSync(join(root, file), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  return import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+}
 
 let checks = 0;
 const failures = [];
@@ -125,6 +134,47 @@ assert.ok(
   'the guidelines still promise a dispute decides the payment, which it cannot'
 );
 checks += 4;
+
+// --- Payment is agreed after the booking, not in the form -------------------
+// A radio button in the booking form asked somebody to commit to how they
+// would pay before they had spoken to the person they were paying, and implied
+// the app had something to do with the transaction.
+const flow = readFileSync(join(root, 'components', 'BookingFlow.tsx'), 'utf8');
+assert.ok(
+  !/name="payment"/.test(flow),
+  'the booking form is choosing a payment method again — it belongs in the thread'
+);
+assert.ok(
+  !/payment_method:/.test(flow),
+  'the booking form is sending a payment method again'
+);
+assert.ok(
+  /never takes, holds or refunds/i.test(flow),
+  'the booking form should still say plainly that the money does not pass through'
+);
+checks += 3;
+
+// --- A provider's own methods are labels, not credentials -------------------
+const { cleanCustomMethods, MAX_CUSTOM_METHODS, MAX_CUSTOM_METHOD_LENGTH } =
+  await loadModule('lib/catalog.ts');
+
+assert.deepEqual(cleanCustomMethods(['Bank transfer', ' Cheque ']), ['Bank transfer', 'Cheque']);
+assert.deepEqual(cleanCustomMethods(['Cheque', 'cheque']), ['Cheque'], 'duplicates collapse');
+assert.deepEqual(cleanCustomMethods(['', '   ']), [], 'blanks are dropped');
+assert.equal(
+  cleanCustomMethods(['a', 'b', 'c', 'd', 'e']).length,
+  MAX_CUSTOM_METHODS,
+  'the cap is enforced server-side, not only in the form'
+);
+assert.equal(
+  cleanCustomMethods(['x'.repeat(200)])[0].length,
+  MAX_CUSTOM_METHOD_LENGTH,
+  'a long label is truncated, so an account number does not fit'
+);
+assert.deepEqual(cleanCustomMethods('not an array'), []);
+assert.deepEqual(cleanCustomMethods(null), []);
+checks += 7;
+
 
 // --- Report ------------------------------------------------------------------
 if (failures.length > 0) {

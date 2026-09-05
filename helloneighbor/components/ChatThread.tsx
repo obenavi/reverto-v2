@@ -112,12 +112,13 @@ export default function ChatThread({
     await load();
   }
 
-  async function choosePayment(method: PaymentMethod) {
+  /** `custom` carries the provider's own wording, for methods this app has no name for. */
+  async function choosePayment(method: PaymentMethod, custom?: string) {
     setSending(true);
     const res = await fetch(`/api/messages/payment-choice?${query}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ method }),
+      body: JSON.stringify({ method, custom }),
     });
     setSending(false);
 
@@ -228,6 +229,8 @@ export default function ChatThread({
             const meta = (message.metadata ?? {}) as {
               options?: (PaymentMethod | PaymentTiming | 'accepted' | 'reschedule')[];
               handles?: Record<string, string>;
+              /** The provider's own ways of being paid, in their own words. */
+              custom?: string[];
             };
             const options = Array.isArray(meta.options) ? meta.options : [];
 
@@ -316,6 +319,25 @@ export default function ChatThread({
                           {answered ? 'Answered' : 'Waiting for a reply'}
                         </p>
                       )}
+
+                      {/* The provider's own ways of being paid. No handle to
+                          show and no note to write for them — they said it in
+                          their own words and that is what appears. */}
+                      {viewer === 'client' &&
+                        !answered &&
+                        ((meta.custom as string[] | undefined) ?? []).map((label) => (
+                          <button
+                            key={label}
+                            disabled={sending}
+                            onClick={() => choosePayment('other', label)}
+                            className="block w-full rounded-btn bg-white px-3 py-2 text-left font-semibold text-brand hover:bg-brand-light disabled:opacity-50"
+                          >
+                            {label}
+                            <span className="block text-[12px] font-normal text-ink-muted">
+                              Their own arrangement — they will tell you what they need
+                            </span>
+                          </button>
+                        ))}
                     </div>
                   )}
                 </div>

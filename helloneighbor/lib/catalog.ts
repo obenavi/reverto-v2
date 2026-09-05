@@ -148,6 +148,38 @@ export const PAYMENT_METHODS: PaymentMethodInfo[] = [
 ];
 
 /**
+ * A provider's own way of being paid, beyond the five the app knows.
+ *
+ * Free text on purpose. Somebody takes a cheque, a bank transfer, a regional
+ * app this codebase has never heard of, or an envelope through the door — and
+ * an app that only accepts the methods it shipped with is one that makes those
+ * people pick the wrong option and explain it in a message.
+ *
+ * A label only. It is shown to strangers on a booking page, so it must never
+ * carry an account number, and MAX_CUSTOM_METHOD_LENGTH is short enough that
+ * one does not fit comfortably.
+ */
+export const MAX_CUSTOM_METHODS = 3;
+export const MAX_CUSTOM_METHOD_LENGTH = 40;
+
+/** Trims, caps and drops the empties. Returns what is safe to store. */
+export function cleanCustomMethods(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input) {
+    const label = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_CUSTOM_METHOD_LENGTH);
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(label);
+    if (out.length >= MAX_CUSTOM_METHODS) break;
+  }
+  return out;
+}
+
+/**
  * Methods that only exist to put a label on an old row.
  *
  * 'stripe' was a card hold taken by the platform and released to the provider
@@ -160,6 +192,8 @@ export const PAYMENT_METHODS: PaymentMethodInfo[] = [
  */
 const RETIRED_PAYMENT_METHODS: PaymentMethodInfo[] = [
   { value: 'stripe', label: 'Card (no longer offered)', note: '', handle: false },
+  // The provider wrote their own; the wording is on the booking row.
+  { value: 'other', label: 'Another way', note: 'However they asked to be paid', handle: false },
 ];
 
 /** Every value the schema knows about. For labelling only — never for offering. */

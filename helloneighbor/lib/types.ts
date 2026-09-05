@@ -4,9 +4,17 @@ export type SubscriberStatus = 'pending' | 'active' | 'suspended' | 'rejected';
 // 'baby' was removed when babysitting was banned; see migration 002.
 export type ServiceKind = 'trash' | 'car' | 'dog' | 'tutor' | 'lawn' | 'other';
 export type SlotStatus = 'open' | 'held' | 'booked';
-// 'stripe' is retained so the card code path still compiles; it is not
-// currently offerable — see PAYMENT_METHODS in lib/catalog.ts.
-export type PaymentMethod = 'stripe' | 'cash' | 'venmo' | 'cashapp' | 'zelle' | 'paypal';
+// 'stripe' is retained only to label rows written before migration 028; it is
+// not offerable and the database no longer accepts it. See lib/catalog.ts.
+export type PaymentMethod =
+  | 'stripe'
+  | 'cash'
+  | 'venmo'
+  | 'cashapp'
+  | 'zelle'
+  | 'paypal'
+  // The provider wrote their own; the wording is in bookings.payment_method_note.
+  | 'other';
 
 /** Whether money moves before the job or after it. */
 export type PaymentTiming = 'advance' | 'on_completion';
@@ -207,6 +215,8 @@ export interface OperatorProfile {
   service_radius_mi: number | null;
   response_time_min: number | null;
   payment_handles: Record<string, string>;
+  /** The provider's own ways of being paid, beyond the built-in list. */
+  custom_payment_methods: string[];
 }
 
 /** A booking joined with the bits of its service and slot the UI displays. */

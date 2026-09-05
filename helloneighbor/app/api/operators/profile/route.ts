@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireOperator } from '@/lib/guards';
-import { PAYMENT_METHODS } from '@/lib/catalog';
+import { PAYMENT_METHODS, cleanCustomMethods } from '@/lib/catalog';
 import { normalizeZip } from '@/lib/communities';
 import type { PaymentMethod } from '@/lib/types';
 
@@ -67,6 +67,12 @@ export async function PATCH(request: Request) {
       ? null
       : Math.round(Number(body.response_time_min));
   }
+  if (Array.isArray(body.custom_payment_methods)) {
+    // Trimmed, capped and de-duplicated server-side. The form limits it too,
+    // but the form is not what decides what goes on a public page.
+    profilePatch.custom_payment_methods = cleanCustomMethods(body.custom_payment_methods);
+  }
+
   if (body.payment_handles && typeof body.payment_handles === 'object') {
     profilePatch.payment_handles = body.payment_handles;
   }

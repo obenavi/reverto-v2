@@ -65,6 +65,8 @@ export async function openConversationForBooking(args: {
   operatorMethods: PaymentMethod[];
   operatorPrefersAdvance: boolean;
   operatorHandles: Record<string, string>;
+  /** The provider's own ways of being paid, written by them. */
+  operatorCustomMethods: string[];
   clientName: string;
   clientPhone: string;
   serviceTitle: string;
@@ -119,14 +121,26 @@ export async function openConversationForBooking(args: {
     seed.push({ sender: 'client', kind: 'text', body: args.note.trim() });
   }
 
+  // The whole point of the thread opening this way: payment is agreed here,
+  // after the booking, between the two of them — not picked from a form that
+  // implied the app was going to process it.
+  const choiceCount = args.operatorMethods.length + args.operatorCustomMethods.length;
   seed.push({
     sender: 'operator',
     kind: 'payment_poll',
     body:
-      args.operatorMethods.length === 1
-        ? `${args.operatorName} takes ${paymentLabel(args.operatorMethods[0])}. Tap to confirm.`
+      choiceCount === 1
+        ? `${args.operatorName} takes ${
+            args.operatorMethods.length === 1
+              ? paymentLabel(args.operatorMethods[0])
+              : args.operatorCustomMethods[0]
+          }. Tap to confirm.`
         : `${args.operatorName} accepts these. Pick whichever works for you:`,
-    metadata: { options: args.operatorMethods, handles: args.operatorHandles },
+    metadata: {
+      options: args.operatorMethods,
+      handles: args.operatorHandles,
+      custom: args.operatorCustomMethods,
+    },
   });
 
   if (args.operatorPrefersAdvance) {

@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import { Notice } from '@/components/ui';
-import { PAYMENT_METHODS, HANDLE_METHODS, paymentNote } from '@/lib/catalog';
+import {
+  PAYMENT_METHODS,
+  HANDLE_METHODS,
+  MAX_CUSTOM_METHODS,
+  MAX_CUSTOM_METHOD_LENGTH,
+  paymentNote,
+} from '@/lib/catalog';
 import type { OperatorProfile, PaymentMethod, Subscriber } from '@/lib/types';
 import { useMutate } from './useMutate';
 
@@ -24,6 +30,9 @@ export default function ProfilePanel({
   const [methods, setMethods] = useState<PaymentMethod[]>(operator.payment_methods);
   const [headline, setHeadline] = useState(profile?.headline ?? '');
   const [handles, setHandles] = useState<Record<string, string>>(profile?.payment_handles ?? {});
+  const [customMethods, setCustomMethods] = useState<string[]>(
+    profile?.custom_payment_methods ?? []
+  );
   const [prefersAdvance, setPrefersAdvance] = useState(operator.prefers_advance_payment);
 
   function toggleMethod(value: PaymentMethod) {
@@ -46,6 +55,7 @@ export default function ProfilePanel({
         prefers_advance_payment: prefersAdvance,
         headline,
         payment_handles: handles,
+        custom_payment_methods: customMethods,
       },
     });
     setSaved(ok);
@@ -131,6 +141,47 @@ export default function ProfilePanel({
           </p>
         </div>
       ))}
+
+      <fieldset>
+        <legend className="mb-1 block text-[13px] font-semibold">
+          Any other way you take payment
+        </legend>
+        <p className="mb-2 text-[12px] text-ink-faint">
+          A cheque, a bank transfer, an app we have not heard of — write it how you would
+          say it. Neighbors see this on your booking page, so put the name of the method
+          and nothing else. Never an account number.
+        </p>
+        <div className="space-y-2">
+          {customMethods.map((label, i) => (
+            <div key={i} className="flex gap-2">
+              <input
+                value={label}
+                maxLength={MAX_CUSTOM_METHOD_LENGTH}
+                placeholder="Bank transfer"
+                onChange={(e) =>
+                  setCustomMethods(customMethods.map((c, j) => (j === i ? e.target.value : c)))
+                }
+              />
+              <button
+                type="button"
+                className="btn-secondary shrink-0"
+                onClick={() => setCustomMethods(customMethods.filter((_, j) => j !== i))}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          {customMethods.length < MAX_CUSTOM_METHODS && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setCustomMethods([...customMethods, ''])}
+            >
+              + Add a way
+            </button>
+          )}
+        </div>
+      </fieldset>
 
       <fieldset className="rounded-card border border-line p-3">
         <legend className="px-1 text-[13px] font-semibold">When you get paid</legend>

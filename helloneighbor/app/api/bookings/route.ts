@@ -58,7 +58,11 @@ export async function POST(request: Request) {
   const slotId = String(body.slot_id ?? '');
   const clientName = String(body.client_name ?? '').trim();
   const clientPhone = normalizePhone(String(body.client_phone ?? ''));
-  const paymentMethod = String(body.payment_method ?? '') as PaymentMethod;
+  // Optional now. Payment is agreed in the thread after booking, not in the
+  // form — so null means "not settled yet", which is the honest state of a
+  // booking somebody has just made.
+  const rawMethod = String(body.payment_method ?? '').trim();
+  const paymentMethod = (rawMethod || null) as PaymentMethod | null;
 
   if (!operatorId || !serviceId || !slotId) {
     return NextResponse.json({ error: 'Pick a service and a time.' }, { status: 400 });
@@ -67,23 +71,26 @@ export async function POST(request: Request) {
   if (!clientPhone) {
     return NextResponse.json({ error: 'That phone number does not look right.' }, { status: 400 });
   }
-  if (!KNOWN_METHODS.has(paymentMethod)) {
-    return NextResponse.json({ error: 'Choose how you want to pay.' }, { status: 400 });
-  }
+  // A method is not required, but one that is sent still has to be real.
   // Enforced here as well as in the UI — the offerable list is a presentation
-  // concern and this route is public. 'stripe' lands here: it is a label on
-  // historical rows, not something a new booking may choose, because the
-  // platform does not handle money between two users.
-  if (!OFFERABLE_METHODS.has(paymentMethod)) {
-    return NextResponse.json(
-      {
-        error:
-          paymentMethod === 'stripe'
-            ? 'Card payments through HelloNeighbor are not offered. Pay them directly — cash or a payment app.'
-            : 'That payment method is not available right now.',
-      },
-      { status: 400 }
-    );
+  // concern and this route is public. 'stripe' lands here: it labels rows
+  // written before migration 028 and is not something a new booking may pick,
+  // because the platform does not handle money between two users.
+  if (paymentMethod !== null) {
+    if (!KNOWN_METHODS.has(paymentMethod)) {
+      return NextResponse.json({ error: 'That is not a payment method.' }, { status: 400 });
+    }
+    if (!OFFERABLE_METHODS.has(paymentMethod)) {
+      return NextResponse.json(
+        {
+          error:
+            paymentMethod === 'stripe'
+              ? 'Card payments through HelloNeighbor are not offered. Pay them directly — cash or a payment app.'
+              : 'That payment method is not available right now.',
+        },
+        { status: 400 }
+      );
+    }
   }
   // Both parties agree to the same terms; the neighbor's acceptance is recorded
   // on the booking so a dispute can be judged against the text they saw.
@@ -141,7 +148,7 @@ export async function POST(request: Request) {
   if (!operator || operator.status !== 'active') {
     return NextResponse.json({ error: 'That operator is not taking bookings.' }, { status: 404 });
   }
-  if (!operator.payment_methods.includes(paymentMethod)) {
+  if (paymentMethod !== null && !operator.payment_methods.includes(paymentMethod)) {
     return NextResponse.json({ error: 'That payment method is not accepted.' }, { status: 400 });
   }
 
@@ -195,7 +202,7 @@ export async function POST(request: Request) {
   // Handles live on the extended profile; a neighbor paying by app needs them.
   const { data: operatorProfile } = await db
     .from('operator_profiles')
-    .select('payment_handles')
+    .select('payment_handles, custom_payment_methods')
     .eq('operator_id', operatorId)
     .maybeSingle();
 
@@ -375,6 +382,8 @@ export async function POST(request: Request) {
     operatorMethods: operator.payment_methods,
     operatorPrefersAdvance: Boolean(operator.prefers_advance_payment),
     operatorHandles: (operatorProfile?.payment_handles as Record<string, string>) ?? {},
+    operatorCustomMethods:
+      (operatorProfile?.custom_payment_methods as string[] | undefined) ?? [],
     clientName,
     clientPhone,
     serviceTitle: service.title,

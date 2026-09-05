@@ -43,7 +43,7 @@ export default async function PublicBookingPage({
 
   if (!operator) notFound();
 
-  const [servicesRes, slotsRes, galleryRes, reviewsRes] = await Promise.all([
+  const [servicesRes, slotsRes, galleryRes, reviewsRes, profileRes] = await Promise.all([
     db
       .from('services')
       .select('*')
@@ -64,6 +64,11 @@ export default async function PublicBookingPage({
       .eq('operator_id', operator.id)
       .order('created_at', { ascending: false })
       .limit(5),
+    db
+      .from('operator_profiles')
+      .select('custom_payment_methods')
+      .eq('operator_id', operator.id)
+      .maybeSingle(),
   ]);
 
   const capacityNow = await operatorCapacity(
@@ -96,6 +101,10 @@ export default async function PublicBookingPage({
         capacity={capacityNow}
         curfew={curfew}
         nearHome={nearHome}
+        customMethods={
+          (profileRes.data as { custom_payment_methods?: string[] } | null)
+            ?.custom_payment_methods ?? []
+        }
       />
     </Shell>
   );

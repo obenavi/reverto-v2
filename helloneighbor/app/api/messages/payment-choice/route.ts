@@ -22,7 +22,17 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null);
   const choice = String(body?.method ?? '') as PaymentMethod;
-  if (!METHODS.has(choice)) {
+  // 'other' is the provider's own wording, which has no entry in METHODS
+  // because it is whatever they typed. It still has to have BEEN offered —
+  // checked against the poll below, same as every other option.
+  const custom =
+    choice === 'other' ? String(body?.custom ?? '').trim().slice(0, 40) : null;
+
+  if (choice === 'other') {
+    if (!custom) {
+      return NextResponse.json({ error: 'Pick one of the offered options.' }, { status: 400 });
+    }
+  } else if (!METHODS.has(choice)) {
     return NextResponse.json({ error: 'Pick one of the offered options.' }, { status: 400 });
   }
 
@@ -69,16 +79,25 @@ export async function POST(request: Request) {
   const pollMeta = (poll?.metadata ?? {}) as {
     options?: PaymentMethod[];
     handles?: Record<string, string>;
+    custom?: string[];
   };
   const offered = Array.isArray(pollMeta.options) ? pollMeta.options : [];
+  const offeredCustom = Array.isArray(pollMeta.custom) ? pollMeta.custom : [];
 
-  if (!offered.includes(choice)) {
+  // A provider's own wording is matched against what the poll actually listed,
+  // so "other" cannot be used to write an arbitrary string onto the booking.
+  const matchedCustom =
+    custom === null
+      ? null
+      : offeredCustom.find((label) => label.toLowerCase() === custom.toLowerCase()) ?? null;
+
+  if (choice === 'other' ? matchedCustom === null : !offered.includes(choice)) {
     return NextResponse.json({ error: 'That option was not offered.' }, { status: 400 });
   }
 
   const { error: bookingError } = await db
     .from('bookings')
-    .update({ payment_method: choice })
+    .update({ payment_method: choice, payment_method_note: matchedCustom })
     .eq('id', booking.id);
 
   if (bookingError) {
@@ -87,14 +106,13 @@ export async function POST(request: Request) {
   }
 
   const handle = pollMeta.handles?.[choice];
+  const label = matchedCustom ?? paymentLabel(choice);
   await db.from('messages').insert({
     conversation_id: conversationId,
     sender: 'client',
     kind: 'payment_choice',
-    body: handle
-      ? `Let's do ${paymentLabel(choice)} — sending to ${handle}.`
-      : `Let's do ${paymentLabel(choice)}.`,
-    metadata: { method: choice, handle: handle ?? null },
+    body: handle ? `Let's do ${label} — sending to ${handle}.` : `Let's do ${label}.`,
+    metadata: { method: choice, custom: matchedCustom, handle: handle ?? null },
   });
 
   await touchConversation(conversationId);

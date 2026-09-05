@@ -39,6 +39,7 @@ export default function BookingFlow({
   capacity,
   curfew,
   nearHome,
+  customMethods,
 }: {
   operator: PublicOperator;
   services: Service[];
@@ -54,6 +55,8 @@ export default function BookingFlow({
    * never going to work.
    */
   nearHome: string | null;
+  /** The provider's own ways of being paid, beyond the built-in list. */
+  customMethods: string[];
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
@@ -68,7 +71,6 @@ export default function BookingFlow({
   const [workState, setWorkState] = useState<string>(operator.state ?? '');
   const [workZip, setWorkZip] = useState('');
   const [notes, setNotes] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>(operator.payment_methods[0] ?? 'cash');
 
   // Each line is ticked on its own rather than merged into one sentence. Four
   // taps is friction, and here the friction is the point: a tick against a
@@ -151,7 +153,6 @@ export default function BookingFlow({
         work_state: workState,
         work_zip: workZip,
         notes,
-        payment_method: method,
         accepted_terms: acceptedTerms,
         accepted_consents: acceptedConsentIds,
       }),
@@ -193,13 +194,11 @@ export default function BookingFlow({
           {slot ? formatSlot(slot.starts_at, slot.ends_at) : 'the time you picked'}. We texted
           you a confirmation.
         </p>
-        {method !== 'stripe' && (
-          <p className="mt-3 text-[13px] text-ink-muted">
-            You&apos;ll pay {formatPrice(service?.price_cents ?? 0)} by{' '}
-            {PAYMENT_METHODS.find((m) => m.value === method)?.label.toLowerCase()} when the job
-            is done.
-          </p>
-        )}
+        <p className="mt-3 text-[13px] text-ink-muted">
+          {formatPrice(service?.price_cents ?? 0)}, paid to {operator.name} directly. Sort
+          out which way in the messages — the thread is already waiting with the ways they
+          take payment.
+        </p>
       </div>
     );
   }
@@ -509,41 +508,34 @@ export default function BookingFlow({
             <p className="mt-2 text-xl font-extrabold">{formatPrice(service.price_cents)}</p>
           </div>
 
-          <fieldset className="card">
-            <legend className="mb-2 block text-[13px] font-semibold">
-              How do you want to pay {operator.name}?
-            </legend>
-            <div className="space-y-2">
+          {/* Shown, not chosen. Committing to a payment method before you have
+              spoken to the person you are paying is the wrong order, and a
+              radio button here implies the app has something to do with the
+              transaction. It does not — the two of them settle it in the
+              messages, where the thread opens with exactly this list and a tap
+              to pick one. */}
+          <div className="card">
+            <p className="text-[13px] font-semibold">How {operator.name} takes payment</p>
+            <ul className="mt-2 space-y-1">
               {acceptedMethods.map((m) => (
-                <label
-                  key={m.value}
-                  className={`flex cursor-pointer items-center gap-2 rounded-btn border px-3 py-2 ${
-                    method === m.value ? 'border-brand bg-brand-light' : 'border-line'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    className="!w-auto"
-                    checked={method === m.value}
-                    onChange={() => setMethod(m.value)}
-                  />
-                  <span>
-                    <span className="font-semibold">{m.label}</span>
-                    <span className="block text-[12px] text-ink-muted">{m.note}</span>
-                  </span>
-                </label>
+                <li key={m.value} className="flex items-baseline gap-2 text-[13px]">
+                  <span className="pill bg-success-light text-success">{m.label}</span>
+                  <span className="text-ink-muted">{m.note}</span>
+                </li>
               ))}
-            </div>
-            {/* Said here rather than only in the terms. This is the moment the
-                neighbour forms an expectation about who is holding their money,
-                and the answer is nobody. */}
+              {customMethods.map((label) => (
+                <li key={label} className="flex items-baseline gap-2 text-[13px]">
+                  <span className="pill bg-success-light text-success">{label}</span>
+                  <span className="text-ink-muted">Their own arrangement</span>
+                </li>
+              ))}
+            </ul>
             <p className="mt-3 rounded-btn bg-mist px-3 py-2 text-[12px] text-ink-muted">
-              You pay {operator.name} directly. HelloNeighbor never takes, holds or
-              refunds this money — we are recording what the two of you agreed, and
-              nothing more.
+              You will agree which one in the messages after you book, and you pay{' '}
+              {operator.name} directly. HelloNeighbor never takes, holds or refunds this
+              money.
             </p>
-          </fieldset>
+          </div>
 
           {!notes.trim() && !noteConfirmed && (
             <div className="card border-warning bg-warning-light">
