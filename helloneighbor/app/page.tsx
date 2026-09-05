@@ -16,7 +16,7 @@ const STEPS = [
   {
     n: 2,
     title: 'Get approved',
-    body: 'A grown-up on our team reviews every application before it goes live.',
+    body: 'A person on our team reads every application before it goes live.',
     tone: 'bg-violet-light text-violet',
   },
   {
@@ -38,21 +38,21 @@ const STEPS = [
  */
 const PROOF = [
   { value: '100%', label: 'Yours to keep' },
-  { value: 'Every one', label: 'Adult-reviewed' },
+  { value: 'Every one', label: 'Read by a person' },
   { value: formatCurfew(PLATFORM_CURFEW_MINUTES), label: 'Under-18 curfew' },
 ];
 
 const SAFEGUARDS = [
   {
     emoji: '👀',
-    title: 'A person reviews everyone',
-    body: 'Every application is read by a real admin before it can take a booking.',
+    title: 'A person reads every application',
+    body: 'Nobody goes live automatically, whatever their age.',
     tone: 'bg-teal-light text-teal',
   },
   {
     emoji: '👪',
-    title: 'Parents are in the loop',
-    body: 'Under 18 means an adult is on the account, sees the bookings, and sets the curfew.',
+    title: 'Under 18 has a grown-up on it',
+    body: 'A parent or guardian sees the bookings, sets the curfew, and can cancel. Over 18, the account is simply yours.',
     tone: 'bg-violet-light text-violet',
   },
   {
@@ -83,16 +83,17 @@ export default function LandingPage() {
       <section className="hero">
         <Shell className="!py-12 text-center">
           <span className="pill mb-4 bg-white px-3 py-1 text-brand-dark">
-            🏘️ Now open to {MINIMUM_AGE} and up
+            🏘️ Open to anyone {MINIMUM_AGE} and up
           </span>
           <h1 className="text-[34px] font-extrabold leading-[1.1] tracking-tight sm:text-[42px]">
             The neighborhood runs on
             <br />
-            <span className="text-mint">kids with a hustle.</span>
+            <span className="text-mint">the people on it.</span>
           </h1>
           <p className="mx-auto mt-4 max-w-md text-[15px] text-white/85">
-            Trash cans, car washes, dog walks, tutoring, yard work. Set your prices,
-            share one link, get booked by the people on your street.
+            Trash cans, car washes, dog walks, tutoring, haircuts, yard work — whatever
+            you are good at. Set your prices, share one link, get booked by the people on
+            your street.
           </p>
           <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Link href="/join" className="btn bg-white text-brand-dark hover:bg-brand-light">

@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'HelloNeighbor',
     description:
-      'The neighborhood runs on kids with a hustle. Set your prices, share one link, get booked.',
+      'The neighborhood runs on the people on it. Set your prices, share one link, get booked.',
     type: 'website',
   },
   icons: {

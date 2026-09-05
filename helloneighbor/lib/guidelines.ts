@@ -18,16 +18,26 @@ export const GUIDELINES: GuidelineSection[] = [
     id: 'who',
     title: 'Who HelloNeighbor is for',
     body: [
-      'HelloNeighbor connects neighbors with people in their area who offer small services — taking out trash cans, washing a car, walking a dog, tutoring, yard work. Most are teenagers; anyone 14 or older can offer services.',
-      'Providers under 18 are labelled with their age on their booking page. Their prices are lower and their availability works around school — a customer should know that before booking, and it is not a fault to be hidden.',
-      'Everyone who offers services is reviewed by a person before their listing goes live. That review is a basic sanity check, not a background check, and it is not a guarantee of anything.',
+      'HelloNeighbor connects neighbors with people in their area who offer small services — taking out trash cans, washing a car, walking a dog, tutoring, cutting hair, yard work. Anyone 14 or older can offer services here. Plenty are teenagers earning their first money; plenty are adults with a skill and some spare hours, and the rules are the same for both.',
+      'Age is stated, not sorted by. A provider under 18 is labelled with their age on their booking page, because their prices are usually lower and their availability works around school, and a customer should know that before booking rather than after. Nobody is ranked above anybody for being older.',
+      'Everyone who offers services is read by a person before their listing goes live. That review is a basic sanity check, not a background check, and it is not a guarantee of anything.',
+    ],
+  },
+  {
+    id: 'offering',
+    title: 'Offering your own thing',
+    body: [
+      'You are not limited to the list. Name whatever you are good at — haircuts, car detailing, sports training, guitar lessons, bike repairs, photography, help with a laptop — and it becomes something neighbors can book.',
+      'Every listing is read before it goes live: automatically first, then by a person if there is any doubt. Until somebody has read it, it is saved but not bookable. That is not a comment on you; it is how a listing gets to exist at all.',
+      'Some things are refused outright and no amount of rewording changes it. The list below is what those are, and the principle underneath it is one idea: this app does not let anyone take sole responsibility for a person who cannot look after themselves.',
     ],
   },
   {
     id: 'not-offered',
     title: 'What we do not allow',
     body: [
-      'Babysitting and any other care of children, elderly people, or people who need medical or personal assistance. These carry risks this platform is not built to manage, and they are not available on HelloNeighbor.',
+      'Babysitting and any other care of children, elderly people, or people who need medical or personal assistance. This is the rule with no exceptions and no upper age limit — an adult may not offer it here any more than a fifteen-year-old may. Being wrong once, in that job, is unrecoverable.',
+      'Coaching and lessons are a different thing and are fine, including with somebody’s child: every booking happens either at your place or at theirs with them home for the whole of it, so a tennis lesson for an eight-year-old happens with their parent in the house. That is a lesson, not custody.',
       'Anything requiring a license, certification, or insurance — electrical, plumbing, roof work, driving passengers, handling medication.',
       'Work that involves ladders above standing height, power tools, chemicals beyond ordinary household cleaning products, or entering a home when nobody else is there.',
       'Anything illegal, and anything involving alcohol, tobacco, vaping products, weapons, or cannabis.',

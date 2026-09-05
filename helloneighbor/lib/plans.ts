@@ -21,7 +21,7 @@ export type Plan = {
   customServices: boolean;
   /** Bookings accepted per week before the profile shows as sold out. null = no cap. */
   weeklyBookings: number | null;
-  /** How many young people one paying account covers. */
+  /** How many providers one paying account covers. */
   maxProfiles: number;
   blurb: string;
   includes: string[];
@@ -67,9 +67,9 @@ export const PLANS: Record<PlanId, Plan> = {
     customServices: true,
     weeklyBookings: null,
     maxProfiles: 3,
-    blurb: 'One parent account, more than one kid.',
+    blurb: 'One paying account, more than one provider.',
     includes: [
-      'Up to 3 young people under one paying account',
+      'Up to 3 providers under one paying account',
       'One place for a parent to see all of their activity',
       'Everything in Pro',
     ],

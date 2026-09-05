@@ -233,7 +233,7 @@ export const GENERAL_TERMS: AgreementDoc = {
       title: 'What we do about people who cause harm',
       plain: 'Ordinary problems escalate. Serious ones mean immediate suspension.',
       body: [
-        'Ordinary problems escalate: a warning on the record, then a suspension, then closure. Serious matters — violence, threats, sexual conduct, weapons or drugs, or anything putting a young person at risk — mean immediate suspension while a person reviews it, with no warning stage.',
+        'Ordinary problems escalate: a warning on the record, then a suspension, then closure. Serious matters — violence, threats, sexual conduct, weapons or drugs, or anything putting anyone at risk — mean immediate suspension while a person reviews it, with no warning stage.',
         'Closure removes the listing, ends the ability to book or be booked, and blocks the same phone number and email from signing up again.',
         'You may appeal any action by writing to us, and a person will look again.',
         'We will tell you what action was taken on a report you made. We will not tell you anything else about the other person’s account.',
@@ -417,7 +417,7 @@ export const CUSTOMER_AGREEMENT: AgreementDoc = {
       title: 'Reporting',
       plain: 'Tell us about hazards, injuries, threats, or anything that looked like exploitation.',
       body: [
-        'Report promptly any injury, near miss, hazard, threat, or conduct that concerned you, including anything that looked like a young person being exploited.',
+        'Report promptly any injury, near miss, hazard, threat, or conduct that concerned you, including anything that looked like anyone being exploited.',
         'If anyone is in immediate danger, call emergency services first. We are not an emergency service and do not monitor jobs.',
       ],
     },
@@ -566,7 +566,7 @@ export const COMMUNITY_AGREEMENT: AgreementDoc = {
   audience:
     'Anyone running a neighborhood group, and any school, nonprofit, association or sponsor organising activity here',
   preamble:
-    'Accepted before you can run a group. Running one means deciding who is admitted and seeing what is happening on your street, which is real responsibility over other people’s children.',
+    'Accepted before you can run a group. Running one means deciding who is admitted and seeing what is happening on your street, which is real responsibility over other people — their children among them.',
   clauses: [
     {
       n: 1,

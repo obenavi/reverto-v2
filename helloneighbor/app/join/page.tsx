@@ -126,7 +126,7 @@ export default function JoinPage() {
     <Shell>
       <PageHeader
         title="Start your business"
-        subtitle="Two minutes. A grown-up reviews every application."
+        subtitle="Two minutes. A person reads every application."
         back={{ href: '/', label: 'Home' }}
       />
 

@@ -12,10 +12,16 @@ export function useMutate() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function mutate(
+  /**
+   * Resolves to the response body on success and null on failure, so a caller
+   * that needs something back — a listing that saved but is not live yet, say —
+   * can read it. Callers that only care whether it worked can still treat the
+   * result as truthy.
+   */
+  async function mutate<T = Record<string, unknown>>(
     url: string,
     options: { method: string; body?: unknown }
-  ): Promise<boolean> {
+  ): Promise<T | null> {
     setBusy(true);
     setError(null);
 
@@ -27,14 +33,15 @@ export function useMutate() {
 
     setBusy(false);
 
+    const body = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       setError(body.error ?? 'Something went wrong.');
-      return false;
+      return null;
     }
 
     router.refresh();
-    return true;
+    return body as T;
   }
 
   return { mutate, busy, error, setError };

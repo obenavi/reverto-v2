@@ -56,7 +56,7 @@ export default function ProfilePanel({
         custom_payment_methods: customMethods,
       },
     });
-    setSaved(ok);
+    setSaved(ok !== null);
   }
 
   return (
