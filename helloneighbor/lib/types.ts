@@ -17,6 +17,12 @@ export type PaymentMethod =
   | 'other';
 
 /** Whether money moves before the job or after it. */
+/**
+ * When payment is due. There is one value.
+ *
+ * 'advance' is kept in the union only so a row written before migration 032
+ * can still be read; the database no longer accepts it, and nothing offers it.
+ */
 export type PaymentTiming = 'advance' | 'on_completion';
 export type PaymentStatus =
   | 'pending'
@@ -44,7 +50,6 @@ export interface Subscriber {
   approved_at: string | null;
   accepted_terms_at: string | null;
   accepted_terms_version: string | null;
-  prefers_advance_payment: boolean;
   /** Guardian details, required and populated only for operators under 18. */
   guardian_name: string | null;
   guardian_phone: string | null;
@@ -242,8 +247,6 @@ export type MessageKind =
   | 'text'
   | 'payment_poll'
   | 'payment_choice'
-  | 'timing_poll'
-  | 'timing_choice'
   | 'payment_memo'
   | 'late_notice'
   | 'late_choice'

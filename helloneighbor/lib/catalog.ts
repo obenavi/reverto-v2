@@ -245,16 +245,24 @@ export function paymentNote(value: PaymentMethod): string {
   return ALL_PAYMENT_METHODS.find((p) => p.value === value)?.note ?? '';
 }
 
+/**
+ * When payment is due. There is one answer.
+ *
+ * Advance payment used to be an option a provider could switch on. It is gone:
+ * every marketplace fraud that does not need an escrow account runs through
+ * prepayment — take the money, never turn up — and with no money passing
+ * through this platform there is nothing to claw back. Paying at the door when
+ * the job is done makes that scam worth nothing.
+ *
+ * The list keeps its shape so a booking written before this can still be
+ * labelled, and so that putting a second entry back is a visible diff rather
+ * than a one-character change.
+ */
 export const PAYMENT_TIMINGS: { value: PaymentTiming; label: string; note: string }[] = [
-  {
-    value: 'advance',
-    label: 'Pay in advance',
-    note: 'Send it now, before the job',
-  },
   {
     value: 'on_completion',
     label: 'Pay when it is done',
-    note: 'Settle up at the end',
+    note: 'In person, at the end of the job, with you both there',
   },
 ];
 

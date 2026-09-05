@@ -33,7 +33,6 @@ export default function ProfilePanel({
   const [customMethods, setCustomMethods] = useState<string[]>(
     profile?.custom_payment_methods ?? []
   );
-  const [prefersAdvance, setPrefersAdvance] = useState(operator.prefers_advance_payment);
 
   function toggleMethod(value: PaymentMethod) {
     setMethods((prev) =>
@@ -52,7 +51,6 @@ export default function ProfilePanel({
         bio,
         photo_url: photoUrl,
         payment_methods: methods,
-        prefers_advance_payment: prefersAdvance,
         headline,
         payment_handles: handles,
         custom_payment_methods: customMethods,
@@ -183,25 +181,17 @@ export default function ProfilePanel({
         </div>
       </fieldset>
 
-      <fieldset className="rounded-card border border-line p-3">
-        <legend className="px-1 text-[13px] font-semibold">When you get paid</legend>
-        <label className="flex cursor-pointer items-start gap-2 text-[13px]">
-          <input
-            type="checkbox"
-            className="!mt-0.5 !w-auto"
-            checked={prefersAdvance}
-            onChange={(e) => setPrefersAdvance(e.target.checked)}
-          />
-          <span className="text-ink-muted">
-            I&apos;d rather be paid in advance.
-            <span className="mt-1 block text-[12px] text-ink-faint">
-              Turn this on and every new booking&apos;s conversation says so for you, with
-              a ready-made payment note for the neighbor to paste into their transfer.
-              Leave it off and you&apos;ll be asked on each booking.
-            </span>
-          </span>
-        </label>
-      </fieldset>
+      {/* Not a setting. Every booking is settled the same way, in person at
+          the end — see migration 032 for why asking for money up front is not
+          something this app lets anyone do. */}
+      <div className="rounded-card border border-line bg-mist p-3 text-[13px] text-ink-muted">
+        <p className="font-semibold text-ink">You get paid when the job is done</p>
+        <p className="mt-1">
+          In person, at the end, with both of you there. Nobody pays you up front and
+          nobody can ask a neighbor to — it is the one thing that makes a fake account
+          worth running.
+        </p>
+      </div>
 
       {error && <Notice tone="error">{error}</Notice>}
       {saved && !error && <Notice tone="success">Saved.</Notice>}

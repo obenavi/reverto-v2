@@ -57,7 +57,7 @@
  */
 
 /** Bump on any material change. Stored against every acceptance. */
-export const LIABILITY_VERSION = '2026-09-05.1';
+export const LIABILITY_VERSION = '2026-09-05.2';
 
 /** The one state with a written addendum so far. Others gate on review. */
 export const LAUNCH_JURISDICTION = 'California';
@@ -260,6 +260,8 @@ export const GENERAL_TERMS: AgreementDoc = {
         'HelloNeighbor does not process payments between users. There is no card button, no wallet, no balance, no escrow and no payout. Every payment for a job is made directly from the neighbour to the provider — cash, or an app such as Venmo, Cash App, Zelle or PayPal that the two of you already use. We record which method was agreed and the amount, and that is the whole of our involvement.',
         'Because we hold nothing, we cannot take a payment, release one, refund one, reverse one, or hold one back while a dispute runs. If someone does not pay, the debt is owed to the other person and is theirs to pursue, in small claims court if it comes to that.',
         'The price shown at booking is the price. Renegotiating off the app is a breach of these terms.',
+        'Payment is due in person, when the job is finished and both parties are present. Advance payment is not offered and may not be requested: a request to be paid before a job is a breach of these terms, and where it comes from an account claiming to be a young person it is treated as a safety matter rather than a payment one.',
+        'Failing to pay for work that was done is a breach of these terms. We hold no money and cannot compel payment, but the booking record, the messages, and either party’s marked receipt are available to you, and an account may be warned, suspended or closed for it.',
         'The only money HelloNeighbor takes from anyone is the subscription a provider pays for access to the listing and scheduling tools. It is a fee for software. It is not a commission on anyone’s work, not a booking fee, not a placement fee, not a payment for finding anyone work, and it does not purchase insurance or make us a party to any job. Fees already paid are not refundable except where we say so in writing or where the law requires it.',
         'If we ever add a feature that moves money between users, we will say so plainly before it goes live, and we will use a licensed third-party processor and keep user funds separate from our own. Nothing in this clause is a promise that any such feature is unregulated — whether it is depends on how it operates and on the law that applies to it.',
       ],

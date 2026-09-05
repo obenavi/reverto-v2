@@ -63,7 +63,6 @@ export async function openConversationForBooking(args: {
   operatorId: string;
   operatorName: string;
   operatorMethods: PaymentMethod[];
-  operatorPrefersAdvance: boolean;
   operatorHandles: Record<string, string>;
   /** The provider's own ways of being paid, written by them. */
   operatorCustomMethods: string[];
@@ -108,8 +107,6 @@ export async function openConversationForBooking(args: {
       | 'text'
       | 'payment_poll'
       | 'payment_choice'
-      | 'timing_poll'
-      | 'timing_choice'
       | 'payment_memo'
       | 'system';
     body: string;
@@ -123,7 +120,7 @@ export async function openConversationForBooking(args: {
     {
       sender: 'client',
       kind: 'text',
-      body: `Hi! My name is ${args.clientName} and I booked you for ${args.serviceTitle} on ${when}. How would you like to get paid — in advance, or cash on the spot?`,
+      body: `Hi! My name is ${args.clientName} and I booked you for ${args.serviceTitle} on ${when}. I'll pay you at the end, in person.`,
     },
   ];
 
@@ -168,30 +165,15 @@ export async function openConversationForBooking(args: {
     });
   }
 
-  if (args.operatorPrefersAdvance) {
-    // The operator has already said, once, in their profile that they want
-    // paying up front — so answer for them rather than making them tap it
-    // again on every booking, and put the memo up immediately.
-    seed.push({
-      sender: 'operator',
-      kind: 'timing_choice',
-      body: `I'd rather be paid in advance, before I come out.`,
-      metadata: { timing: 'advance', from_profile: true },
-    });
-    seed.push({
-      sender: 'operator',
-      kind: 'payment_memo',
-      body: memo,
-      metadata: { memo },
-    });
-  } else {
-    seed.push({
-      sender: 'client',
-      kind: 'timing_poll',
-      body: 'And when would you like it?',
-      metadata: { options: ['advance', 'on_completion'] },
-    });
-  }
+  // The memo goes up whichever way they settle. Somebody paying by app at the
+  // door still needs a reference on the transfer, and the provider still needs
+  // to be able to tell two identical £15 payments apart afterwards.
+  seed.push({
+    sender: 'operator',
+    kind: 'payment_memo',
+    body: memo,
+    metadata: { memo },
+  });
 
   // Stamp each seeded message a millisecond apart. Inserting them in one batch
   // gives them all the same default now(), and the thread is ordered by
@@ -209,15 +191,6 @@ export async function openConversationForBooking(args: {
   );
 
   if (seedError) console.error('[conversations] could not seed thread', seedError);
-
-  // Keep the booking in step when the operator's profile already answered.
-  if (args.operatorPrefersAdvance) {
-    const { error: timingError } = await db
-      .from('bookings')
-      .update({ payment_timing: 'advance' })
-      .eq('id', args.bookingId);
-    if (timingError) console.error('[conversations] could not set timing', timingError);
-  }
 
   return {
     conversationId: conversation.id,

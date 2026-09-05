@@ -5,7 +5,7 @@
  * acceptance. Bump it whenever the text below changes materially, so a dispute
  * can be judged against the wording each party actually saw.
  */
-export const TERMS_VERSION = '2026-09-05.1';
+export const TERMS_VERSION = '2026-09-05.2';
 
 export type GuidelineSection = {
   id: string;
@@ -62,7 +62,9 @@ export const GUIDELINES: GuidelineSection[] = [
       'The only money HelloNeighbor ever takes from anyone is the monthly subscription a provider pays for the tools — their booking page, their schedule, their messages. It is a fee for software. It is not a commission, not a booking fee, not a cut of anyone\u2019s work, and it buys no insurance.',
       'Because we hold nothing, we cannot take a payment, release one, refund one, reverse one, or hold one back while an argument runs. If somebody does not pay, the money is owed to the other person and is theirs to chase.',
       'The price shown at booking is the price. Do not renegotiate off-app.',
-      'Payment is handed over in person, when the job is done and you are both there — unless the provider asks to be paid in advance and you agree to it in the messages. When you book you tick every way you could pay them, and they pick one of those.',
+      'Payment is handed over in person, when the job is done and you are both there. Never before. Nobody on HelloNeighbor may ask to be paid up front, and a provider who asks you to send money before they turn up is either breaking these guidelines or is not who they say they are — do not send it, and report them.',
+      'When you book you tick every way you could pay them, and they pick one of those.',
+      'Not paying somebody who did the work is a breach of these guidelines. We cannot make you pay — we never held the money — but the provider can mark the booking unpaid with their evidence, and an account that does it can be warned, suspended or closed.',
       'Either of you can mark a booking as paid in the app and attach a screenshot or a photo of the receipt. That is a record of what you each say happened, kept in case it is ever needed. It is not us confirming anything, because we are not in a position to.',
     ],
   },

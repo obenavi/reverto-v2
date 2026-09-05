@@ -22,9 +22,6 @@ export async function PATCH(request: Request) {
   if (typeof body.area === 'string' && body.area.trim()) subscriberPatch.area = body.area.trim();
   if (typeof body.bio === 'string') subscriberPatch.bio = body.bio.trim() || null;
   if (typeof body.photo_url === 'string') subscriberPatch.photo_url = body.photo_url.trim() || null;
-  if (typeof body.prefers_advance_payment === 'boolean') {
-    subscriberPatch.prefers_advance_payment = body.prefers_advance_payment;
-  }
   if (typeof body.community_only === 'boolean') {
     subscriberPatch.community_only = body.community_only;
   }

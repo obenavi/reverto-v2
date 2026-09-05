@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, Notice } from '@/components/ui';
 import { formatPrice, relativeTime } from '@/lib/format';
-import { PAYMENT_TIMINGS, paymentNote, paymentLabel } from '@/lib/catalog';
-import type { Message, PaymentMethod, PaymentTiming } from '@/lib/types';
+import { paymentNote, paymentLabel } from '@/lib/catalog';
+import type { Message, PaymentMethod } from '@/lib/types';
 import ReportBlock from './ReportBlock';
 import EnableNotifications from './EnableNotifications';
 import { OpenDispute, LeaveReview } from './DisputeReview';
@@ -130,23 +130,6 @@ export default function ChatThread({
     await load();
   }
 
-  async function chooseTiming(timing: PaymentTiming) {
-    setSending(true);
-    const res = await fetch('/api/messages/timing-choice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversation_id: conversationId, timing }),
-    });
-    setSending(false);
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? 'Could not save that.');
-      return;
-    }
-    await load();
-  }
-
   async function copyMemo(text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -162,7 +145,6 @@ export default function ChatThread({
 
   const booking = conversation?.bookings;
   const answered = messages.some((m) => m.kind === 'payment_choice');
-  const timingAnswered = messages.some((m) => m.kind === 'timing_choice');
   const lateAnswered = messages.some((m) => m.kind === 'late_choice');
   const otherName =
     viewer === 'client' ? (conversation?.subscribers?.name ?? 'your provider') : conversation?.client_name;
@@ -227,7 +209,7 @@ export default function ChatThread({
 
             const mine = message.sender === viewer;
             const meta = (message.metadata ?? {}) as {
-              options?: (PaymentMethod | PaymentTiming | 'accepted' | 'reschedule')[];
+              options?: (PaymentMethod | 'accepted' | 'reschedule')[];
               handles?: Record<string, string>;
               /** The provider's own ways of being paid, in their own words. */
               custom?: string[];
@@ -269,30 +251,6 @@ export default function ChatThread({
                       ) : (
                         <p className={`text-[12px] ${mine ? 'text-white/70' : 'text-ink-faint'}`}>
                           {lateAnswered ? 'Answered' : 'Waiting for a reply'}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {message.kind === 'timing_poll' && (
-                    <div className="mt-2 space-y-1">
-                      {viewer === 'operator' && !timingAnswered ? (
-                        PAYMENT_TIMINGS.map((option) => (
-                          <button
-                            key={option.value}
-                            disabled={sending}
-                            onClick={() => chooseTiming(option.value)}
-                            className="block w-full rounded-btn bg-white px-3 py-2 text-left font-semibold text-brand hover:bg-brand-light disabled:opacity-50"
-                          >
-                            {option.label}
-                            <span className="block text-[12px] font-normal text-ink-muted">
-                              {option.note}
-                            </span>
-                          </button>
-                        ))
-                      ) : (
-                        <p className={`text-[12px] ${mine ? 'text-white/70' : 'text-ink-faint'}`}>
-                          {timingAnswered ? 'Answered' : 'Waiting for a reply'}
                         </p>
                       )}
                     </div>

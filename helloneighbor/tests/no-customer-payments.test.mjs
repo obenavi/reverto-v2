@@ -175,6 +175,35 @@ assert.deepEqual(cleanCustomMethods('not an array'), []);
 assert.deepEqual(cleanCustomMethods(null), []);
 checks += 7;
 
+// --- Advance payment is gone and stays gone ---------------------------------
+// It protected the provider against not being paid, which is a real problem.
+// It is still gone, because every marketplace fraud that does not need an
+// escrow account runs through prepayment: take the money, never turn up. With
+// no money passing through this platform there is nothing to claw back, and
+// the account most likely to run it is a fake one wearing a teenager's photo.
+const { PAYMENT_TIMINGS } = await loadModule('lib/catalog.ts');
+assert.equal(PAYMENT_TIMINGS.length, 1, 'there is more than one payment timing again');
+assert.equal(PAYMENT_TIMINGS[0].value, 'on_completion');
+checks += 2;
+
+forbid(/timing_poll|timing_choice/, 'the advance-payment poll is back');
+forbid(/prefers_advance_payment/, 'the advance-payment switch is back');
+
+assert.ok(
+  /Advance payment is not offered and may not be requested/i.test(liability),
+  'the terms should refuse advance payment outright, not merely not mention it'
+);
+assert.ok(
+  /may not ask to be paid up front|may ask to be paid up front/i.test(guidelines) ||
+    /paid up front/i.test(guidelines),
+  'the guidelines should tell a neighbour that being asked for money up front is a red flag'
+);
+assert.ok(
+  /Not paying somebody who did the work is a breach/i.test(guidelines),
+  'removing advance payment shifts the risk onto the provider — the guidelines have to name non-payment as a breach'
+);
+checks += 3;
+
 
 // --- Report ------------------------------------------------------------------
 if (failures.length > 0) {

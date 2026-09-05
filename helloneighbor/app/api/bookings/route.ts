@@ -142,7 +142,7 @@ export async function POST(request: Request) {
 
   const { data: operator } = await db
     .from('subscribers')
-    .select('id, name, phone, age, zip_code, status, payment_methods, prefers_advance_payment, plan, community_only, state')
+    .select('id, name, phone, age, zip_code, status, payment_methods, plan, community_only, state')
     .eq('id', operatorId)
     .maybeSingle();
 
@@ -360,6 +360,8 @@ export async function POST(request: Request) {
       notes: body.notes ? String(body.notes).trim() : null,
       price_cents: service.price_cents,
       payment_method: paymentMethod,
+      // One value. Payment is settled in person when the job is done.
+      payment_timing: 'on_completion',
       payment_status: 'pending',
       status: 'confirmed',
       client_subscriber_id: bookingAsSubscriberId,
@@ -414,7 +416,6 @@ export async function POST(request: Request) {
     operatorId,
     operatorName: operator.name,
     operatorMethods: operator.payment_methods,
-    operatorPrefersAdvance: Boolean(operator.prefers_advance_payment),
     operatorHandles: (operatorProfile?.payment_handles as Record<string, string>) ?? {},
     operatorCustomMethods:
       (operatorProfile?.custom_payment_methods as string[] | undefined) ?? [],
