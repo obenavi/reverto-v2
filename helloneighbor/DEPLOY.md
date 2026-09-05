@@ -1,12 +1,75 @@
-# Deploying HelloNeighbor
+# Running and deploying HelloNeighbor
 
-Everything the code needs is done. What remains needs *your* accounts — I have
-no credentials for Vercel or Apple and cannot create them.
-
-## 1. Put it online (~15 minutes)
+Everything the code needs is done. What remains needs *your* accounts — nobody
+here has credentials for Supabase secrets, Vercel, Twilio or Apple.
 
 Supabase is already live: project `helloneighbor`, ref `rytwnyqnokidcybiwckk`,
-us-east-1, all four migrations applied.
+us-east-1, **32 migrations applied**. The tables are empty; there are no
+accounts yet.
+
+---
+
+## 0. Just browse it, on your own machine (~5 minutes)
+
+This is the shortest path to clicking around, and it needs four values and no
+paid services.
+
+```bash
+cd helloneighbor
+npm install
+cp .env.example .env.local     # then fill in the four below
+npm run dev                    # http://localhost:3000
+```
+
+| Variable | Where from |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://rytwnyqnokidcybiwckk.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → `anon public` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → `service_role` (secret) |
+| `SESSION_SECRET` | `openssl rand -base64 32` |
+
+Three things make this work without Twilio, Anthropic or a lawyer, and **all
+three are switched off the moment `NODE_ENV=production`**:
+
+- **Login codes come back in the response** instead of by SMS, so you can log
+  in with no Twilio account. `app/api/auth/request-code/route.ts`.
+- **Listings go live without the supervisor.** With no `ANTHROPIC_API_KEY`
+  every new service would otherwise stay hidden pending a review that can never
+  happen. `app/api/operators/services/route.ts`.
+- **The jurisdiction gate lets you through.** See the warning below — this is
+  the one that confuses people on their first real deploy.
+
+### A path through the app that touches most of it
+
+1. `/join` — sign up. Put an age of 15 to see the guardian flow, or 30 to see
+   the app as an adult uses it.
+2. The response tells you the login code. `/login` with the same phone.
+3. `/admin/login` with `ADMIN_PASSWORD` — approve the account. (Try approving a
+   15-year-old *before* the guardian consents: it should refuse.)
+4. Dashboard → Services → add one. Pick "Something else" to name your own, and
+   try typing "babysitting" to watch it get refused.
+5. Dashboard → Schedule → open a time. Then **My link** → copy it.
+6. Open that link in another browser and book yourself. You will land in the
+   thread with the payment poll waiting.
+
+---
+
+## ⚠️ The thing that will confuse you on a real deploy
+
+**In production, every signup is refused, on purpose.**
+
+`lib/jurisdictions.ts` requires a named counsel sign-off per state before that
+state is enabled, and California's entry currently reads
+`reviewedBy: 'PENDING — no counsel sign-off yet'`. An unreviewed jurisdiction
+fails closed in production, so a deployed build turns everyone away.
+
+That is the intended behaviour and the fix is not a code change — it is a
+lawyer's name in that file, once one has actually read `docs/COMPLIANCE.md`.
+Until then, `NODE_ENV=development` locally is how you see the app work.
+
+---
+
+## 1. Put it online (~15 minutes)
 
 ```bash
 npm install -g vercel
@@ -124,5 +187,8 @@ sequence is both cheaper and much likelier to pass review.
 - **Get a lawyer to read `/guidelines` and `/privacy`.** The liability clause is
   wording, not protection, and a platform connecting minors with strangers
   carries exposure that wording does not remove.
-- **Answer the COPPA question.** The schema accepts 8-year-olds.
+- **Answer the employment-agency question.** The only money the platform takes
+  is a subscription from the *provider* — a fee charged to the worker, which is
+  the pattern several states regulate under employment-agency and job-listing
+  statutes. Unresolved; see `docs/COMPLIANCE.md`.
 - **Consider insurance.** General liability, at minimum.

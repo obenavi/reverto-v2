@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { requireOperator } from '@/lib/guards';
 import { jurisdictionFor, kindAllowedIn } from '@/lib/jurisdictions';
 import { SERVICE_KINDS } from '@/lib/catalog';
-import { reviewContent } from '@/lib/supervisor';
+import { isSupervisorConfigured, reviewContent } from '@/lib/supervisor';
 import { screenServiceText } from '@/lib/serviceScreen';
 import { PLANS, kindAllowedOnPlan, type PlanId } from '@/lib/plans';
 import { serviceAllowance } from '@/lib/capacity';
@@ -137,8 +137,16 @@ export async function POST(request: Request) {
 
   // 'review' and 'error' both mean a person has not seen it yet. It stays
   // hidden — a listing nobody has checked should not be taking bookings, and
-  // an unconfigured or failing supervisor is not a reason to publish.
-  if (verdict !== 'pass') {
+  // a failing supervisor is not a reason to publish.
+  //
+  // The one exception is a developer with no ANTHROPIC_API_KEY set, who would
+  // otherwise find that nothing they list ever appears and have no idea why.
+  // Same shape as the login-code fallback in api/auth/request-code: it exists
+  // only where NODE_ENV is not production, and the moment a key IS set the
+  // real verdict applies again.
+  const unreviewedLocally = !isSupervisorConfigured() && process.env.NODE_ENV !== 'production';
+
+  if (verdict !== 'pass' && !unreviewedLocally) {
     return NextResponse.json(
       {
         service: data,

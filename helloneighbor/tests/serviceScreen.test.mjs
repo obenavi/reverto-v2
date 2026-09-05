@@ -137,6 +137,19 @@ assert.ok(/screenServiceText\(/.test(patch), 'an edit is new text and must be sc
 assert.ok(/reviewContent\(/.test(patch), 'an edit must go to the model as well');
 passed += 2;
 
+console.log('\n— the local escape hatch is local —');
+// A developer with no API key would otherwise find that nothing they list ever
+// appears. The hatch is fine; the hatch reaching production is not.
+assert.ok(
+  /NODE_ENV !== 'production'/.test(route),
+  'the unconfigured-supervisor fallback must be scoped to non-production'
+);
+assert.ok(
+  /!isSupervisorConfigured\(\) && process\.env\.NODE_ENV !== 'production'/.test(route),
+  'the fallback must require BOTH an unconfigured supervisor and a non-production build'
+);
+passed += 2;
+
 console.log('\n— the guidelines describe it —');
 const guidelines = readFileSync(join(root, 'lib/guidelines.ts'), 'utf8');
 assert.ok(/You are not limited to the list/.test(guidelines), 'say that people can name their own');
