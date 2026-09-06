@@ -20,6 +20,7 @@ import { supabaseAdmin } from './supabase';
 import { MINOR_BADGE_LIMIT } from './guardian';
 import type { Supervision } from './parents';
 import { isFree } from './promos';
+import { effectiveFreeUntil } from './pilot';
 
 export type BillingReason =
   /** Charging, or about to. */
@@ -79,10 +80,15 @@ export function billingState(row: {
   plan_renews_at: string | null;
   free_until?: string | null;
 }): BillingState {
+  // A pilot makes everybody free without touching a single row. Folded in
+  // here rather than at every call site, so there is no path that reads the
+  // raw column and bills somebody during one.
+  const freeUntil = effectiveFreeUntil(row.free_until);
+
   const base = {
     startedAt: row.plan_started_at,
     renewsAt: row.plan_renews_at,
-    freeUntil: row.free_until ?? null,
+    freeUntil,
   };
 
   // Supervision comes first even inside a free period. A minor with no adult
@@ -91,7 +97,7 @@ export function billingState(row: {
   if (!supervisionSettled(row.age, row.supervision)) {
     return { reason: 'awaiting_adult', ...base };
   }
-  if (isFree(row.free_until)) return { reason: 'free_period', ...base };
+  if (isFree(freeUntil)) return { reason: 'free_period', ...base };
   if (!row.plan_started_at) return { reason: 'awaiting_approval', ...base };
   return { reason: 'billing', ...base };
 }
@@ -128,7 +134,7 @@ export async function startBillingIfReady(subscriberId: string): Promise<Billing
   // the promo meaningless, and starting the clock afterwards would quietly
   // shorten it.
   const natural = addMonth(now).toISOString();
-  const free = data.free_until;
+  const free = effectiveFreeUntil(data.free_until);
   const renewsAt = free && free > natural ? free : natural;
 
   const { error } = await db

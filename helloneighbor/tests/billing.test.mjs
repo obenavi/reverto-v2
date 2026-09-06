@@ -17,7 +17,18 @@ const src = readFileSync(new URL('../lib/billing.ts', import.meta.url), 'utf8')
   // rather than a stub, so a change to it shows up here.
   + readFileSync(new URL('../lib/promos.ts', import.meta.url), 'utf8')
       .match(/export function isFree[\s\S]*?\n}/)[0]
-      .replace('export ', '');
+      .replace('export ', '')
+  // Same for the pilot switch: the real implementations, so a change to either
+  // one shows up as a billing failure rather than passing against a stub.
+  + '\n'
+  + readFileSync(new URL('../lib/pilot.ts', import.meta.url), 'utf8')
+      .match(/export function pilotFreeUntil[\s\S]*?\n}/)[0]
+      .replace('export ', '')
+  + '\n'
+  + readFileSync(new URL('../lib/pilot.ts', import.meta.url), 'utf8')
+      .match(/export function effectiveFreeUntil[\s\S]*?\n}/)[0]
+      .replace('export ', '')
+  + '\nlet warned = false;\n';
 
 const js = transpileModule(src, {
   compilerOptions: { module: ModuleKind.ESNext, target: 'ES2020' },

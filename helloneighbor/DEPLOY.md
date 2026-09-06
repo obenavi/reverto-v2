@@ -54,6 +54,37 @@ three are switched off the moment `NODE_ENV=production`**:
 
 ---
 
+## Running a pilot: making it free for everyone
+
+Set one environment variable:
+
+```
+PILOT_FREE_UNTIL=2026-12-31
+```
+
+Nobody is charged before that date. There are no codes to hand out and no rows
+to update — it applies to every account, including ones created during the
+pilot, whose first renewal is pushed to the end of the pilot rather than
+landing a month after they signed up.
+
+It ends by itself. That is the point of a date rather than a switch: a pilot
+you have to remember to turn off is a pilot that runs for a year.
+
+Three things worth knowing:
+
+- **A promo code that runs past the pilot is not cut short**, and an expired
+  promo does not pull somebody out of the pilot. The later of the two wins.
+- **A minor with no adult on their account still cannot take work.** Free does
+  not change that, and the dashboard still says so.
+- **A value the code cannot read is ignored and logged**, not treated as
+  "free forever". Check your logs after setting it if you want to be sure —
+  or run `npm test`, which refuses several plausible typos by name.
+
+To end a pilot early, remove the variable and redeploy. Anyone whose renewal
+was pushed to the pilot date keeps that date; they are not billed retroactively.
+
+---
+
 ## ⚠️ The thing that will confuse you on a real deploy
 
 **In production, every signup is refused, on purpose.**
