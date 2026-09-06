@@ -3,6 +3,7 @@ import { SERVICE_KINDS } from '@/lib/catalog';
 import { formatPrice } from '@/lib/format';
 import { PLATFORM_CURFEW_MINUTES, formatCurfew } from '@/lib/curfew';
 import { MINIMUM_AGE } from '@/lib/ages';
+import { PLANS } from '@/lib/plans';
 import { Shell } from '@/components/ui';
 import { Logo, LogoMark } from '@/components/Logo';
 
@@ -95,7 +96,10 @@ export default function LandingPage() {
             you are good at. Set your prices, share one link, get booked by the people on
             your street.
           </p>
-          <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <p className="mt-3 text-[13px] font-semibold text-mint">
+            Free to start — {PLANS.basic.weeklyBookings} bookings a week, no card.
+          </p>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Link href="/join" className="btn bg-white text-brand-dark hover:bg-brand-light">
               Start my business →
             </Link>

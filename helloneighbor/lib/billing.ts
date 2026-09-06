@@ -21,10 +21,13 @@ import { MINOR_BADGE_LIMIT } from './guardian';
 import type { Supervision } from './parents';
 import { isFree } from './promos';
 import { effectiveFreeUntil } from './pilot';
+import { isFreePlan, type PlanId } from './plans';
 
 export type BillingReason =
   /** Charging, or about to. */
   | 'billing'
+  /** On the free tier. Nothing is owed and nothing is going to be. */
+  | 'free_plan'
   /** Inside a free period from a promo code. */
   | 'free_period'
   /** Under 18 with no adult behind the account. Not charged, cannot go live. */
@@ -76,6 +79,7 @@ export function billingState(row: {
   age: number;
   supervision: Supervision;
   status: string;
+  plan: PlanId | null;
   plan_started_at: string | null;
   plan_renews_at: string | null;
   free_until?: string | null;
@@ -97,6 +101,15 @@ export function billingState(row: {
   if (!supervisionSettled(row.age, row.supervision)) {
     return { reason: 'awaiting_adult', ...base };
   }
+
+  // Before the approval and promo branches, because both of them describe when
+  // charging STARTS and on the free tier it never does. "Your first month
+  // begins the day we approve you" is a false sentence to show somebody who
+  // will never be billed.
+  if (isFreePlan(row.plan ?? 'basic')) {
+    return { reason: 'free_plan', ...base, renewsAt: null };
+  }
+
   if (isFree(freeUntil)) return { reason: 'free_period', ...base };
   if (!row.plan_started_at) return { reason: 'awaiting_approval', ...base };
   return { reason: 'billing', ...base };
@@ -114,7 +127,7 @@ export async function startBillingIfReady(subscriberId: string): Promise<Billing
 
   const { data } = await db
     .from('subscribers')
-    .select('id, age, supervision, status, plan_started_at, plan_renews_at, free_until')
+    .select('id, age, supervision, status, plan, plan_started_at, plan_renews_at, free_until')
     .eq('id', subscriberId)
     .maybeSingle();
 

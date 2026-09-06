@@ -5,7 +5,7 @@
  * acceptance. Bump it whenever the text below changes materially, so a dispute
  * can be judged against the wording each party actually saw.
  */
-export const TERMS_VERSION = '2026-09-05.2';
+export const TERMS_VERSION = '2026-09-06';
 
 export type GuidelineSection = {
   id: string;
@@ -69,7 +69,8 @@ export const GUIDELINES: GuidelineSection[] = [
     body: [
       'HelloNeighbor is a place to find each other and agree a time. It is not a payment service. There is no card button, no wallet, no balance, no escrow and no payout, and there is no version of this app where your money sits with us.',
       'You pay the person who did the work, directly — cash, or an app you already use such as Venmo, Cash App, Zelle or PayPal. The app records which method you agreed and the amount, and that is the whole of our involvement.',
-      'The only money HelloNeighbor ever takes from anyone is the monthly subscription a provider pays for the tools — their booking page, their schedule, their messages. It is a fee for software. It is not a commission, not a booking fee, not a cut of anyone\u2019s work, and it buys no insurance.',
+      'Starting costs nothing. The free plan covers one service and two bookings a week, with no card and no end date — enough to find out whether your street will book you. You only pay if you want past those limits.',
+      'The only money HelloNeighbor ever takes from anyone is the monthly subscription a provider pays for the tools once they are past the free plan — their booking page, their schedule, their messages. It is a fee for software. It is not a commission, not a booking fee, not a cut of anyone\u2019s work, and it buys no insurance.',
       'Because we hold nothing, we cannot take a payment, release one, refund one, reverse one, or hold one back while an argument runs. If somebody does not pay, the money is owed to the other person and is theirs to chase.',
       'The price shown at booking is the price. Do not renegotiate off-app.',
       'Payment is handed over in person, when the job is done and you are both there. Never before. Nobody on HelloNeighbor may ask to be paid up front, and a provider who asks you to send money before they turn up is either breaking these guidelines or is not who they say they are — do not send it, and report them.',

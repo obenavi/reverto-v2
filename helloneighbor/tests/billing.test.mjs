@@ -28,7 +28,16 @@ const src = readFileSync(new URL('../lib/billing.ts', import.meta.url), 'utf8')
   + readFileSync(new URL('../lib/pilot.ts', import.meta.url), 'utf8')
       .match(/export function effectiveFreeUntil[\s\S]*?\n}/)[0]
       .replace('export ', '')
-  + '\nlet warned = false;\n';
+  + '\nlet warned = false;\n'
+  // And the free-tier check, from the real plan table — so making Basic paid
+  // again shows up here as a billing failure.
+  + readFileSync(new URL('../lib/plans.ts', import.meta.url), 'utf8')
+      .match(/export const PLANS[\s\S]*?\n};/)[0]
+      .replace('export ', '')
+  + '\n'
+  + readFileSync(new URL('../lib/plans.ts', import.meta.url), 'utf8')
+      .match(/export function isFreePlan[\s\S]*?\n}/)[0]
+      .replace('export ', '');
 
 const js = transpileModule(src, {
   compilerOptions: { module: ModuleKind.ESNext, target: 'ES2020' },
@@ -68,8 +77,10 @@ check('a linked parent settles it', supervisionSettled(14, 'parent_account'), tr
 check('14 with nobody is not settled', supervisionSettled(14, 'none'), false);
 
 console.log('\n— what the dashboard is told —');
+// A PAID plan by default, because these cases are about when charging starts
+// and on the free tier it never does. The free tier gets its own block below.
 const row = (over) => ({
-  age: 15, supervision: 'none', status: 'active',
+  age: 15, supervision: 'none', status: 'active', plan: 'pro',
   plan_started_at: null, plan_renews_at: null, ...over,
 });
 
@@ -103,6 +114,20 @@ check('no promo is unaffected', billingState(row({
 })).reason, 'billing');
 // The one that matters: a promo does not let an unsupervised minor operate.
 // It only means nobody is charged for an account they cannot use.
+console.log('\n— the free tier —');
+// Basic costs nothing, so none of the "when does charging start" answers apply
+// to it, and showing one would be telling somebody a false thing about money.
+const free = (over) => billingState(row({ plan: 'basic', supervision: 'waiver', ...over })).reason;
+check('a free plan is its own state', free({}), 'free_plan');
+check('being approved does not change it', free({ plan_started_at: '2026-08-01T00:00:00Z' }), 'free_plan');
+check('nor does a promo on top of it', free({ free_until: '2099-01-01T00:00:00Z' }), 'free_plan');
+check('and no renewal date is offered', billingState(row({
+  plan: 'basic', supervision: 'waiver', plan_renews_at: '2026-10-01T00:00:00Z',
+})).renewsAt, null);
+// The one thing that still outranks it: a minor with nobody behind them cannot
+// take work, free or not.
+check('no adult still comes first', free({ supervision: 'none' }), 'awaiting_adult');
+
 check('supervision still comes first', billingState(row({
   supervision: 'none', free_until: future,
 })).reason, 'awaiting_adult');

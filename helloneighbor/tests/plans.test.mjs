@@ -15,7 +15,7 @@ const js = transpileModule(src, {
 }).outputText;
 
 const m = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
-const { PLANS, capacity, weekStart, weekEnd, kindAllowedOnPlan, plan } = m;
+const { PLANS, capacity, weekStart, weekEnd, kindAllowedOnPlan, plan, planPrice, isFreePlan } = m;
 
 let failures = 0;
 const check = (label, got, want) => {
@@ -25,13 +25,21 @@ const check = (label, got, want) => {
 };
 
 console.log('— prices —');
-check('basic is $15', PLANS.basic.priceCents, 1500);
+// Basic being free is the whole shape of the pricing, not a placeholder. A
+// paid entry tier charges the hardest side of the marketplace before anybody
+// has been booked, and makes the fee flat while the plan caps the earnings.
+check('basic is free', PLANS.basic.priceCents, 0);
+check('and reads as free rather than $0', planPrice('basic'), 'Free');
 check('pro is $25', PLANS.pro.priceCents, 2500);
 check('pro+ is $30', PLANS.pro_plus.priceCents, 3000);
+check('every paid plan costs more than the free one', [PLANS.pro.priceCents, PLANS.pro_plus.priceCents].every((c) => c > PLANS.basic.priceCents), true);
 
 console.log('\n— what each plan allows —');
-check('basic caps services at 3', PLANS.basic.maxServices, 3);
-check('basic caps bookings at 4 a week', PLANS.basic.weeklyBookings, 4);
+check('basic allows one service', PLANS.basic.maxServices, 1);
+check('basic caps bookings at 2 a week', PLANS.basic.weeklyBookings, 2);
+// A free tier with no ceiling is not a free tier. Both limits have to exist,
+// or there is nothing to upgrade for and no reason anyone ever pays.
+check('the free tier is limited on both axes', [PLANS.basic.maxServices, PLANS.basic.weeklyBookings].every((v) => typeof v === 'number' && v > 0), true);
 check('pro has no service cap', PLANS.pro.maxServices, null);
 check('pro has no weekly cap', PLANS.pro.weeklyBookings, null);
 check('only pro+ covers more than one kid', [PLANS.basic.maxProfiles, PLANS.pro.maxProfiles, PLANS.pro_plus.maxProfiles], [1, 1, 3]);
@@ -43,8 +51,8 @@ check('pro may write its own', kindAllowedOnPlan('pro', 'other'), true);
 check('an unknown plan falls back to basic', plan(null).id, 'basic');
 
 console.log('\n— the weekly cap —');
-check('3 of 4 used is not sold out', capacity('basic', 3).soldOut, false);
-check('4 of 4 used is sold out', capacity('basic', 4).soldOut, true);
+check('1 of 2 used is not sold out', capacity('basic', 1).soldOut, false);
+check('2 of 2 used is sold out', capacity('basic', 2).soldOut, true);
 check('over the cap stays sold out', capacity('basic', 9).soldOut, true);
 check('remaining never goes negative', capacity('basic', 9).remaining, 0);
 check('pro is never sold out', capacity('pro', 500).soldOut, false);

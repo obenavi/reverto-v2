@@ -125,6 +125,17 @@ were written for. Whether they reach a software subscription is exactly the
 kind of question that needs counsel and not a guess. It is now a row in the
 matrix and a line in the gating list below. It is unresolved.
 
+**What the free tier changes about it.** Basic now costs nothing: one service,
+two bookings a week, no card, no end date. A number of the statutes in this
+area single out *advance* fees charged to a job seeker — money taken before any
+work has been obtained — and several prohibit them outright while treating a
+fee owed after placement differently. Nobody on HelloNeighbor pays anything to
+be listed; a fee is only owed by somebody who has already been getting booked
+and wants past the limits. That does not answer the question, and it must not
+be written down anywhere as though it did. It moves the question from the
+hardest version to an arguable one, which is worth having done before counsel
+reads it rather than after.
+
 ## Launch gating
 
 Do not enable paid features or minor-provider functionality until every line is

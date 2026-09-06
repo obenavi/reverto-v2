@@ -1,6 +1,6 @@
 'use client';
 
-import { PLANS, PLAN_ORDER, planPrice, type Capacity, type PlanId } from '@/lib/plans';
+import { PLANS, PLAN_ORDER, isFreePlan, planPrice, type Capacity, type PlanId } from '@/lib/plans';
 import type { BillingState } from '@/lib/billing';
 import { Notice } from '@/components/ui';
 import PromoCode from './PromoCode';
@@ -35,6 +35,12 @@ export default function PlanPanel({
           code. Your first month begins that day, not today.
         </Notice>
       )}
+      {billing.reason === 'free_plan' && (
+        <Notice tone="success">
+          Basic is free and stays free. No card, no trial, no end date — the limits
+          below are the whole of it, and you only pay if you want past them.
+        </Notice>
+      )}
       {billing.reason === 'free_period' && (
         <Notice tone="success">
           You&apos;re on a free period. Nothing is charged until it ends, and we will tell
@@ -55,13 +61,19 @@ export default function PlanPanel({
           <div>
             <p className="font-bold">{current.name}</p>
             <p className="text-[13px] text-ink-muted">
-              {planPrice(planId)}/month
-              {renewsAt
-                ? ` · renews ${new Date(renewsAt).toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                  })}`
-                : ' · not started yet'}
+              {isFreePlan(planId) ? (
+                'Free'
+              ) : (
+                <>
+                  {planPrice(planId)}/month
+                  {renewsAt
+                    ? ` · renews ${new Date(renewsAt).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}`
+                    : ' · not started yet'}
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -131,7 +143,11 @@ export default function PlanPanel({
                       <span className="pill ml-2 bg-brand text-white">current</span>
                     )}
                   </p>
-                  <p className="font-bold tabular-nums">{planPrice(id)}/mo</p>
+                  <p
+                    className={`font-bold tabular-nums ${isFreePlan(id) ? 'text-success' : ''}`}
+                  >
+                    {isFreePlan(id) ? 'Free' : `${planPrice(id)}/mo`}
+                  </p>
                 </div>
                 <p className="mt-1 text-[13px] text-ink-muted">{p.blurb}</p>
                 <ul className="mt-2 space-y-1 text-[13px] text-ink-muted">
