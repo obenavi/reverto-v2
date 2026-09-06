@@ -116,25 +116,48 @@ where warranted, an enforcement action against an account. Clause 14 says so.
 That is a real reduction in what the platform can do for a wronged user, and it
 is the trade being made.
 
-**The open question this raises.** The only money HelloNeighbor takes is a
-subscription from the *provider* — the young person or the adult behind their
-account — for the right to be listed and booked. Several states regulate fees
-charged to job seekers by employment agencies and job-listing services, and
-charging the worker rather than the customer is the pattern those statutes
-were written for. Whether they reach a software subscription is exactly the
-kind of question that needs counsel and not a guess. It is now a row in the
-matrix and a line in the gating list below. It is unresolved.
+**The open question this raises, sized correctly.** An earlier draft of this
+section overstated it, and an overstated risk in a compliance document is its
+own kind of error — it spends attention that a real item needs.
 
-**What the free tier changes about it.** Basic now costs nothing: one service,
-two bookings a week, no card, no end date. A number of the statutes in this
-area single out *advance* fees charged to a job seeker — money taken before any
-work has been obtained — and several prohibit them outright while treating a
-fee owed after placement differently. Nobody on HelloNeighbor pays anything to
-be listed; a fee is only owed by somebody who has already been getting booked
-and wants past the limits. That does not answer the question, and it must not
-be written down anywhere as though it did. It moves the question from the
-hardest version to an arguable one, which is worth having done before counsel
-reads it rather than after.
+The concern is not that HelloNeighbor is anyone's employer. It plainly is not,
+and that was never the test: employment-agency statutes exist precisely to
+regulate intermediaries who are *not* the employer, so "we are only a platform"
+neither helps nor hurts.
+
+Three things do help, and together they make this a low-priority item:
+
+- **Nobody here is employed.** These are one-off independent services between
+  two private people. Most of these statutes are written around procuring
+  *employment*, and there is no employment relationship anywhere in the chain
+  to procure.
+- **The fee is not a placement fee.** It is a flat monthly charge for software
+  access, owed whether somebody gets one booking or twenty, and not tied to any
+  particular job. Statutes in this area are generally aimed at a fee for
+  obtaining a specific position.
+- **Nobody pays to be listed at all.** Basic is free. Where these schemes bite
+  hardest is on *advance* fees charged to a job seeker, and there are none.
+
+The comparables point the same way. Thumbtack, Angi, Bark and TaskRabbit all
+charge providers subscriptions or lead fees and are not regulated as employment
+agencies, for the same reason: independent contracting is not employment.
+
+**What is actually left.** Two things, and they are narrow:
+
+- Some states define the regulated activity more broadly than "employment" —
+  procuring *work or engagements* — and a few regulate "job listing services"
+  as a separate category with disclosure and refund rules rather than licensing.
+  California has such a scheme in its Civil Code alongside the employment-agency
+  provisions. It is aimed at services that list *jobs to job seekers*;
+  HelloNeighbor lists *providers to customers*, which is the other direction,
+  and that distinction is the thing to put in front of counsel.
+- **The providers are minors**, which is the part with no comparable. Thumbtack
+  does not have fourteen-year-olds on it. Whether any fee arrangement involving
+  a minor's earnings needs different treatment is a question for the child-labor
+  review, where it belongs, rather than a separate line item here.
+
+So: one paragraph in the child-labor brief, not a workstream. Keep the row in
+the matrix so the question is asked; do not treat it as a launch blocker.
 
 ## Launch gating
 
@@ -147,7 +170,7 @@ done. Ticks are for work actually finished, not started.
 - [ ] Child-labor review, including work permits and school hours
 - [ ] Privacy and minor-data review
 - [ ] Payment-regulation review before any card, wallet, balance, refund or payout
-- [ ] Employment-agency / job-listing review of charging the provider a subscription
+- [ ] Employment-agency / job-listing question — one paragraph inside the child-labor brief, not a separate review
 - [ ] SMS / TCPA compliance review
 - [ ] Consumer-law review of the release, cap, arbitration clause and class waiver
 - [ ] Tax review
@@ -175,16 +198,48 @@ before launch**, and clause 16 must be updated the day cover exists.
 - [x] Audit trail for identity checks, consents and enforcement
 
 ### Still to build
+- [x] Incident-response plan, written down — `docs/INCIDENT_RESPONSE.md`
+- [x] Law-enforcement request process, written down — `docs/LAW_ENFORCEMENT.md`
 - [x] One-tap safety reporting from an active booking
 - [x] Emergency contact and guardian escalation path
 - [x] Check-in / check-out, which is what makes the curfew observable
 - [x] Documented message-retention job enforcing the two-year period in clause 18
-- [ ] Law-enforcement request process, written down
-- [ ] Incident-response plan, written down
 - [ ] Moderator access controls and training notes
 - [ ] Written enforcement standards and periodic review for inconsistency
 - [x] Per-state feature flags
 - [ ] Appeal workflow surfaced in the app rather than by email
+
+## The adults-only route, in code
+
+Almost every hard question in this document comes from minors: child labor,
+work permits, school hours, guardian consent, curfews, and the facial age check
+that exists only to catch a wrong declared age. An adults-only configuration
+has none of them.
+
+So `lib/jurisdictions.ts` has exactly one way to open a state in production
+without a counsel sign-off:
+
+```ts
+minProviderAge: 18,
+minCustomerAge: 18,
+adultsOnlyBeta: { attestedBy: 'your name', attestedAt: '2026-09-06' },
+```
+
+Both floors must be 18 or the attestation is void and the state stays shut —
+and that misconfiguration fails as its OWN error rather than falling through to
+"not reviewed", so somebody who wrote their name in that field finds out
+immediately that the state is not open, and why. The escape hatch cannot be
+widened into the thing it was an escape from.
+
+Where the floor is 18 the facial age check is not offered at all
+(`ageCheckAppliesIn`). That removes the single highest-risk item in the
+codebase — a biometric identifier under Illinois BIPA and its equivalents —
+without needing anybody's opinion, because there is no minor left for it to
+catch.
+
+`attestedBy` is meant to be an uncomfortable field. Put your own name in it if
+you are the one making the calls. What it must never hold is a lawyer who has
+not read the file.
 
 ## Recommended sequence
 

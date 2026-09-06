@@ -70,6 +70,8 @@ export default function DashboardTabs(props: {
   planCapacity: Capacity;
   curfew: { timezone: string; curfewMinutes: number | null };
   billing: BillingState;
+  /** Whether the facial age check applies in this operator's state. */
+  ageCheckApplies: boolean;
 }) {
   const {
     operator,
@@ -88,6 +90,7 @@ export default function DashboardTabs(props: {
     planCapacity,
     curfew,
     billing,
+    ageCheckApplies,
   } = props;
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('bookings');
@@ -194,7 +197,12 @@ export default function DashboardTabs(props: {
           />
         )}
         {tab === 'account' && (
-          <AccountPanel operator={operator} bookings={bookings} blocked={blocked} />
+          <AccountPanel
+            operator={operator}
+            bookings={bookings}
+            blocked={blocked}
+            ageCheckApplies={ageCheckApplies}
+          />
         )}
       </Shell>
     </>

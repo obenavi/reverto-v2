@@ -79,6 +79,30 @@ export type Jurisdiction = {
   /** Who signed this off, and when. An entry without both is not enabled. */
   reviewedBy: string;
   reviewedAt: string;
+
+  /**
+   * The one way to run a state in production without a counsel sign-off.
+   *
+   * Almost every hard legal question in this product comes from minors: child
+   * labor law, work permits, school hours, guardian consent, curfews, and the
+   * biometric age check that exists only to catch a wrong declared age. An
+   * adults-only configuration has none of them, and it is the shape of a
+   * closed beta somebody can honestly run before paying a lawyer.
+   *
+   * So the gate opens for it — but ONLY for it. Setting this while any age
+   * floor here is below 18 is a misconfiguration, and it fails closed rather
+   * than doing what it looks like it was meant to do. That asymmetry is the
+   * whole point: the escape hatch cannot be widened into the thing it was an
+   * escape from.
+   *
+   * `attestedBy` is a name, and it is meant to be an uncomfortable field to
+   * fill in. Put your own name in it if you are the one making the calls.
+   * What it must never contain is a lawyer who has not read the file.
+   */
+  adultsOnlyBeta?: {
+    attestedBy: string;
+    attestedAt: string;
+  };
 };
 
 /**
@@ -112,8 +136,34 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
 };
 
 export type JurisdictionLookup =
-  | { enabled: true; jurisdiction: Jurisdiction }
-  | { enabled: false; reason: 'unknown' | 'unreviewed'; message: string };
+  | {
+      enabled: true;
+      jurisdiction: Jurisdiction;
+      /** True when it is open on an adults-only attestation, not a sign-off. */
+      betaOnly: boolean;
+    }
+  | { enabled: false; reason: 'unknown' | 'unreviewed' | 'misconfigured'; message: string };
+
+/** Whether a counsel sign-off is on this entry. */
+export function hasCounselSignOff(j: Jurisdiction): boolean {
+  return Boolean(j.reviewedAt) && !j.reviewedBy.startsWith('PENDING');
+}
+
+/**
+ * Whether an adults-only attestation is both present and honest.
+ *
+ * Honest means the entry actually is adults-only. An attestation sitting on an
+ * entry that still admits fifteen-year-olds is the dangerous case: it looks
+ * deliberate, it reads as approval, and it would open the gate on exactly the
+ * configuration the attestation was never a substitute for. So it is not a
+ * partial pass — it is a refusal, and a different one, so the message can say
+ * what is actually wrong.
+ */
+export function adultsOnlyAttested(j: Jurisdiction): boolean {
+  const beta = j.adultsOnlyBeta;
+  if (!beta?.attestedBy?.trim() || !beta.attestedAt?.trim()) return false;
+  return j.minProviderAge >= 18 && j.minCustomerAge >= 18;
+}
 
 const NOT_AVAILABLE =
   'HelloNeighbor is not available in your state yet. We open one state at a time, after checking the rules that apply to young people working there.';
@@ -132,21 +182,38 @@ export function jurisdictionFor(state: string | null | undefined): JurisdictionL
 
   if (!found) return { enabled: false, reason: 'unknown', message: NOT_AVAILABLE };
 
-  if (!found.reviewedAt || found.reviewedBy.startsWith('PENDING')) {
-    // Fails closed in production, open in development. Same shape as the cron
-    // secret: nobody can build the app if an unreviewed jurisdiction blocks
-    // every signup locally, and nobody can ship one by accident either.
-    //
-    // The consequence is deliberate and worth stating: as things stand no
-    // jurisdiction has a sign-off, so a production deploy today refuses every
-    // signup in every state. That is the correct behaviour, and the fix is a
-    // lawyer's name in this file rather than a change to this function.
-    if (process.env.NODE_ENV === 'production') {
-      return { enabled: false, reason: 'unreviewed', message: NOT_AVAILABLE };
-    }
+  if (hasCounselSignOff(found)) return { enabled: true, jurisdiction: found, betaOnly: false };
+
+  // No sign-off. There is exactly one other way through, and it is narrow.
+  if (adultsOnlyAttested(found)) {
+    return { enabled: true, jurisdiction: found, betaOnly: true };
   }
 
-  return { enabled: true, jurisdiction: found };
+  // An attestation that is present but does not hold is its own failure, and
+  // it must not fall through to the generic "not reviewed" path. Somebody who
+  // wrote their name in that field believes the state is open; they should
+  // find out immediately that it is not, and why.
+  if (found.adultsOnlyBeta && process.env.NODE_ENV === 'production') {
+    return {
+      enabled: false,
+      reason: 'misconfigured',
+      message: NOT_AVAILABLE,
+    };
+  }
+
+  // Fails closed in production, open in development. Same shape as the cron
+  // secret: nobody can build the app if an unreviewed jurisdiction blocks every
+  // signup locally, and nobody can ship one by accident either.
+  //
+  // The consequence is deliberate and worth stating: with neither a sign-off
+  // nor an adults-only attestation, a production deploy refuses every signup in
+  // that state. That is correct, and the fix is a name in this file rather than
+  // a change to this function.
+  if (process.env.NODE_ENV === 'production') {
+    return { enabled: false, reason: 'unreviewed', message: NOT_AVAILABLE };
+  }
+
+  return { enabled: true, jurisdiction: found, betaOnly: !hasCounselSignOff(found) };
 }
 
 /** Codes a signup form may offer. Never a hardcoded list of states. */
@@ -182,6 +249,19 @@ export function customerAgeAllowed(j: Jurisdiction, age: number): AgeCheck {
     };
   }
   return { ok: true };
+}
+
+/**
+ * Whether the facial age check should run here at all.
+ *
+ * It exists for one reason: to flag a declared age that is implausible for
+ * somebody claiming to be a minor. Where the floor is 18 there is no minor to
+ * catch, and running it anyway would be collecting a face — the highest-risk
+ * thing this codebase does, under BIPA and its equivalents — in exchange for
+ * nothing. Off is not a downgrade here; it is the correct setting.
+ */
+export function ageCheckAppliesIn(j: Jurisdiction): boolean {
+  return j.minProviderAge < 18;
 }
 
 /** Whether this service category may be offered here. */

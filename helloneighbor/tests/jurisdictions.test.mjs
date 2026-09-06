@@ -21,6 +21,7 @@ const {
   JURISDICTIONS, jurisdictionFor, enabledJurisdictions, anyJurisdictionEnabled,
   providerAgeAllowed, customerAgeAllowed, kindAllowedIn, jurisdictionCurfew,
   complianceNotes, jurisdictionForWork,
+  hasCounselSignOff, adultsOnlyAttested, ageCheckAppliesIn,
 } = m;
 
 let failures = 0;
@@ -149,6 +150,44 @@ check('a permit needed either side is needed',
 // Never claim a clause is enforceable unless both sides agree it is.
 check('arbitration needs both to allow it',
   merge({ arbitrationEnforceable: true }, { arbitrationEnforceable: false }).arbitrationEnforceable, false);
+
+console.log('\n— the adults-only attestation —');
+// The one way to run a state in production without counsel. It is narrow on
+// purpose, and every case below is about it staying narrow.
+const base = (over) => ({
+  code: 'ZZ', name: 'Testland',
+  minProviderAge: 18, minCustomerAge: 18, guardianConsentAge: 16, minorBadgeAge: 18,
+  closeToHomeAge: 16, curfewMinutes: 21 * 60, curfewAge: 18, blockedKinds: [],
+  workPermitRequired: false, schoolHoursRestricted: false, arbitrationEnforceable: true,
+  addendumId: 'x', reviewedBy: 'PENDING — no counsel sign-off yet', reviewedAt: '',
+  ...over,
+});
+
+const attested = { attestedBy: 'O. Benavi', attestedAt: '2026-09-06' };
+
+check('an adults-only entry with a name attested', adultsOnlyAttested(base({ adultsOnlyBeta: attested })), true);
+check('no attestation is not attested', adultsOnlyAttested(base({})), false);
+check('an empty name does not count', adultsOnlyAttested(base({ adultsOnlyBeta: { attestedBy: '  ', attestedAt: '2026-09-06' } })), false);
+check('an empty date does not count', adultsOnlyAttested(base({ adultsOnlyBeta: { attestedBy: 'O. Benavi', attestedAt: '' } })), false);
+
+// The case the whole design turns on. An attestation sitting on an entry that
+// still admits minors looks deliberate and reads as approval, and it must not
+// open the gate on the configuration it was never a substitute for.
+check('a provider floor below 18 voids it', adultsOnlyAttested(base({ minProviderAge: 14, adultsOnlyBeta: attested })), false);
+check('a customer floor below 18 voids it too', adultsOnlyAttested(base({ minCustomerAge: 16, adultsOnlyBeta: attested })), false);
+check('and 18 exactly is fine', adultsOnlyAttested(base({ minProviderAge: 18, minCustomerAge: 18, adultsOnlyBeta: attested })), true);
+
+console.log('\n— a counsel sign-off is still the other way —');
+check('PENDING is not a sign-off', hasCounselSignOff(base({})), false);
+check('a name with no date is not a sign-off', hasCounselSignOff(base({ reviewedBy: 'A Lawyer LLP', reviewedAt: '' })), false);
+check('a name and a date is', hasCounselSignOff(base({ reviewedBy: 'A Lawyer LLP', reviewedAt: '2026-09-06' })), true);
+
+console.log('\n— the face check follows the age floor —');
+// It exists to catch a wrong declared age among minors. With no minors it
+// would be collecting a face in exchange for nothing.
+check('it applies where minors can work', ageCheckAppliesIn(base({ minProviderAge: 14 })), true);
+check('and does not where the floor is 18', ageCheckAppliesIn(base({ minProviderAge: 18 })), false);
+check('nor where it is higher still', ageCheckAppliesIn(base({ minProviderAge: 21 })), false);
 
 console.log(failures === 0 ? '\nall passed' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

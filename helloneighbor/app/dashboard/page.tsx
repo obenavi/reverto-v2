@@ -8,6 +8,7 @@ import { operatorCapacity } from '@/lib/capacity';
 import type { PlanId } from '@/lib/plans';
 import DashboardTabs from '@/components/dashboard/DashboardTabs';
 import { operatorCurfew } from '@/lib/curfewPolicy';
+import { ageCheckAppliesIn, jurisdictionFor } from '@/lib/jurisdictions';
 import { billingState } from '@/lib/billing';
 import type {
   BookingRow,
@@ -112,6 +113,13 @@ export default async function DashboardPage() {
   const curfew = await operatorCurfew(operatorId);
   const billing = billingState(operator);
 
+  // Where the state's floor is 18 there is no minor for the face check to
+  // catch, so it is not offered at all rather than offered and declined.
+  const stateLookup = jurisdictionFor(operator.state);
+  const ageCheckApplies = stateLookup.enabled
+    ? ageCheckAppliesIn(stateLookup.jurisdiction)
+    : true;
+
   return (
     <DashboardTabs
       operator={operator}
@@ -130,6 +138,7 @@ export default async function DashboardPage() {
       planCapacity={planCapacity}
       curfew={curfew}
       billing={billing}
+      ageCheckApplies={ageCheckApplies}
     />
   );
 }

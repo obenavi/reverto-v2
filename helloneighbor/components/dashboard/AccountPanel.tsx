@@ -18,10 +18,13 @@ export default function AccountPanel({
   operator,
   bookings,
   blocked,
+  ageCheckApplies,
 }: {
   operator: Subscriber;
   bookings: BookingRow[];
   blocked: string[];
+  /** False where this state's provider floor is 18 — see lib/jurisdictions. */
+  ageCheckApplies: boolean;
 }) {
   const router = useRouter();
   const { mutate, busy, error } = useMutate();
@@ -70,12 +73,17 @@ export default function AccountPanel({
         guardianConsentSentAt={operator.guardian_consent_sent_at ?? null}
       />
 
-      <AgeCheck
-        alreadyConsented={Boolean(operator.biometric_consent_at)}
-        status={operator.age_verification_status}
-        guardianEmailOnFile={operator.guardian_email}
-        guardianNameOnFile={operator.guardian_name}
-      />
+      {/* Not shown where the age floor is 18. The check exists to catch a
+          wrong declared age among minors; with no minors it would be
+          collecting a face in exchange for nothing. */}
+      {ageCheckApplies && (
+        <AgeCheck
+          alreadyConsented={Boolean(operator.biometric_consent_at)}
+          status={operator.age_verification_status}
+          guardianEmailOnFile={operator.guardian_email}
+          guardianNameOnFile={operator.guardian_name}
+        />
+      )}
 
       <section className="card">
         <p className="font-bold">Earnings</p>
