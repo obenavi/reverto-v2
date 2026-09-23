@@ -358,20 +358,25 @@ function parseHours(wb, fileName){
 
 /* --- דוח שכר ---
    גיליון הפיצול (עובד × משנה/אתר) נותן את עלות המעביד לכל אתר.
-   גיליון "דוח מעסיק" משמש לאימות שהפיצול מסתכם לעלות המעביד. */
+   לאימות: גיליון "דוח מעסיק" אם צורף, אחרת שורת "סיכום למפעל" בגיליון הפיצול.
+   שמות העמודות משתנים בין ייצואים ("תאריך" / "תאריך עבודה"), ולכן הזיהוי לפי תוכן. */
 function parsePayroll(wb, fileName){
   let split=null, summary=null;
   for(const aoa of Object.values(wb.sheets)){
     const hi = findHeader(aoa, r=>r.includes('מספר עובד'));
     if(hi<0) continue;
     const H = aoa[hi].map(normName);
-    const iSub = H.indexOf('משנה');
-    if(iSub>=0 && (H.includes('עלות עובד')||H.includes('עלות מעביד')) && H.includes('תאריך')) split = {aoa, hi, H, iSub};
+    const iSub = H.indexOf('משנה'), iEmp = H.indexOf('מספר עובד');
+    const hasCost = H.includes('עלות עובד') || H.includes('עלות מעביד');
+    // בגיליון הפיצול בעמודת "משנה" יש קוד אתר בשורות העובדים; בדוח המעסיק היא ריקה
+    // רק שורות עובד (עמודה ראשונה ריקה); שורות "סיכום למשנה" מכילות מספרים באותן עמודות
+    const siteRows = iSub<0 ? 0 : aoa.slice(hi+1).filter(r=>!normName(r[0]) && num(r[iEmp])!=null && num(r[iSub])!=null).length;
+    if(hasCost && siteRows>0 && siteRows>(split?.siteRows||0)){ if(split && split.H.includes('עלות מעביד')) summary = split; split = {aoa, hi, H, iSub, siteRows}; }
     else if(H.includes('עלות מעביד')) summary = {aoa, hi, H};
   }
   if(!split) throw new Error('לא נמצא גיליון עם פיצול עלות לפי אתר (עמודת "משנה")');
   const {aoa, hi, H, iSub} = split;
-  const iEmp=H.indexOf('מספר עובד'), iCost = H.includes('עלות עובד') ? H.indexOf('עלות עובד') : H.indexOf('עלות מעביד'), iDate=H.indexOf('תאריך');
+  const iEmp=H.indexOf('מספר עובד'), iCost = H.includes('עלות עובד') ? H.indexOf('עלות עובד') : H.indexOf('עלות מעביד'), iDate=H.findIndex(h=>h.startsWith('תאריך'));
   const sites = {}, emps = {}, yms=[]; let total=0;
   for(const r of aoa.slice(hi+1)){
     const emp = num(r[iEmp]), code = num(r[iSub]), cost = num(r[iCost]);
@@ -380,14 +385,16 @@ function parsePayroll(wb, fileName){
     const s = sites[k] ||= {name:siteLabel(r[iSub+1]||k), cost:0, emps:{}};
     s.cost += cost; s.emps[emp]=1; emps[emp]=1; total += cost; yms.push(dateYm(r[iDate]));
   }
-  let employerTotal = null, employerCount = null;
-  if(summary){
+  let employerTotal = null, employerCount = null, checkSource = null;
+  const plantRow = aoa.slice(hi+1).find(r=>/סיכום\s+למפעל/.test(normName(r[0])));
+  if(plantRow && num(plantRow[iCost])!=null){ employerTotal = num(plantRow[iCost]); checkSource = 'plant'; }
+  if(summary){ checkSource = 'summary';
     const S = summary.H, iE = S.indexOf('מספר עובד'), iEC = S.indexOf('עלות מעביד');
     const rows = summary.aoa.slice(summary.hi+1).filter(r=>!normName(r[0]) && num(r[iE])!=null && num(r[iEC])!=null);
     employerTotal = round2(rows.reduce((a,r)=>a+num(r[iEC]),0)); employerCount = rows.length;
   }
   const out = {}; for(const [k,s] of Object.entries(sites)) out[k] = {name:s.name, cost:round2(s.cost), emps:Object.keys(s.emps).length};
-  return {ym: majority(yms), data:{file:fileName, uploadedAt:new Date().toISOString(), sites:out, total:round2(total), employees:Object.keys(emps).length, employerTotal, employerCount}};
+  return {ym: majority(yms), data:{file:fileName, uploadedAt:new Date().toISOString(), sites:out, total:round2(total), employees:Object.keys(emps).length, employerTotal, employerCount, checkSource}};
 }
 
 /* ============================================================ חישוב רווחיות לחודש */
@@ -688,7 +695,7 @@ function monthCard(ym){
       const multi = Object.values(x.sites).filter(s=>s.multiBranch).length; if(multi) c.push(['warn', `${multi} אתרים רשומים ביותר מסניף אחד`]);
       return c; })}
     ${slot('שכר · עלות מעביד', M.payroll, x=>{
-      const c=[[x.employerTotal==null?'warn':near(x.total,x.employerTotal)?'':'bad', `עלות מעביד ${money(x.total)} · ${x.employees} עובדים${x.employerTotal!=null?(near(x.total,x.employerTotal)?' · הפיצול לאתרים תואם לדוח המעסיק':` · בדוח המעסיק: ${money(x.employerTotal)}`):''}`]];
+      const c=[[x.employerTotal==null?'warn':near(x.total,x.employerTotal)?'':'bad', `עלות מעביד ${money(x.total)} · ${x.employees} עובדים${x.employerTotal!=null?(near(x.total,x.employerTotal)?(x.checkSource==='plant'?' · תואם לשורת "סיכום למפעל"':' · הפיצול לאתרים תואם לדוח המעסיק'):` · ${x.checkSource==='plant'?'בשורת הסיכום':'בדוח המעסיק'}: ${money(x.employerTotal)}`):''}`]];
       const noH = Object.keys(x.sites).filter(k=>!isOverhead(k) && M.hours && !M.hours.sites[k]); if(noH.length) c.push(['warn', `${noH.length} אתרים עם עלות שכר בלי שעות ב-TimeWatch: ${noH.map(k=>esc(x.sites[k].name)).join(', ')}`]);
       return c; })}
   </article>`;
