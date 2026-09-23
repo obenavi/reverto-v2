@@ -402,6 +402,13 @@ function siteIndex(){ const m={}; mapping.groups.forEach(g=>g.sites.forEach(s=>m
 function clientIndex(){ const m={}; mapping.groups.forEach(g=>g.clients.forEach(c=>m[c]=g)); return m; }
 const isOverhead = code => mapping.overheadSites.includes(String(code));
 
+// הסניף של אתר מגיע מ-TimeWatch. בחודש שבו חסר דוח שעות (או שלאתר אין שעות), לוקחים את הסניף
+// מהחודש הקרוב ביותר שבו האתר הופיע, כדי שעלות השכר לא תיפול ל"ללא סניף".
+function knownBranch(code, ym){
+  const ms = monthList().filter(m=>months[m].hours?.sites?.[code]).sort((a,b)=>Math.abs(dist(a,ym))-Math.abs(dist(b,ym)) || b.localeCompare(a));
+  return ms.length ? months[ms[0]].hours.sites[code].branch : NO_BRANCH;
+}
+const dist = (a,b) => (+a.slice(0,4)*12 + +a.slice(5)) - (+b.slice(0,4)*12 + +b.slice(5));
 function compute(ym){
   const M = months[ym] || {};
   const rev = M.revenue?.clients || {}, hs = M.hours?.sites || {}, pay = M.payroll?.sites || {};
@@ -413,7 +420,7 @@ function compute(ym){
   const codes = new Set([...Object.keys(hs), ...Object.keys(pay)]);
   for(const code of codes){
     const h = hs[code]?.h || 0, cost = pay[code]?.cost || 0;
-    const info = {code, name:hs[code]?.name || pay[code]?.name || code, branch:hs[code]?.branch || NO_BRANCH, h, cost};
+    const info = {code, name:hs[code]?.name || pay[code]?.name || code, branch:hs[code]?.branch || knownBranch(code, ym), h, cost};
     if(isOverhead(code)){ overhead += cost; continue; }
     const g = bySite[code];
     if(!g){ unSites[code] = info; continue; }
@@ -468,7 +475,7 @@ function allUnmatched(){
   const bySite = siteIndex(), byClient = clientIndex(), sites={}, clients={};
   for(const [ym,M] of Object.entries(months)){
     for(const [code,s] of Object.entries(M.hours?.sites||{})) if(!bySite[code] && !isOverhead(code)){ const x=sites[code] ||= {code,name:s.name,branch:s.branch,h:0,cost:0,months:new Set()}; x.h+=s.h; x.months.add(ym); }
-    for(const [code,s] of Object.entries(M.payroll?.sites||{})) if(!bySite[code] && !isOverhead(code)){ const x=sites[code] ||= {code,name:s.name,branch:NO_BRANCH,h:0,cost:0,months:new Set()}; x.cost+=s.cost; x.months.add(ym); }
+    for(const [code,s] of Object.entries(M.payroll?.sites||{})) if(!bySite[code] && !isOverhead(code)){ const x=sites[code] ||= {code,name:s.name,branch:knownBranch(code, ym),h:0,cost:0,months:new Set()}; x.cost+=s.cost; x.months.add(ym); }
     for(const [c,x] of Object.entries(M.revenue?.clients||{})) if(!byClient[c]){ const y=clients[c] ||= {name:c,rev:0,months:new Set()}; y.rev+=x.inv-x.cr; y.months.add(ym); }
   }
   return {sites:Object.values(sites), clients:Object.values(clients)};
@@ -477,6 +484,10 @@ function allUnmatched(){
 /* ============================================================ תקופות: חודש, רבעון, מצטבר
    ui.ym הוא חודש העוגן. ברבעון: הרבעון שהוא נמצא בו. במצטבר: מינואר ועד אליו. */
 const QN = ['ראשון','שני','שלישי','רביעי'];
+// חודש שלם = שלושת הדוחות נקלטו. בתקופה של כמה חודשים נכללים רק חודשים שלמים,
+// אחרת עלות שכר של חודש בלי הכנסות (או להפך) מעוותת את הרווחיות.
+const complete = m => !!(months[m]?.revenue && months[m]?.hours && months[m]?.payroll);
+const missingReports = m => [['revenue','הכנסות'],['hours','שעות'],['payroll','שכר']].filter(([k])=>!months[m]?.[k]).map(x=>x[1]);
 function periodOf(mode, ym){
   if(!ym) return null;
   const y = +ym.slice(0,4), m = +ym.slice(5), have = new Set(monthList());
@@ -485,19 +496,21 @@ function periodOf(mode, ym){
     const q = Math.ceil(m/3); all = [1,2,3].map(i=>ymOf(y,(q-1)*3+i));
     label = `רבעון ${QN[q-1]} ${y} (${MONTHS[(q-1)*3]}–${MONTHS[(q-1)*3+2]})`; short = `רבעון ${q}/${y}`;
     const pq = q===1 ? [y-1,4] : [y,q-1];
-    const pAll = [1,2,3].map(i=>ymOf(pq[0],(pq[1]-1)*3+i)).filter(x=>have.has(x));
+    const pAll = [1,2,3].map(i=>ymOf(pq[0],(pq[1]-1)*3+i)).filter(x=>have.has(x) && complete(x));
     if(pAll.length) prev = {months:pAll, short:`רבעון ${pq[1]}/${pq[0]}`};
   } else if(mode==='ytd'){
     all = Array.from({length:m},(_,i)=>ymOf(y,i+1));
     label = `מצטבר ${MONTHS[0]}–${MONTHS[m-1]} ${y}`; short = `${MONTHS[0]}–${MONTHS[m-1]} ${y}`;
-    const pAll = Array.from({length:m},(_,i)=>ymOf(y-1,i+1)).filter(x=>have.has(x));
+    const pAll = Array.from({length:m},(_,i)=>ymOf(y-1,i+1)).filter(x=>have.has(x) && complete(x));
     if(pAll.length) prev = {months:pAll, short:`התקופה המקבילה אשתקד`};
   } else {
     all = [ym]; label = monthName(ym); short = MONTHS[m-1];
     const pm = monthList().filter(x=>x<ym).pop(); if(pm) prev = {months:[pm], short:MONTHS[+pm.slice(5)-1]};
   }
-  const months_ = all.filter(x=>have.has(x));
-  return {mode, all, months:months_, absent:all.filter(x=>!have.has(x)), label, short, prev, key: mode==='month'?ym:mode==='quarter'?`${y}-Q${Math.ceil(m/3)}`:`${y}-YTD-${String(m).padStart(2,'0')}`};
+  const loaded = all.filter(x=>have.has(x));
+  let months_ = mode==='month' ? loaded : loaded.filter(complete), excluded = mode==='month' ? [] : loaded.filter(x=>!complete(x));
+  if(!months_.length){ months_ = loaded; excluded = []; }   // אין אף חודש שלם: מציגים את מה שיש, עם אזהרה
+  return {mode, all, months:months_, excluded, absent:all.filter(x=>!have.has(x)), label, short, prev, key: mode==='month'?ym:mode==='quarter'?`${y}-Q${Math.ceil(m/3)}`:`${y}-YTD-${String(m).padStart(2,'0')}`};
 }
 const period = () => periodOf(ui.pmode, ui.ym);
 // סכימת כמה חודשים: מחברים סכומים לפי לקוח/אתר/סניף ומחשבים מחדש שיעורים וסטטוסים
@@ -532,8 +545,8 @@ function computePeriod(yms){
 }
 function periodGaps(per){
   const out = per.absent.length ? [`${per.absent.length>1?'לא נקלטו':'לא נקלט'}: ${per.absent.map(m=>MONTHS[+m.slice(5)-1]).join(', ')}`] : [];
-  for(const m of per.months){ const M = months[m]; const miss = [['revenue','הכנסות'],['hours','שעות'],['payroll','שכר']].filter(([k])=>!M[k]).map(x=>x[1]);
-    if(miss.length) out.push(`${MONTHS[+m.slice(5)-1]}: חסר דוח ${miss.join(' ו')}`); }
+  for(const m of per.excluded) out.push(`${MONTHS[+m.slice(5)-1]} לא נכלל בחישוב כי חסר דוח ${missingReports(m).join(' ו')}`);
+  for(const m of per.months){ const miss = missingReports(m); if(miss.length) out.push(`${MONTHS[+m.slice(5)-1]}: חסר דוח ${miss.join(' ו')}, ולכן הנתונים חלקיים`); }
   return out;
 }
 
@@ -566,7 +579,8 @@ function render(){
 /* ---------- סקירה ---------- */
 function renderOverview(v){
   const per = period(), R = computePeriod(per.months), T = R.tot;
-  const P = per.prev ? computePeriod(per.prev.months) : null;
+  // השוואה רק בין תקופות שלמות; השוואה לחודש חלקי מראה ירידות שלא קרו
+  const P = per.prev && per.months.every(complete) && per.prev.months.every(complete) ? computePeriod(per.prev.months) : null;
   const d = (cur, prev, better='up', isPct=false) => {
     if(prev==null || !isFinite(prev) || !isFinite(cur) || (!isPct && !prev)) return '';
     const diff = isPct ? cur-prev : (cur-prev)/Math.abs(prev); const good = better==='up' ? diff>=0 : diff<=0;
@@ -710,18 +724,21 @@ function renderClient(v){
   const first = +inYear[0].slice(5), last = +inYear[inYear.length-1].slice(5);
   const all = Array.from({length:last-first+1},(_,i)=>ymOf(y,first+i));   // מהחודש הראשון שנקלט בשנה ועד האחרון
   const before = MONTHS.slice(0, first-1);                                  // חודשים בתחילת השנה שעוד לא נקלטו
-  const YTD = computePeriod(inYear);
+  const fullMonths = inYear.filter(complete);
+  const YTD = computePeriod(fullMonths.length ? fullMonths : inYear);
   const groups = mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he'));
   if(!groups.length){ v.innerHTML = '<div class="panel empty">עדיין אין לקוחות בטבלת ההתאמה.</div>'; return; }
   if(!mapping.groups.some(g=>g.id===ui.client)) ui.client = (YTD.groups.slice().sort((a,b)=>b.rev-a.rev)[0]||groups[0]).id;
   const G = mapping.groups.find(g=>g.id===ui.client);
   const rows = all.map(m=>{
     if(!months[m]) return {m, absent:true};
+    const partial = fullMonths.length && !complete(m);
     const g = compute(m).groups.find(x=>x.id===G.id);
-    return g ? {m, rev:g.rev, h:g.h, cost:g.cost, gp:g.gp, margin:g.margin, revH:g.revH, costH:g.costH, flags:g.flags} : {m, rev:0, h:0, cost:0, gp:0, margin:NaN, revH:NaN, costH:NaN, flags:[]};
+    const pf = partial ? [['warn',`חלקי: חסר ${missingReports(m).join(' ו')}. לא נכלל בסה״כ`]] : null;
+    return g ? {m, rev:g.rev, h:g.h, cost:g.cost, gp:g.gp, margin:g.margin, revH:g.revH, costH:g.costH, flags:pf||g.flags, partial} : {m, rev:0, h:0, cost:0, gp:0, margin:NaN, revH:NaN, costH:NaN, flags:pf||[], partial};
   });
   const T = YTD.groups.find(x=>x.id===G.id) || {rev:0,h:0,cost:0,gp:0,margin:NaN,revH:NaN,costH:NaN,sites:{},branchList:[]};
-  const absent = rows.filter(r=>r.absent).map(r=>MONTHS[+r.m.slice(5)-1]);
+  const absent = rows.filter(r=>r.absent||r.partial).map(r=>MONTHS[+r.m.slice(5)-1]+(r.partial?' (חלקי)':''));
   const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
   const dash = '<span class="muted">—</span>';
   const sites = Object.values(T.sites||{}).sort((a,b)=>b.h-a.h);
@@ -733,8 +750,8 @@ function renderClient(v){
     </div>
     ${before.length||absent.length?`<div class="panel" style="background:var(--warn-soft);border-color:transparent">המצטבר מתחילת השנה חלקי: ${[before.length?`${before.length>1?`${before[0]}–${before[before.length-1]}`:before[0]} עוד לא נקלטו, והנתונים כאן מתחילים ב${MONTHS[first-1]}`:'', absent.length?`${absent.join(', ')} חסרים באמצע`:''].filter(Boolean).join('; ')}. כשיועלו, הם יתווספו כאן אוטומטית.</div>`:''}
     <div class="kpis">
-      ${kpi(`הכנסות ${first===last?MONTHS[first-1]:`${MONTHS[first-1]}–${MONTHS[last-1]}`} ${y}`, moneyC(T.rev), `ממוצע לחודש ${moneyC(T.rev/Math.max(1,inYear.length))}`)}
-      ${kpi('שעות', hrs(T.h), `ממוצע לחודש ${hrs(T.h/Math.max(1,inYear.length))}`)}
+      ${kpi(`הכנסות ${first===last?MONTHS[first-1]:`${MONTHS[first-1]}–${MONTHS[last-1]}`} ${y}`, moneyC(T.rev), `ממוצע לחודש ${moneyC(T.rev/Math.max(1,(fullMonths.length||inYear.length)))}`)}
+      ${kpi('שעות', hrs(T.h), `ממוצע לחודש ${hrs(T.h/Math.max(1,(fullMonths.length||inYear.length)))}`)}
       ${kpi('רווח גולמי', moneyC(T.gp), `שיעור ${pct(T.margin)}`)}
       ${kpi('הכנסה מול עלות לשעה', perH(T.revH), `עלות מעביד ${perH(T.costH)} לשעה`)}
     </div>
@@ -767,7 +784,7 @@ function renderClient(v){
       </tbody></table></div><p class="hint" style="margin-top:8px">ההכנסה מתחלקת בין האתרים לפי חלק השעות בכל חודש.</p></section>`:''}
   </div>`;
   const labels = rows.map(r=>MONTHS[+r.m.slice(5)-1]);
-  const val = k => rows.map(r=>r.absent?null:r[k]);
+  const val = k => rows.map(r=>r.absent||r.partial?null:r[k]);
   drawChart('ch-c-money', {type:'bar', data:{labels, datasets:[
     {label:'הכנסות', data:val('rev'), backgroundColor:cv('--s1'), borderRadius:4, maxBarThickness:26},
     {label:'רווח גולמי', data:val('gp'), backgroundColor:cv('--s3'), borderRadius:4, maxBarThickness:26}]}}, x=>'₪'+nfc.format(x), c=>` ${c.dataset.label}: ${moneyRaw(c.parsed.y)}`);
