@@ -540,9 +540,9 @@ function compute(ym){
         r.split = 'rate'; r.rateFrom = RT.from; r.rateProxy = !RT.applies;
       }
     }
-    // בדיקת חיוב לכל לקוח עם תעריפים: רק בחודשים שהתעריפים בתוקף, כשלכל האתרים עם שעות יש תעריף ואין אתר "פיקס"
+    // בדיקת חיוב: רק בלקוח שמחולק לפי תעריף, בחודשים שהתעריפים בתוקף, כשלכל האתרים עם שעות יש תעריף ואין אתר "פיקס"
     const withH = sites.filter(s=>s.h>0);
-    if(RT?.applies && r.rev>0 && withH.length && withH.every(s=>s.rate!=null) && !sites.some(s=>s.fixed)){
+    if(r.split==='rate' && RT?.applies && r.rev>0 && withH.length && withH.every(s=>s.rate!=null) && !sites.some(s=>s.fixed)){
       r.expected = withH.reduce((a,s)=>a+s.rate*s.h,0); r.billGap = r.rev - r.expected;
     }
     const share = {};
@@ -1050,7 +1050,7 @@ function renderMatch(v){
       <p class="hint" style="margin-bottom:10px">כל לקוח מחבר אתרים (לפי הקוד ב-TimeWatch ובשכר) לשמות בהנהלת החשבונות. הסרת פריט מחזירה אותו לרשימת הממתינים. ${mapping.updatedAt?`עודכן לאחרונה ${new Date(mapping.updatedAt).toLocaleString('he-IL')}.`:''}</p>
       ${mapping.groups.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">לקוח</th><th>אתרים</th><th>שמות בהנהלת החשבונות</th></tr></thead><tbody>
         ${mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<tr><td class="first"><input type="text" value="${esc(g.name)}" data-rename="${g.id}" aria-label="שם הלקוח" style="width:190px">${g.sites.length>1?`<div style="margin-top:4px"><select data-splitby="${g.id}" aria-label="חלוקת ההכנסה בין האתרים" style="font-size:12px;padding:2px 4px"><option value="">הכנסה בין האתרים: לפי שעות</option><option value="price" ${g.splitBy==='price'?'selected':''}>הכנסה בין האתרים: לפי תעריף × שעות</option></select></div>`:''}</td>
-          <td class="wrap">${g.sites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}${RTn?.rates[c]!=null?` · ${ltr('₪'+RTn.rates[c])}`:RTn?.fixed.includes(c)?' · פיקס':''}<button type="button" data-unsite="${g.id}|${esc(c)}" aria-label="הסרת אתר ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td>
+          <td class="wrap">${g.sites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}${g.splitBy==='price'?(RTn?.rates[c]!=null?` · ${ltr('₪'+RTn.rates[c])}`:RTn?.fixed.includes(c)?' · פיקס':''):''}<button type="button" data-unsite="${g.id}|${esc(c)}" aria-label="הסרת אתר ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td>
           <td class="wrap">${g.clients.map(c=>`<span class="chip">${esc(c)}<button type="button" data-unclient="${g.id}|${esc(c)}" aria-label="הסרת ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td></tr>`).join('')}
         <tr><td class="first">עלות הנהלה</td><td class="wrap" colspan="2">${mapping.overheadSites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}<button type="button" data-unoverhead="${esc(c)}" aria-label="הסרה">×</button></span>`).join('')}</td></tr>
       </tbody></table></div>`:'<p class="muted">עדיין אין התאמות. אפשר לייבא את קובץ ההתאמה או לשייך מהרשימה שלמעלה.</p>'}
@@ -1066,7 +1066,7 @@ function rateTablesPanel(){
     ${ts.length?`<div class="tbl-wrap"><table><thead><tr><th>בתוקף מחודש</th><th class="n">אתרים עם תעריף</th><th>פיקס</th><th>בלי תעריף בקובץ</th><th>קובץ</th><th></th></tr></thead><tbody>
       ${ts.map(t=>`<tr><td><select data-ratefrom="${t.id}" aria-label="בתוקף מחודש">${opts(t.from)}</select></td><td class="n">${Object.keys(t.rates).length}</td><td class="wrap">${t.fixed.join(', ')||'—'}</td><td class="wrap">${(t.missing||[]).map(esc).join(', ')||'—'}</td><td class="small muted">${esc(t.file||'')}</td>
         <td><button class="btn danger sm" type="button" data-delrates="${t.id}">מחיקה</button></td></tr>`).join('')}
-      </tbody></table></div><p class="hint" style="margin-top:8px">כל טבלה חלה מהחודש שנבחר ועד הטבלה הבאה. בחודשים שלפני הטבלה הראשונה התעריפים משמשים רק כיחס חלוקה בין האתרים, בלי בדיקת חיוב. החלוקה לפי תעריף פועלת בלקוחות שהוגדרו כך בטבלה למטה.</p>`
+      </tbody></table></div><p class="hint" style="margin-top:8px">כל טבלה חלה מהחודש שנבחר ועד הטבלה הבאה. בחודשים שלפני הטבלה הראשונה התעריפים משמשים רק כיחס חלוקה בין האתרים, בלי בדיקת חיוב. התעריפים משמשים רק בלקוחות שהוגדרו "לפי תעריף × שעות" בטבלה למטה (כרגע: ${mapping.groups.filter(g=>g.splitBy==='price').map(g=>esc(g.name)).join(', ')||'אף לקוח'}).</p>`
       :'<p class="muted">עדיין לא הועלו תעריפים.</p>'}
   </section>`;
 }
