@@ -185,9 +185,9 @@ const monthName = ym => `${MONTHS[+ym.slice(5)-1]} ${ym.slice(0,4)}`;
 
 let mapping = {groups:[], overheadSites:[]};
 let months = {};                 // ym -> doc
-let ui = {tab:'overview', ym:null, pmode:'month', branch:'', q:'', sort:['gp','asc'], open:null};
+let ui = {tab:'overview', ym:null, pmode:'month', branch:'', q:'', sort:['gp','asc'], open:null, client:null};
 try{ Object.assign(ui, JSON.parse(localStorage.getItem('coop-ui')||'{}')); }catch(e){}
-const saveUi = () => { try{ localStorage.setItem('coop-ui', JSON.stringify({tab:ui.tab, ym:ui.ym, pmode:ui.pmode, branch:ui.branch, sort:ui.sort})); }catch(e){} };
+const saveUi = () => { try{ localStorage.setItem('coop-ui', JSON.stringify({tab:ui.tab, ym:ui.ym, pmode:ui.pmode, branch:ui.branch, sort:ui.sort, client:ui.client})); }catch(e){} };
 const charts = {};
 
 /* ============================================================ utils */
@@ -538,7 +538,7 @@ function periodGaps(per){
 }
 
 /* ============================================================ רינדור */
-const TABS = [['overview','סקירה ותובנות'],['clients','רווחיות לקוחות'],['match','התאמת לקוחות'],['data','קליטת נתונים']];
+const TABS = [['overview','סקירה ותובנות'],['clients','רווחיות לקוחות'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים']];
 function render(){
   const ms = monthList();
   if(!ms.includes(ui.ym)) ui.ym = ms[ms.length-1] || null;
@@ -560,7 +560,7 @@ function render(){
   Object.values(charts).forEach(c=>c.destroy()); for(const k in charts) delete charts[k];
   const v = $('#view');
   if(!ms.length && ui.tab!=='data' && ui.tab!=='match'){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין אין נתונים</h2><p>יש להעלות את שלושת הדוחות החודשיים בלשונית "קליטת נתונים".</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
-  ({overview:renderOverview, clients:renderClients, match:renderMatch, data:renderData})[ui.tab](v);
+  ({overview:renderOverview, clients:renderClients, client:renderClient, match:renderMatch, data:renderData})[ui.tab](v);
 }
 
 /* ---------- סקירה ---------- */
@@ -695,11 +695,84 @@ function detailRow(g){
   const sites = Object.values(g.sites).sort((a,b)=>b.h-a.h);
   return `<tr class="detail"><td colspan="10">
     <div class="stack" style="gap:10px">
+      <div><button class="btn sm primary" type="button" data-client="${g.id}">כרטיס לקוח: התפלגות מתחילת השנה</button></div>
       <div><b>שמות בהנהלת החשבונות:</b> ${Object.entries(g.clients).map(([c,a])=>`${esc(c)} (${money(a)})`).join(' · ') || '<span class="muted">אין הכנסה החודש</span>'}</div>
       ${sites.length?`<div class="tbl-wrap"><table><thead><tr><th>קוד</th><th>אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">עלות לשעה</th></tr></thead><tbody>
         ${sites.map(s=>`<tr><td class="num">${esc(s.code)}</td><td>${esc(s.name)}</td><td>${esc(s.branch)}</td><td class="n">${nf1.format(s.h)}</td><td class="n">${money(s.cost)}</td><td class="n">${money(s.revShare||0)}</td><td class="n">${perH(s.h?s.cost/s.h:NaN)}</td></tr>`).join('')}
       </tbody></table></div>${sites.length>1?'<p class="hint">ההכנסה מתחלקת בין האתרים לפי חלק השעות.</p>':''}`:'<p class="muted">אין אתרים משויכים.</p>'}
     </div></td></tr>`;
+}
+
+/* ---------- כרטיס לקוח: התפלגות חודשית מתחילת השנה ---------- */
+function renderClient(v){
+  const ms = monthList(); const y = (ui.ym||ms[ms.length-1]).slice(0,4);
+  const inYear = ms.filter(m=>m.startsWith(y));
+  const first = +inYear[0].slice(5), last = +inYear[inYear.length-1].slice(5);
+  const all = Array.from({length:last-first+1},(_,i)=>ymOf(y,first+i));   // מהחודש הראשון שנקלט בשנה ועד האחרון
+  const before = MONTHS.slice(0, first-1);                                  // חודשים בתחילת השנה שעוד לא נקלטו
+  const YTD = computePeriod(inYear);
+  const groups = mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he'));
+  if(!groups.length){ v.innerHTML = '<div class="panel empty">עדיין אין לקוחות בטבלת ההתאמה.</div>'; return; }
+  if(!mapping.groups.some(g=>g.id===ui.client)) ui.client = (YTD.groups.slice().sort((a,b)=>b.rev-a.rev)[0]||groups[0]).id;
+  const G = mapping.groups.find(g=>g.id===ui.client);
+  const rows = all.map(m=>{
+    if(!months[m]) return {m, absent:true};
+    const g = compute(m).groups.find(x=>x.id===G.id);
+    return g ? {m, rev:g.rev, h:g.h, cost:g.cost, gp:g.gp, margin:g.margin, revH:g.revH, costH:g.costH, flags:g.flags} : {m, rev:0, h:0, cost:0, gp:0, margin:NaN, revH:NaN, costH:NaN, flags:[]};
+  });
+  const T = YTD.groups.find(x=>x.id===G.id) || {rev:0,h:0,cost:0,gp:0,margin:NaN,revH:NaN,costH:NaN,sites:{},branchList:[]};
+  const absent = rows.filter(r=>r.absent).map(r=>MONTHS[+r.m.slice(5)-1]);
+  const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
+  const dash = '<span class="muted">—</span>';
+  const sites = Object.values(T.sites||{}).sort((a,b)=>b.h-a.h);
+  v.innerHTML = `<div class="stack">
+    <div class="filters" style="margin-block:16px 0">
+      <label>לקוח <select id="f-client">${groups.map(g=>`<option value="${g.id}" ${g.id===G.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label>
+      <label>שנה <select id="f-cyear">${[...new Set(ms.map(m=>m.slice(0,4)))].reverse().map(x=>`<option ${x===y?'selected':''}>${x}</option>`).join('')}</select></label>
+      <span class="small muted">${esc((T.branchList||[]).join(' / ')||'')}${G.clients.length?` · בהנהלת החשבונות: ${G.clients.map(esc).join(' | ')}`:''}</span>
+    </div>
+    ${before.length||absent.length?`<div class="panel" style="background:var(--warn-soft);border-color:transparent">המצטבר מתחילת השנה חלקי: ${[before.length?`${before.length>1?`${before[0]}–${before[before.length-1]}`:before[0]} עוד לא נקלטו, והנתונים כאן מתחילים ב${MONTHS[first-1]}`:'', absent.length?`${absent.join(', ')} חסרים באמצע`:''].filter(Boolean).join('; ')}. כשיועלו, הם יתווספו כאן אוטומטית.</div>`:''}
+    <div class="kpis">
+      ${kpi(`הכנסות ${first===last?MONTHS[first-1]:`${MONTHS[first-1]}–${MONTHS[last-1]}`} ${y}`, moneyC(T.rev), `ממוצע לחודש ${moneyC(T.rev/Math.max(1,inYear.length))}`)}
+      ${kpi('שעות', hrs(T.h), `ממוצע לחודש ${hrs(T.h/Math.max(1,inYear.length))}`)}
+      ${kpi('רווח גולמי', moneyC(T.gp), `שיעור ${pct(T.margin)}`)}
+      ${kpi('הכנסה מול עלות לשעה', perH(T.revH), `עלות מעביד ${perH(T.costH)} לשעה`)}
+    </div>
+    <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <section class="panel">
+        <div class="panel-head"><h2>הכנסות ורווח גולמי לפי חודש</h2></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>הכנסות</span><span><i style="background:var(--s3)"></i>רווח גולמי</span></div>
+        <div class="chart-box"><canvas id="ch-c-money" aria-label="הכנסות ורווח גולמי לפי חודש"></canvas></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>שעות לפי חודש</h2></div>
+        <div class="legend"><span><i style="background:var(--s2)"></i>שעות עבודה</span></div>
+        <div class="chart-box"><canvas id="ch-c-hours" aria-label="שעות לפי חודש"></canvas></div>
+      </section>
+    </div>
+    <section class="panel">
+      <div class="panel-head"><h2>פירוט חודשי: ${esc(G.name)}</h2></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th class="first">חודש</th><th class="n">שעות</th><th class="n">הכנסות</th><th class="n">עלות מעביד</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th><th>סטטוס</th></tr></thead>
+        <tbody>${rows.map(r=> r.absent ? `<tr><td class="first">${monthName(r.m)}</td><td colspan="8" class="muted">לא נקלט</td></tr>` :
+          `<tr><td class="first">${monthName(r.m)}</td><td class="n">${nf1.format(r.h)}</td><td class="n">${money(r.rev)}</td><td class="n">${money(r.cost)}</td><td class="n">${money(r.gp)}</td><td class="n">${marginPill(r.margin, r.rev)}</td><td class="n">${r.h?perH(r.revH):dash}</td><td class="n">${r.h?perH(r.costH):dash}</td>
+           <td><span class="pills">${(r.flags.length?r.flags:[['info','אין פעילות']]).map(f=>`<span class="pill ${f[0]}">${f[1]}</span>`).join('')}</span></td></tr>`).join('')}
+        <tr class="total"><td class="first">סה״כ מתחילת השנה</td><td class="n">${nf1.format(T.h)}</td><td class="n">${money(T.rev)}</td><td class="n">${money(T.cost)}</td><td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td><td></td></tr>
+        </tbody></table></div>
+    </section>
+    ${sites.length>1?`<section class="panel">
+      <div class="panel-head"><h2>לפי אתר, מתחילת השנה</h2></div>
+      <div class="tbl-wrap"><table><thead><tr><th class="first">אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">עלות לשעה</th></tr></thead><tbody>
+      ${sites.map(st=>`<tr><td class="first">${esc(st.name)} <span class="muted small">(${esc(st.code)})</span></td><td>${esc(st.branch)}</td><td class="n">${nf1.format(st.h)}</td><td class="n">${money(st.cost)}</td><td class="n">${money(st.revShare||0)}</td><td class="n">${money((st.revShare||0)-st.cost)}</td><td class="n">${perH(st.h?st.cost/st.h:NaN)}</td></tr>`).join('')}
+      </tbody></table></div><p class="hint" style="margin-top:8px">ההכנסה מתחלקת בין האתרים לפי חלק השעות בכל חודש.</p></section>`:''}
+  </div>`;
+  const labels = rows.map(r=>MONTHS[+r.m.slice(5)-1]);
+  const val = k => rows.map(r=>r.absent?null:r[k]);
+  drawChart('ch-c-money', {type:'bar', data:{labels, datasets:[
+    {label:'הכנסות', data:val('rev'), backgroundColor:cv('--s1'), borderRadius:4, maxBarThickness:26},
+    {label:'רווח גולמי', data:val('gp'), backgroundColor:cv('--s3'), borderRadius:4, maxBarThickness:26}]}}, x=>'₪'+nfc.format(x), c=>` ${c.dataset.label}: ${moneyRaw(c.parsed.y)}`);
+  drawChart('ch-c-hours', {type:'bar', data:{labels, datasets:[
+    {label:'שעות', data:val('h'), backgroundColor:cv('--s2'), borderRadius:4, maxBarThickness:26}]}}, x=>nf0.format(x), c=>` שעות: ${nf1.format(c.parsed.y)}`);
 }
 
 /* ---------- התאמת לקוחות ---------- */
@@ -863,6 +936,7 @@ document.addEventListener('click', async e=>{
   if(d.branchGo){ ui.tab='clients'; ui.branch=d.branchGo; saveUi(); render(); return; }
   if(d.sort){ ui.sort = [d.sort, ui.sort[0]===d.sort && ui.sort[1]==='desc' ? 'asc' : 'desc']; saveUi(); render(); return; }
   if(d.open){ ui.open = ui.open===d.open ? null : d.open; render(); return; }
+  if(d.client){ ui.client=d.client; ui.tab='client'; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(t.id==='btn-export') return exportReport();
   if(t.id==='map-export'){ const wb=XLSX.utils.book_new(); wb.Workbook={Views:[{RTL:true}]}; XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mappingAoa()), 'טבלת התאמה'); return saveXlsx(wb, 'טבלת-התאמת-לקוחות.xlsx'); }
   if(d.unsite){ const [gid,c]=d.unsite.split('|'); const g=mapping.groups.find(x=>x.id===gid); g.sites=g.sites.filter(x=>x!==c); await store.saveMapping(); render(); return; }
@@ -876,6 +950,8 @@ document.addEventListener('click', async e=>{
 document.addEventListener('change', async e=>{
   const t = e.target, d = t.dataset;
   if(t.id==='f-ym'){ ui.ym=t.value; ui.open=null; saveUi(); render(); }
+  else if(t.id==='f-client'){ ui.client=t.value; saveUi(); render(); }
+  else if(t.id==='f-cyear'){ const ym = monthList().filter(m=>m.startsWith(t.value)).pop(); if(ym){ ui.ym=ym; saveUi(); render(); } }
   else if(t.id==='f-pmode'){ ui.pmode=t.value; ui.open=null; saveUi(); render(); }
   else if(t.id==='f-branch'){ ui.branch=t.value; saveUi(); render(); }
   else if(t.id==='file-in'){ const f=[...t.files]; t.value=''; await handleFiles(f); }
