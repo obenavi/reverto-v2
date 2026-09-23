@@ -868,14 +868,14 @@ function renderCost(v){
       <div class="panel-head"><h2>עלות שעה ורווחיות לפי לקוח</h2>
         <label class="small muted">יעד רווח גולמי <input type="text" id="f-target" value="${ui.target||15}" inputmode="decimal" style="width:52px;text-align:center"> %</label></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th class="first">לקוח</th><th class="n">שעות</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th><th class="n">עלות חוזרת לשעה</th><th class="n">רווח מדווח</th><th class="n">רווח בלי חד-פעמי</th><th class="n">נוספות</th><th class="n">היעדרויות</th><th class="n">נסיעות</th><th class="n">חד-פעמי</th><th class="n">מחיר לשעה ליעד</th><th class="n">תוספת בחודש</th></tr></thead>
+        <thead><tr><th class="first">לקוח</th><th class="n">שעות</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th><th class="n">עלות חוזרת לשעה</th><th class="n">רווח מדווח</th><th class="n">רווח בלי חד-פעמי</th><th class="n">נוספות</th><th class="n">היעדרויות</th><th class="n">נסיעות לשעה</th><th class="n">חד-פעמי</th><th class="n">מחיר לשעה ליעד</th><th class="n">תוספת בחודש</th></tr></thead>
         <tbody>${groups.slice().sort((a,b)=>(a.recMargin||0)-(b.recMargin||0)).map(g=>{ const need = g.recCostH/(1-t), up = g.rev>0&&g.h>0 ? Math.max(0,(need-g.revH)*g.h)/nM : 0;
           return `<tr class="clickable" data-client="${g.id}"><td class="first">${esc(g.name)}</td><td class="n">${hrs(g.h)}</td><td class="n">${perH(g.revH)}</td><td class="n">${perH(g.costH)}</td><td class="n">${perH(g.recCostH)}</td>
           <td class="n">${marginPill(g.margin,g.rev)}</td><td class="n">${marginPill(g.recMargin,g.rev)}</td>
-          <td class="n">${pct(share(g,'ot'),0)}</td><td class="n">${pct(share(g,'absence'),0)}</td><td class="n">${pct(share(g,'travel'),0)}</td><td class="n">${g.comp?.once?money(g.comp.once/nM):'—'}</td>
+          <td class="n">${pct(share(g,'ot'),0)}</td><td class="n">${pct(share(g,'absence'),0)}</td><td class="n" title="${pct(share(g,'travel'),0)} מהברוטו">${g.h?perH((g.comp?.travel||0)/g.h):'—'}</td><td class="n">${g.comp?.once?money(g.comp.once/nM):'—'}</td>
           <td class="n">${g.rev>0&&g.h>0?perH(need):'—'}</td><td class="n">${up>0?`<b>${money(up)}</b>`:'—'}</td></tr>`; }).join('')}
         </tbody></table></div>
-      <p class="hint" style="margin-top:8px">עלות חוזרת = עלות מעביד בלי תשלומים חד-פעמיים. אחוזי נוספות, היעדרויות ונסיעות הם מתוך הברוטו של הלקוח. מחיר ליעד מחושב על העלות החוזרת. לחיצה על שורה פותחת את כרטיס הלקוח.</p>
+      <p class="hint" style="margin-top:8px">עלות חוזרת = עלות מעביד בלי תשלומים חד-פעמיים. אחוזי נוספות והיעדרויות הם מתוך הברוטו של הלקוח. נסיעות לשעה = נסיעות ואחזקת רכב ששויכו ללקוח ÷ שעות העבודה אצלו (ממוצע הרשת: ${perH(T.h?(T.comp.travel||0)/T.h:NaN)}). מחיר ליעד מחושב על העלות החוזרת. לחיצה על שורה פותחת את כרטיס הלקוח.</p>
     </section>
   </div>`;
 }
