@@ -185,9 +185,9 @@ const monthName = ym => `${MONTHS[+ym.slice(5)-1]} ${ym.slice(0,4)}`;
 
 let mapping = {groups:[], overheadSites:[]};
 let months = {};                 // ym -> doc
-let ui = {tab:'overview', ym:null, pmode:'month', branch:'', q:'', sort:['gp','asc'], open:null, client:null};
+let ui = {tab:'overview', ym:null, pmode:'month', branch:'', q:'', sort:['gp','asc'], open:null, client:null, target:15};
 try{ Object.assign(ui, JSON.parse(localStorage.getItem('coop-ui')||'{}')); }catch(e){}
-const saveUi = () => { try{ localStorage.setItem('coop-ui', JSON.stringify({tab:ui.tab, ym:ui.ym, pmode:ui.pmode, branch:ui.branch, sort:ui.sort, client:ui.client})); }catch(e){} };
+const saveUi = () => { try{ localStorage.setItem('coop-ui', JSON.stringify({tab:ui.tab, ym:ui.ym, pmode:ui.pmode, branch:ui.branch, sort:ui.sort, client:ui.client, target:ui.target})); }catch(e){} };
 const charts = {};
 
 /* ============================================================ utils */
@@ -277,6 +277,7 @@ function detectType(wb){
   if(wb.html) return 'hours';
   for(const aoa of Object.values(wb.sheets)){
     const flat = aoa.slice(0,30).flat().map(normName);
+    if(flat.includes('סוג נתון') && flat.includes('תאור סמל')) return 'components';
     if(flat.some(c=>c.includes('לפני מע"מ')) && flat.includes('לקוח')) return 'revenue';
     if(flat.some(c=>c==='עלות מעביד'||c==='עלות עובד')) return 'payroll';
     if(flat.includes('סה"כ שעות') && flat.includes('משימה')) return 'hours';
@@ -376,14 +377,16 @@ function parsePayroll(wb, fileName){
   }
   if(!split) throw new Error('לא נמצא גיליון עם פיצול עלות לפי אתר (עמודת "משנה")');
   const {aoa, hi, H, iSub} = split;
-  const iEmp=H.indexOf('מספר עובד'), iCost = H.includes('עלות עובד') ? H.indexOf('עלות עובד') : H.indexOf('עלות מעביד'), iDate=H.findIndex(h=>h.startsWith('תאריך'));
-  const sites = {}, emps = {}, yms=[]; let total=0;
+  const iEmp=H.indexOf('מספר עובד'), iCost = H.includes('עלות עובד') ? H.indexOf('עלות עובד') : H.indexOf('עלות מעביד'), iDate=H.findIndex(h=>h.startsWith('תאריך')), iGross=H.indexOf('ברוטו');
+  const sites = {}, emps = {}, yms=[], empSites = {}; let total=0;
   for(const r of aoa.slice(hi+1)){
     const emp = num(r[iEmp]), code = num(r[iSub]), cost = num(r[iCost]);
     if(emp==null || cost==null || code==null) continue;
     const k = String(code);
-    const s = sites[k] ||= {name:siteLabel(r[iSub+1]||k), cost:0, emps:{}};
-    s.cost += cost; s.emps[emp]=1; emps[emp]=1; total += cost; yms.push(dateYm(r[iDate]));
+    const s = sites[k] ||= {name:siteLabel(r[iSub+1]||k), cost:0, gross:0, emps:{}};
+    const gross = iGross>=0 ? (num(r[iGross])||0) : 0;
+    s.cost += cost; s.gross += gross; s.emps[emp]=1; emps[emp]=1; total += cost; yms.push(dateYm(r[iDate]));
+    (empSites[emp] ||= {})[k] = (empSites[emp][k]||0) + (iGross>=0 ? gross : cost);
   }
   let employerTotal = null, employerCount = null, checkSource = null;
   const plantRow = aoa.slice(hi+1).find(r=>/סיכום\s+למפעל/.test(normName(r[0])));
@@ -393,8 +396,71 @@ function parsePayroll(wb, fileName){
     const rows = summary.aoa.slice(summary.hi+1).filter(r=>!normName(r[0]) && num(r[iE])!=null && num(r[iEC])!=null);
     employerTotal = round2(rows.reduce((a,r)=>a+num(r[iEC]),0)); employerCount = rows.length;
   }
-  const out = {}; for(const [k,s] of Object.entries(sites)) out[k] = {name:s.name, cost:round2(s.cost), emps:Object.keys(s.emps).length};
-  return {ym: majority(yms), data:{file:fileName, uploadedAt:new Date().toISOString(), sites:out, total:round2(total), employees:Object.keys(emps).length, employerTotal, employerCount, checkSource}};
+  const out = {}; for(const [k,s] of Object.entries(sites)) out[k] = {name:s.name, cost:round2(s.cost), gross:round2(s.gross), emps:Object.keys(s.emps).length};
+  // חלוקת כל עובד בין האתרים (לפי ברוטו), כדי לשייך את רכיבי השכר שלו לאתרים. מספרי עובד וחלקים בלבד, בלי שמות וסכומים.
+  const empShares = {};
+  for(const [e,m] of Object.entries(empSites)){ const t = Object.values(m).reduce((a,b)=>a+b,0); if(t>0) empShares[e] = Object.fromEntries(Object.entries(m).map(([k,v])=>[k, Math.round(v/t*1e6)/1e6])); }
+  return {ym: majority(yms), data:{file:fileName, uploadedAt:new Date().toISOString(), sites:out, total:round2(total), gross:round2(Object.values(sites).reduce((a,x)=>a+x.gross,0)), employees:Object.keys(emps).length, employerTotal, employerCount, checkSource, empShares}};
+}
+
+/* --- דוח רכיבי שכר (ברוטו לפי סמל) ---
+   נלקח רק סוג הנתון "תשלומים" (רכיבי הברוטו). כל רכיב של עובד מתחלק בין האתרים לפי חלוקת
+   הברוטו שלו בדוח השכר של אותו חודש, ולכן דוח השכר צריך להיקלט קודם. נשמרים רק סיכומים לפי אתר ורכיב. */
+const BUCKETS = [['base','בסיס: שעות רגילות ומשכורת'],['topup','השלמת שעות והפסקות'],['ot','שעות נוספות, שבת וחג'],['absence','היעדרויות בתשלום (חופשה, מחלה, חג)'],
+  ['travel','נסיעות ורכב'],['allow','הבראה, ותק ותוספות'],['prov','הפרשות ששולמו בשכר'],['once','חד-פעמי: פדיון, מענקים, בונוסים'],['other','אחר']];
+const BUCKET = Object.fromEntries(BUCKETS);
+function bucketOf(desc){
+  const d = normName(desc);
+  if(/פדיון|מענק|בונוס|גילום|גלום|שי לחג|הודעה מוקדמת|אשל|קיזוז/.test(d)) return 'once';
+  if(/%|נוספות/.test(d)) return 'ot';
+  if(/חופשה|מחלה|חג|מילואים|אבל/.test(d)) return 'absence';
+  if(/נסיע|רכב|חניה/.test(d)) return 'travel';
+  if(/השלמ|הפסק/.test(d)) return 'topup';
+  if(/הבראה|ותק|תוספת|טלפון|ביגוד/.test(d)) return 'allow';
+  if(/גמל|השתלמות|פנסיה|פיצוי/.test(d)) return 'prov';
+  if(/רגילות|משכורת|שכר|שעות/.test(d)) return 'base';
+  return 'other';
+}
+// החלק של הפרמיה בשעות נוספות/שבת: ברכיב של 150% שליש מהתשלום הוא התוספת מעבר לשעה רגילה
+const premiumOf = desc => { const m = normName(desc).match(/(\d{3})\s*%/); const p = m ? +m[1] : 0; return p>100 ? (p-100)/p : 0; };
+function monthFromHeader(h){
+  const s = normName(h); const i = MONTHS.findIndex(n=>s===n || s.startsWith(n));
+  return i>=0 ? i+1 : null;
+}
+function parseComponents(wb, fileName){
+  const aoa = Object.values(wb.sheets).find(a=>findHeader(a, r=>r.includes('סוג נתון') && r.includes('תאור סמל'))>=0);
+  const hi = findHeader(aoa, r=>r.includes('סוג נתון') && r.includes('תאור סמל'));
+  const H = aoa[hi].map(normName);
+  const iEmp=H.indexOf('מספר עובד'), iType=H.indexOf('סוג נתון'), iSym=H.indexOf('סמל'), iDesc=H.indexOf('תאור סמל');
+  const monthCols = H.map((h,i)=>[i, monthFromHeader(h)]).filter(([i,m])=>i>iDesc && m);
+  if(!monthCols.length) throw new Error('לא נמצאה עמודת חודש (למשל "יולי") בקובץ הרכיבים');
+  const out = [];
+  for(const [col, mNum] of monthCols){
+    // השנה: לפי חודש שכבר נקלט עם דוח שכר באותו חודש קלנדרי
+    const cand = monthList().filter(x=>+x.slice(5)===mNum).sort((a,b)=>(!!months[b].payroll?.empShares - !!months[a].payroll?.empShares) || b.localeCompare(a));
+    const ym = cand[0] || ymOf(new Date().getFullYear(), mNum);
+    const shares = months[ym]?.payroll?.empShares;
+    if(!shares) throw new Error(`יש להעלות קודם את דוח השכר (עלות מעביד לפי אתר) של ${monthName(ym)}${months[ym]?.payroll?' מחדש, כדי שיישמר פיצול העובדים בין האתרים':''}`);
+    const sites = {}, symbols = {}; let total = 0, unallocated = 0; const emps = new Set();
+    for(const r of aoa.slice(hi+1)){
+      if(normName(r[0]) || normName(r[iType])!=='תשלומים') continue;
+      const emp = num(r[iEmp]), v = num(r[col]); if(emp==null || !v) continue;
+      const desc = normName(r[iDesc]), sym = normName(r[iSym]), b = bucketOf(desc), prem = premiumOf(desc);
+      const sy = symbols[sym] ||= {name:desc, bucket:b, total:0, emps:0}; sy.total += v; sy.emps++;
+      total += v; emps.add(emp);
+      const sh = shares[emp];
+      if(!sh){ unallocated += v; continue; }
+      for(const [code, w] of Object.entries(sh)){
+        const x = sites[code] ||= {};
+        x[b] = (x[b]||0) + v*w;
+        if(prem) x.otPrem = (x.otPrem||0) + v*w*prem;
+      }
+    }
+    for(const x of Object.values(sites)) for(const k in x) x[k] = round2(x[k]);
+    for(const x of Object.values(symbols)) x.total = round2(x.total);
+    out.push({ym, data:{file:fileName, uploadedAt:new Date().toISOString(), sites, symbols, total:round2(total), unallocated:round2(unallocated), employees:emps.size}});
+  }
+  return out;
 }
 
 /* ============================================================ חישוב רווחיות לחודש */
@@ -411,20 +477,20 @@ function knownBranch(code, ym){
 const dist = (a,b) => (+a.slice(0,4)*12 + +a.slice(5)) - (+b.slice(0,4)*12 + +b.slice(5));
 function compute(ym){
   const M = months[ym] || {};
-  const rev = M.revenue?.clients || {}, hs = M.hours?.sites || {}, pay = M.payroll?.sites || {};
+  const rev = M.revenue?.clients || {}, hs = M.hours?.sites || {}, pay = M.payroll?.sites || {}, comp = M.components?.sites || null;
   const bySite = siteIndex(), byClient = clientIndex();
   const G = {}; // group id -> result
   const get = g => G[g.id] ||= {id:g.id, name:g.name, group:g, rev:0, h:0, cost:0, sites:{}, clients:{}};
   const unSites = {}, unClients = {};
-  let overhead = 0;
+  let overhead = 0; const ohComp = {};
   const codes = new Set([...Object.keys(hs), ...Object.keys(pay)]);
   for(const code of codes){
     const h = hs[code]?.h || 0, cost = pay[code]?.cost || 0;
-    const info = {code, name:hs[code]?.name || pay[code]?.name || code, branch:hs[code]?.branch || knownBranch(code, ym), h, cost};
-    if(isOverhead(code)){ overhead += cost; continue; }
+    const info = {code, name:hs[code]?.name || pay[code]?.name || code, branch:hs[code]?.branch || knownBranch(code, ym), h, cost, gross:pay[code]?.gross||0, comp:comp?.[code]||{}};
+    if(isOverhead(code)){ overhead += cost; addComp(ohComp, info.comp); continue; }
     const g = bySite[code];
     if(!g){ unSites[code] = info; continue; }
-    const r = get(g); r.h += h; r.cost += cost; r.sites[code] = info;
+    const r = get(g); r.h += h; r.cost += cost; r.gross = (r.gross||0) + info.gross; r.comp = addComp(r.comp||{}, info.comp); r.sites[code] = info;
   }
   for(const [name, x] of Object.entries(rev)){
     const net = x.inv - x.cr, g = byClient[name];
@@ -446,7 +512,7 @@ function compute(ym){
     for(const [b,w] of Object.entries(share)){ const x=B(b); x.rev += r.rev*w; x.groups++; }
     sites.forEach(s=>{ const x=B(s.branch); x.h += s.h; x.cost += s.cost; });
     r.gp = r.rev - r.cost; r.margin = r.rev ? r.gp/r.rev : NaN; r.revH = r.h ? r.rev/r.h : NaN; r.costH = r.h ? r.cost/r.h : NaN;
-    r.flags = flagsOf(r);
+    r.flags = flagsOf(r); finishComp(r);
   }
   for(const s of Object.values(unSites)){ const x=B(s.branch); x.h+=s.h; x.cost+=s.cost; }
   Object.values(branches).forEach(b=>{ b.gp=b.rev-b.cost; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
@@ -456,7 +522,19 @@ function compute(ym){
                h:list.reduce((a,r)=>a+r.h,0)+Object.values(unSites).reduce((a,s)=>a+s.h,0), overhead};
   tot.gp = tot.rev - tot.cost; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp - overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
-  return {ym, groups:list, branches, unSites, unClients, tot, has:{rev:!!M.revenue, hours:!!M.hours, pay:!!M.payroll}};
+  tot.gross = list.reduce((a,r)=>a+(r.gross||0),0) + Object.values(unSites).reduce((a,s)=>a+s.gross,0);
+  tot.comp = [...list.map(r=>r.comp||{}), ...Object.values(unSites).map(s=>s.comp)].reduce((a,c)=>addComp(a,c), {});
+  tot.ohComp = ohComp; finishComp(tot);
+  return {ym, hasComp:!!comp, groups:list, branches, unSites, unClients, tot, has:{rev:!!M.revenue, hours:!!M.hours, pay:!!M.payroll}};
+}
+const addComp = (a, c) => { for(const [k,v] of Object.entries(c||{})) a[k]=(a[k]||0)+v; return a; };
+// עלות חוזרת: בלי תשלומים חד-פעמיים (פדיון חופשה לעוזב, מענקים), כולל חלקם בעלויות המעביד
+function finishComp(r){
+  const once = r.comp?.once || 0, factor = r.gross ? r.cost/r.gross : 1;
+  r.onceCost = once*factor; r.recCost = r.cost - r.onceCost;
+  r.recMargin = r.rev ? (r.rev-r.recCost)/r.rev : NaN; r.recCostH = r.h ? r.recCost/r.h : NaN;
+  r.grossH = r.h ? (r.gross||0)/r.h : NaN;
+  return r;
 }
 function flagsOf(r){
   const f = [];
@@ -520,8 +598,8 @@ function computePeriod(yms){
   const G={}, branches={}, unSites={}, unClients={};
   for(const R of parts){
     for(const g of R.groups){
-      const x = G[g.id] ||= {id:g.id, name:g.name, group:g.group, rev:0, h:0, cost:0, sites:{}, clients:{}, weight:{}};
-      x.rev+=g.rev; x.h+=g.h; x.cost+=g.cost;
+      const x = G[g.id] ||= {id:g.id, name:g.name, group:g.group, rev:0, h:0, cost:0, gross:0, comp:{}, sites:{}, clients:{}, weight:{}};
+      x.rev+=g.rev; x.h+=g.h; x.cost+=g.cost; x.gross+=g.gross||0; addComp(x.comp, g.comp);
       for(const st of Object.values(g.sites)){ const y = x.sites[st.code] ||= {code:st.code, name:st.name, branch:st.branch, h:0, cost:0, revShare:0}; y.h+=st.h; y.cost+=st.cost; y.revShare+=st.revShare||0; }
       for(const [c,a] of Object.entries(g.clients)) x.clients[c]=(x.clients[c]||0)+a;
       for(const [b,w] of Object.entries(g.branchShare)) x.weight[b]=(x.weight[b]||0)+w*(g.rev+g.h+1);
@@ -534,13 +612,14 @@ function computePeriod(yms){
   for(const r of groups){
     const w = Object.entries(r.weight).sort((a,b)=>b[1]-a[1]);
     r.branchList = w.map(x=>x[0]); r.branch = w[0][0];
-    r.gp = r.rev-r.cost; r.margin = r.rev? r.gp/r.rev : NaN; r.revH = r.h? r.rev/r.h : NaN; r.costH = r.h? r.cost/r.h : NaN; r.flags = flagsOf(r);
+    r.gp = r.rev-r.cost; r.margin = r.rev? r.gp/r.rev : NaN; r.revH = r.h? r.rev/r.h : NaN; r.costH = r.h? r.cost/r.h : NaN; r.flags = flagsOf(r); finishComp(r);
   }
   Object.values(branches).forEach(b=>{ b.gp=b.rev-b.cost; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
   const tot = ['rev','cost','h','overhead'].reduce((o,k)=>(o[k]=parts.reduce((a,R)=>a+R.tot[k],0),o),{});
   tot.gp = tot.rev-tot.cost; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-tot.overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
-  return {ym:yms[yms.length-1], yms, parts, groups, branches, unSites, unClients, tot,
+  tot.gross = parts.reduce((a,R)=>a+(R.tot.gross||0),0); tot.comp = parts.reduce((a,R)=>addComp(a,R.tot.comp),{}); tot.ohComp = parts.reduce((a,R)=>addComp(a,R.tot.ohComp),{}); finishComp(tot);
+  return {ym:yms[yms.length-1], yms, parts, groups, branches, unSites, unClients, tot, hasComp:parts.every(R=>R.hasComp),
           has:{rev:parts.every(R=>R.has.rev), hours:parts.every(R=>R.has.hours), pay:parts.every(R=>R.has.pay)}};
 }
 function periodGaps(per){
@@ -551,14 +630,14 @@ function periodGaps(per){
 }
 
 /* ============================================================ רינדור */
-const TABS = [['overview','סקירה ותובנות'],['clients','רווחיות לקוחות'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים']];
+const TABS = [['overview','סקירה ותובנות'],['clients','רווחיות לקוחות'],['cost','עלות שעה והתייעלות'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים']];
 function render(){
   const ms = monthList();
   if(!ms.includes(ui.ym)) ui.ym = ms[ms.length-1] || null;
   const un = allUnmatched(); const unN = un.sites.length + un.clients.length;
   $('#tabs').innerHTML = TABS.map(([id,n])=>`<button class="tab" role="tab" type="button" data-tab="${id}" aria-selected="${ui.tab===id}">${n}${id==='match'&&unN?`<span class="badge num">${unN}</span>`:''}</button>`).join('');
   $('#store-note').textContent = store.mode==='db' ? 'נשמר במאגר המשותף של הדף' : 'נשמר בדפדפן הזה בלבד';
-  const withFilters = ['overview','clients'].includes(ui.tab) && ms.length;
+  const withFilters = ['overview','clients','cost'].includes(ui.tab) && ms.length;
   $('#filters').hidden = !withFilters;
   if(withFilters){
     const pm = ui.pmode;
@@ -573,7 +652,7 @@ function render(){
   Object.values(charts).forEach(c=>c.destroy()); for(const k in charts) delete charts[k];
   const v = $('#view');
   if(!ms.length && ui.tab!=='data' && ui.tab!=='match'){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין אין נתונים</h2><p>יש להעלות את שלושת הדוחות החודשיים בלשונית "קליטת נתונים".</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
-  ({overview:renderOverview, clients:renderClients, client:renderClient, match:renderMatch, data:renderData})[ui.tab](v);
+  ({overview:renderOverview, clients:renderClients, cost:renderCost, client:renderClient, match:renderMatch, data:renderData})[ui.tab](v);
 }
 
 /* ---------- סקירה ---------- */
@@ -717,6 +796,89 @@ function detailRow(g){
     </div></td></tr>`;
 }
 
+/* ---------- עלות שעה והתייעלות ---------- */
+const perHourRows = (T) => {   // מבנה עלות השעה: כל רכיב ברוטו לשעת עבודה, ועלויות המעביד מעל הברוטו
+  const rows = BUCKETS.map(([k,n])=>({k, n, v: T.h ? (T.comp?.[k]||0)/T.h : NaN})).filter(r=>r.k!=='other' || r.v);
+  rows.push({k:'oncost', n:'עלויות מעביד (ב"ל, פנסיה, פיצויים, השתלמות)', v: T.h ? (T.cost-(T.gross||0))/T.h : NaN});
+  return rows;
+};
+function renderCost(v){
+  const per = period(), R = computePeriod(per.months), t = (ui.target||15)/100;
+  const withComp = monthList().filter(m=>months[m].components);
+  if(!R.hasComp){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">חסר דוח רכיבי שכר ל${per.label}</h2><p>יש להעלות בלשונית "קליטת נתונים" את דוח הברוטו לפי רכיבי שכר (הנתונים נלקחים מסעיף "תשלומים").</p>${withComp.length?`<p style="margin-top:8px">נקלט עבור: ${withComp.map(monthName).join(', ')}.</p>`:''}</div>`; return; }
+  const T = R.tot, nM = per.months.length;
+  let groups = R.groups.filter(g=>g.h>0 || g.rev>0);
+  if(ui.branch) groups = groups.filter(g=>g.branchList.includes(ui.branch));
+  const share = (g,k) => g.gross ? (g.comp?.[k]||0)/g.gross : NaN;
+  // --- המלצות ---
+  const priced = groups.filter(g=>g.rev>0 && g.h>=10 && g.recMargin<t).map(g=>({g, need:g.recCostH/(1-t), uplift:Math.max(0,(g.recCostH/(1-t)-g.revH)*g.h)/nM})).sort((a,b)=>b.uplift-a.uplift);
+  const upliftSum = priced.reduce((a,x)=>a+x.uplift,0);
+  const factor = T.gross ? T.cost/T.gross : 1.2;
+  const otG = groups.filter(g=>(g.comp?.otPrem||0)>0).sort((a,b)=>(b.comp.otPrem)-(a.comp.otPrem));
+  const otPrem = (T.comp.otPrem||0)*factor/nM, otAll = (T.comp.ot||0)/nM;
+  const oneTimeLoss = groups.filter(g=>g.rev>0 && g.margin<0 && g.recMargin>=0);
+  const structural = groups.filter(g=>g.rev>0 && g.h>=10 && g.recMargin<0);
+  const absent = groups.filter(g=>g.h>=10 && share(g,'absence')>0.10).sort((a,b)=>share(b,'absence')-share(a,'absence'));
+  const travel = groups.filter(g=>g.h>=10 && share(g,'travel')>0.15).sort((a,b)=>share(b,'travel')-share(a,'travel'));
+  const recs = [];
+  if(priced.length) recs.push({level:'bad', title:`עדכון מחיר ל-${priced.length} לקוחות: עד ${money(upliftSum)} בחודש`,
+    text:`כדי להגיע לרווח גולמי חוזר של ${pct(t,0)}: ${priced.slice(0,5).map(x=>`<b>${esc(x.g.name)}</b> מ-${perH(x.g.revH)} ל-${perH(x.need)} לשעה (${money(x.uplift)})`).join(' · ')}${priced.length>5?` ועוד ${priced.length-5}`:''}.`});
+  if(otPrem>500) recs.push({level:'warn', title:`שעות נוספות: ${money(otAll)} בחודש, מתוכם ${money(otPrem)} פרמיה`,
+    text:`הפרמיה (התוספת מעבר לשעה רגילה, כולל עלויות מעביד) היא החלק שאפשר לחסוך בשיבוץ עובד נוסף או במשמרות מתוכננות. ריכוז עיקרי: ${otG.slice(0,3).map(g=>`<b>${esc(g.name)}</b> (${pct(share(g,'ot'),0)} מהברוטו, פרמיה ${money(g.comp.otPrem*factor/nM)})`).join(' · ')}.`});
+  if(oneTimeLoss.length) recs.push({level:'info', title:`${oneTimeLoss.length} לקוחות בהפסד בגלל תשלומים חד-פעמיים בלבד`,
+    text:`${oneTimeLoss.map(g=>`${esc(g.name)}: ${pct(g.margin)} מדווח, ${pct(g.recMargin)} בלי החד-פעמי`).join(' · ')}. זה פדיון חופשה לעוזב או מענק, ולא בעיה במבנה העלות. לא לתמחר מחדש על סמך החודש הזה.`});
+  if(structural.length) recs.push({level:'bad', title:`${structural.length} לקוחות בהפסד גם בלי תשלומים חד-פעמיים`,
+    text:`${structural.map(g=>`<b>${esc(g.name)}</b> (עלות ${perH(g.recCostH)} מול הכנסה ${perH(g.revH)} לשעה)`).join(' · ')}. כאן נדרש עדכון מחיר, צמצום שעות או בחינת המשך ההתקשרות.`});
+  if(absent.length) recs.push({level:'warn', title:`היעדרויות בתשלום גבוהות ב-${absent.length} לקוחות`,
+    text:`${absent.slice(0,4).map(g=>`${esc(g.name)} (${pct(share(g,'absence'),0)} מהברוטו)`).join(' · ')}. בממוצע בארגון ${pct((T.comp.absence||0)/T.gross,1)}. חופשה ומחלה ששולמו נכנסות לעלות בלי שעות עבודה מולן. כדאי לוודא שהמחליפים לא נרשמים כשעות נוספות, ולכלול את מקדם ההיעדרות במחיר.`});
+  if(travel.length) recs.push({level:'warn', title:`נסיעות ורכב מעל 15% מהברוטו ב-${travel.length} לקוחות`,
+    text:`${travel.slice(0,4).map(g=>`${esc(g.name)} (${pct(share(g,'travel'),0)})`).join(' · ')}. בארגון כולו ${pct((T.comp.travel||0)/T.gross,1)} מהברוטו (${money((T.comp.travel||0)/nM)} בחודש). כדאי לבדוק שיבוץ עובדים שגרים קרוב לאתר ואת מדיניות אחזקת הרכב.`});
+  // --- השוואה חודשית ---
+  const yr = (ui.ym||'').slice(0,4), cm = withComp.filter(m=>m.startsWith(yr) && complete(m));
+  const perMonth = cm.map(m=>({m, R:compute(m)}));
+  const rowsDef = perHourRows(T);
+  const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
+  v.innerHTML = `<div class="stack">
+    <div class="kpis">
+      ${kpi('ברוטו לשעת עבודה', perH(T.grossH), `${hrs(T.h)} שעות באתרים`)}
+      ${kpi('עלות מעביד לשעה', perH(T.costH), `מעל הברוטו: ${pct(T.gross?T.cost/T.gross-1:NaN,0)}`)}
+      ${kpi('שעות נוספות, שבת וחג', pct(T.gross?(T.comp.ot||0)/T.gross:NaN), `${money(otAll)} בחודש`)}
+      ${kpi('רווח גולמי בלי חד-פעמי', pct(T.recMargin), `מדווח ${pct(T.margin)} · חד-פעמי ${money((T.comp.once||0)/nM)} בחודש`)}
+    </div>
+    <div class="grid2">
+      <section class="panel">
+        <div class="panel-head"><h2>מבנה עלות השעה לפי חודש</h2><span class="small muted">₪ לשעת עבודה ב-TimeWatch, אתרי לקוחות בלבד</span></div>
+        ${perMonth.length?`<div class="tbl-wrap"><table>
+          <thead><tr><th class="first">רכיב</th>${perMonth.map(x=>`<th class="n">${MONTHS[+x.m.slice(5)-1]}</th>`).join('')}${perMonth.length>1?'<th class="n">שינוי בחודש האחרון</th>':''}</tr></thead>
+          <tbody>${rowsDef.map(rd=>{ const vals = perMonth.map(x=>perHourRows(x.R.tot).find(y=>y.k===rd.k)?.v);
+              const dlt = vals.length>1 ? vals[vals.length-1]-vals[vals.length-2] : null;
+              return `<tr><td class="first">${rd.n}</td>${vals.map(x=>`<td class="n">${perH(x)}</td>`).join('')}${perMonth.length>1?`<td class="n">${isFinite(dlt)?`<span class="delta ${dlt<=0?'good':'bad'}">${ltr((dlt>=0?'+':'−')+'₪'+nf1.format(Math.abs(dlt)))}</span>`:'—'}</td>`:''}</tr>`; }).join('')}
+            <tr class="total"><td class="first">עלות מעביד לשעה</td>${perMonth.map(x=>`<td class="n">${perH(x.R.tot.costH)}</td>`).join('')}${perMonth.length>1?(()=>{ const a=perMonth[perMonth.length-2].R.tot.costH, b=perMonth[perMonth.length-1].R.tot.costH; return `<td class="n"><span class="delta ${b<=a?'good':'bad'}">${ltr((b>=a?'+':'−')+'₪'+nf1.format(Math.abs(b-a)))}</span></td>`; })():''}</tr>
+            <tr><td class="first">הכנסה לשעה</td>${perMonth.map(x=>`<td class="n">${perH(x.R.tot.revH)}</td>`).join('')}${perMonth.length>1?'<td></td>':''}</tr>
+          </tbody></table></div>
+          ${perMonth.length<2?'<p class="hint" style="margin-top:8px">ההשוואה החודשית תופיע כשיקלט דוח רכיבים לחודש שלם נוסף (עם דוחות הכנסות, שעות ושכר).</p>':''}`:'<p class="muted">אין עדיין חודש שלם עם דוח רכיבים.</p>'}
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>המלצות להתייעלות</h2><span class="small muted">${per.label}${nM>1?' · סכומים לחודש':''}</span></div>
+        <div class="insights">${recs.length?recs.map(i=>`<div class="insight"><span class="pill ${i.level}">${{good:'▲ חיובי',bad:'▼ עדיפות גבוהה',warn:'● לבדיקה',info:'● מידע'}[i.level]}</span><h3>${i.title}</h3><p>${i.text}</p></div>`).join(''):'<p class="muted">לא נמצאו חריגות.</p>'}</div>
+      </section>
+    </div>
+    <section class="panel">
+      <div class="panel-head"><h2>עלות שעה ורווחיות לפי לקוח</h2>
+        <label class="small muted">יעד רווח גולמי <input type="text" id="f-target" value="${ui.target||15}" inputmode="decimal" style="width:52px;text-align:center"> %</label></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th class="first">לקוח</th><th class="n">שעות</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th><th class="n">עלות חוזרת לשעה</th><th class="n">רווח מדווח</th><th class="n">רווח בלי חד-פעמי</th><th class="n">נוספות</th><th class="n">היעדרויות</th><th class="n">נסיעות</th><th class="n">חד-פעמי</th><th class="n">מחיר לשעה ליעד</th><th class="n">תוספת בחודש</th></tr></thead>
+        <tbody>${groups.slice().sort((a,b)=>(a.recMargin||0)-(b.recMargin||0)).map(g=>{ const need = g.recCostH/(1-t), up = g.rev>0&&g.h>0 ? Math.max(0,(need-g.revH)*g.h)/nM : 0;
+          return `<tr class="clickable" data-client="${g.id}"><td class="first">${esc(g.name)}</td><td class="n">${hrs(g.h)}</td><td class="n">${perH(g.revH)}</td><td class="n">${perH(g.costH)}</td><td class="n">${perH(g.recCostH)}</td>
+          <td class="n">${marginPill(g.margin,g.rev)}</td><td class="n">${marginPill(g.recMargin,g.rev)}</td>
+          <td class="n">${pct(share(g,'ot'),0)}</td><td class="n">${pct(share(g,'absence'),0)}</td><td class="n">${pct(share(g,'travel'),0)}</td><td class="n">${g.comp?.once?money(g.comp.once/nM):'—'}</td>
+          <td class="n">${g.rev>0&&g.h>0?perH(need):'—'}</td><td class="n">${up>0?`<b>${money(up)}</b>`:'—'}</td></tr>`; }).join('')}
+        </tbody></table></div>
+      <p class="hint" style="margin-top:8px">עלות חוזרת = עלות מעביד בלי תשלומים חד-פעמיים. אחוזי נוספות, היעדרויות ונסיעות הם מתוך הברוטו של הלקוח. מחיר ליעד מחושב על העלות החוזרת. לחיצה על שורה פותחת את כרטיס הלקוח.</p>
+    </section>
+  </div>`;
+}
+
 /* ---------- כרטיס לקוח: התפלגות חודשית מתחילת השנה ---------- */
 function renderClient(v){
   const ms = monthList(); const y = (ui.ym||ms[ms.length-1]).slice(0,4);
@@ -777,6 +939,18 @@ function renderClient(v){
         <tr class="total"><td class="first">סה״כ מתחילת השנה</td><td class="n">${nf1.format(T.h)}</td><td class="n">${money(T.rev)}</td><td class="n">${money(T.cost)}</td><td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td><td></td></tr>
         </tbody></table></div>
     </section>
+    ${(()=>{ const cmM = rows.filter(r=>!r.absent && !r.partial && months[r.m].components);
+      if(!cmM.length) return '';
+      const gs = cmM.map(r=>({m:r.m, g:compute(r.m).groups.find(x=>x.id===G.id)})).filter(x=>x.g);
+      if(!gs.length) return '';
+      const defs = perHourRows(gs[0].g);
+      return `<section class="panel">
+        <div class="panel-head"><h2>מבנה עלות השעה של הלקוח</h2><span class="small muted">₪ לשעת עבודה</span></div>
+        <div class="tbl-wrap"><table><thead><tr><th class="first">רכיב</th>${gs.map(x=>`<th class="n">${MONTHS[+x.m.slice(5)-1]}</th>`).join('')}<th class="n">ממוצע הארגון</th></tr></thead><tbody>
+        ${defs.map(d=>`<tr><td class="first">${d.n}</td>${gs.map(x=>`<td class="n">${perH(perHourRows(x.g).find(y=>y.k===d.k)?.v)}</td>`).join('')}<td class="n muted">${perH(perHourRows(computePeriod(cmM.map(r=>r.m)).tot).find(y=>y.k===d.k)?.v)}</td></tr>`).join('')}
+        <tr class="total"><td class="first">עלות מעביד לשעה</td>${gs.map(x=>`<td class="n">${perH(x.g.costH)}</td>`).join('')}<td class="n">${perH(computePeriod(cmM.map(r=>r.m)).tot.costH)}</td></tr>
+        <tr><td class="first">רווח גולמי בלי חד-פעמי</td>${gs.map(x=>`<td class="n">${marginPill(x.g.recMargin, x.g.rev)}</td>`).join('')}<td class="n">${pct(computePeriod(cmM.map(r=>r.m)).tot.recMargin)}</td></tr>
+        </tbody></table></div></section>`; })()}
     ${sites.length>1?`<section class="panel">
       <div class="panel-head"><h2>לפי אתר, מתחילת השנה</h2></div>
       <div class="tbl-wrap"><table><thead><tr><th class="first">אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">עלות לשעה</th></tr></thead><tbody>
@@ -865,22 +1039,35 @@ function monthCard(ym){
     ${slot('שכר · עלות מעביד', M.payroll, x=>{
       const c=[[x.employerTotal==null?'warn':near(x.total,x.employerTotal)?'':'bad', `עלות מעביד ${money(x.total)} · ${x.employees} עובדים${x.employerTotal!=null?(near(x.total,x.employerTotal)?(x.checkSource==='plant'?' · תואם לשורת "סיכום למפעל"':' · הפיצול לאתרים תואם לדוח המעסיק'):` · ${x.checkSource==='plant'?'בשורת הסיכום':'בדוח המעסיק'}: ${money(x.employerTotal)}`):''}`]];
       const noH = Object.keys(x.sites).filter(k=>!isOverhead(k) && M.hours && !M.hours.sites[k]); if(noH.length) c.push(['warn', `${noH.length} אתרים עם עלות שכר בלי שעות ב-TimeWatch: ${noH.map(k=>esc(x.sites[k].name)).join(', ')}`]);
+      if(!x.empShares) c.push(['warn','נקלט בגרסה קודמת. כדי לקלוט רכיבי שכר לחודש הזה יש להעלות את דוח השכר מחדש']);
+      return c; })}
+    ${slot('רכיבי שכר ברוטו (לא חובה)', M.components, x=>{
+      const g = M.payroll?.gross; const c=[[g==null?'warn':near(x.total,g)?'':'bad', `תשלומים ${money(x.total)} · ${x.employees} עובדים · ${Object.keys(x.symbols).length} רכיבים${g!=null?(near(x.total,g)?' · תואם לברוטו בדוח השכר':` · בדוח השכר: ${money(g)}`):''}`]];
+      if(x.unallocated) c.push(['warn', `${money(x.unallocated)} של עובדים שאינם בפיצול האתרים לא שויכו`]);
       return c; })}
   </article>`;
 }
+const TYPE_LABEL = {revenue:'דוח ההכנסות', hours:'דוח השעות', payroll:'דוח השכר', components:'דוח רכיבי השכר'};
 async function handleFiles(files){
+  // קוראים את כל הקבצים ומעבדים לפי סדר: רכיבי השכר תלויים בדוח השכר של אותו חודש
+  const items = [];
   for(const f of files){
+    try{ const wb = await readWorkbook(f); const type = detectType(wb);
+      if(!type){ toast(`לא זוהה סוג הדוח בקובץ ${f.name}`); continue; } items.push({f, wb, type}); }
+    catch(err){ toast(`לא הצלחנו לקרוא את ${f.name}`); }
+  }
+  const order = {revenue:0, hours:1, payroll:2, components:3};
+  items.sort((a,b)=>order[a.type]-order[b.type]);
+  for(const {f, wb, type} of items){
     try{
-      const wb = await readWorkbook(f);
-      const type = detectType(wb);
-      if(!type){ toast(`לא זוהה סוג הדוח בקובץ ${f.name}`); continue; }
-      const {ym, data} = ({revenue:parseRevenue, hours:parseHours, payroll:parsePayroll})[type](wb, f.name);
-      if(!ym){ toast(`לא זוהה החודש בקובץ ${f.name}`); continue; }
-      const key = {revenue:'revenue', hours:'hours', payroll:'payroll'}[type];
-      const doc = Object.assign({ym}, months[ym]||{}, {[key]:data});
-      await store.saveMonth(ym, doc);
-      ui.ym = ym;
-      toast(`${({revenue:'דוח ההכנסות',hours:'דוח השעות',payroll:'דוח השכר'})[type]} ל${monthName(ym)} נקלט`);
+      const res = ({revenue:parseRevenue, hours:parseHours, payroll:parsePayroll, components:parseComponents})[type](wb, f.name);
+      for(const {ym, data} of [].concat(res)){
+        if(!ym){ toast(`לא זוהה החודש בקובץ ${f.name}`); continue; }
+        const doc = Object.assign({ym}, months[ym]||{}, {[type]:data});
+        await store.saveMonth(ym, doc);
+        ui.ym = ym;
+        toast(`${TYPE_LABEL[type]} ל${monthName(ym)} נקלט`);
+      }
     }catch(err){ console.error(err); toast(`לא הצלחנו לקרוא את ${f.name}: ${err.message||'פורמט לא מוכר'}`); }
   }
   render();
@@ -947,7 +1134,7 @@ function drawChart(id, cfg, tick, label){
 
 /* ============================================================ אירועים */
 document.addEventListener('click', async e=>{
-  const t = e.target.closest('button, tr[data-open], tr[data-branch-go], th[data-sort]'); if(!t) return;
+  const t = e.target.closest('button, tr[data-open], tr[data-branch-go], tr[data-client], th[data-sort]'); if(!t) return;
   const d = t.dataset;
   if(d.tab){ ui.tab=d.tab; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(d.branchGo){ ui.tab='clients'; ui.branch=d.branchGo; saveUi(); render(); return; }
@@ -967,6 +1154,7 @@ document.addEventListener('click', async e=>{
 document.addEventListener('change', async e=>{
   const t = e.target, d = t.dataset;
   if(t.id==='f-ym'){ ui.ym=t.value; ui.open=null; saveUi(); render(); }
+  else if(t.id==='f-target'){ const n = parseFloat(t.value); if(n>0 && n<90){ ui.target=n; saveUi(); render(); } }
   else if(t.id==='f-client'){ ui.client=t.value; saveUi(); render(); }
   else if(t.id==='f-cyear'){ const ym = monthList().filter(m=>m.startsWith(t.value)).pop(); if(ym){ ui.ym=ym; saveUi(); render(); } }
   else if(t.id==='f-pmode'){ ui.pmode=t.value; ui.open=null; saveUi(); render(); }
