@@ -251,7 +251,7 @@ const store = {
 };
 function normalizeMapping(m){
   return {
-    groups:(m.groups||[]).map(g=>({id:g.id, name:g.name, sites:(g.sites||[]).map(String), clients:(g.clients||[]).map(normName), ...(g.splitBy?{splitBy:g.splitBy}:{}), ...(g.fixedFee?{fixedFee:+g.fixedFee}:{})})),
+    groups:(m.groups||[]).map(g=>({id:g.id, name:g.name, sites:(g.sites||[]).map(String), clients:(g.clients||[]).map(normName), ...(g.splitBy?{splitBy:g.splitBy}:{}), ...(g.branch?{branch:g.branch}:{}), ...(g.fixedFee?{fixedFee:+g.fixedFee}:{})})),
     rateTables:(m.rateTables||[]).map(t=>({...t, rates:{...t.rates}, fixed:[...(t.fixed||[])], missing:[...(t.missing||[])]})),
     overheadSites:(m.overheadSites||['999']).map(String), updatedAt:m.updatedAt||null,
   };
@@ -560,7 +560,9 @@ function compute(ym){
     }
     const share = {};
     sites.forEach(s=>{ const w = r.rev ? s.revShare/r.rev : weightOf(s); share[s.branch]=(share[s.branch]||0)+w; });
-    if(!sites.length) share[NO_BRANCH]=1;
+    // אין לקוח פעילות באתרים שלו החודש (למשל חשבונית על חודש קודם או זיכוי): הסניף נלקח מהחודשים שבהם האתרים
+    // שלו הופיעו ב-TimeWatch, ואם אין לו אתרים בכלל, מהסניף שהוגדר לו בהתאמה
+    if(!sites.length) share[r.group.sites.map(c=>knownBranch(c, ym)).find(b=>b!==NO_BRANCH) || r.group.branch || NO_BRANCH] = 1;
     r.branchShare = share;
     r.branch = Object.entries(share).sort((a,b)=>b[1]-a[1])[0][0];
     r.branchList = Object.keys(share);
@@ -1063,7 +1065,7 @@ function renderMatch(v){
         <div class="actions"><label class="btn" for="map-file">ייבוא מאקסל</label><input type="file" id="map-file" accept=".xlsx,.xls" hidden><button class="btn" type="button" id="map-export">ייצוא לאקסל</button></div></div>
       <p class="hint" style="margin-bottom:10px">כל לקוח מחבר אתרים (לפי הקוד ב-TimeWatch ובשכר) לשמות בהנהלת החשבונות. הסרת פריט מחזירה אותו לרשימת הממתינים. ${mapping.updatedAt?`עודכן לאחרונה ${new Date(mapping.updatedAt).toLocaleString('he-IL')}.`:''}</p>
       ${mapping.groups.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">לקוח</th><th>אתרים</th><th>שמות בהנהלת החשבונות</th></tr></thead><tbody>
-        ${mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<tr><td class="first"><input type="text" value="${esc(g.name)}" data-rename="${g.id}" aria-label="שם הלקוח" style="width:190px">${g.sites.length>1?`<div style="margin-top:4px"><select data-splitby="${g.id}" aria-label="חלוקת ההכנסה בין האתרים" style="font-size:12px;padding:2px 4px"><option value="">הכנסה בין האתרים: לפי שעות</option><option value="price" ${g.splitBy==='price'?'selected':''}>הכנסה בין האתרים: לפי תעריף × שעות</option></select></div>`:''}${g.splitBy==='price'?`<label class="small muted" style="display:flex;gap:4px;align-items:center;margin-top:4px">חיוב חודשי קבוע ללא אתר ₪<input type="text" inputmode="decimal" data-fee="${g.id}" value="${g.fixedFee||''}" placeholder="0" style="width:70px;font-size:12px;padding:2px 4px"></label>`:''}</td>
+        ${mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<tr><td class="first"><input type="text" value="${esc(g.name)}" data-rename="${g.id}" aria-label="שם הלקוח" style="width:190px">${g.sites.length>1?`<div style="margin-top:4px"><select data-splitby="${g.id}" aria-label="חלוקת ההכנסה בין האתרים" style="font-size:12px;padding:2px 4px"><option value="">הכנסה בין האתרים: לפי שעות</option><option value="price" ${g.splitBy==='price'?'selected':''}>הכנסה בין האתרים: לפי תעריף × שעות</option></select></div>`:''}${!g.sites.length?`<div style="margin-top:4px"><select data-gbranch="${g.id}" aria-label="סניף ללקוח בלי אתר" style="font-size:12px;padding:2px 4px"><option value="">סניף: לא הוגדר</option>${branchNames().map(b=>`<option ${g.branch===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>`:''}${g.splitBy==='price'?`<label class="small muted" style="display:flex;gap:4px;align-items:center;margin-top:4px">חיוב חודשי קבוע ללא אתר ₪<input type="text" inputmode="decimal" data-fee="${g.id}" value="${g.fixedFee||''}" placeholder="0" style="width:70px;font-size:12px;padding:2px 4px"></label>`:''}</td>
           <td class="wrap">${g.sites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}${g.splitBy==='price'?(RTn?.rates[c]!=null?` · ${ltr('₪'+RTn.rates[c])}`:RTn?.fixed.includes(c)?' · פיקס':''):''}<button type="button" data-unsite="${g.id}|${esc(c)}" aria-label="הסרת אתר ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td>
           <td class="wrap">${g.clients.map(c=>`<span class="chip">${esc(c)}<button type="button" data-unclient="${g.id}|${esc(c)}" aria-label="הסרת ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td></tr>`).join('')}
         <tr><td class="first">עלות הנהלה</td><td class="wrap" colspan="2">${mapping.overheadSites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}<button type="button" data-unoverhead="${esc(c)}" aria-label="הסרה">×</button></span>`).join('')}</td></tr>
@@ -1281,6 +1283,7 @@ document.addEventListener('change', async e=>{
   else if(t.id==='map-file' && t.files[0]){ const f=t.files[0]; t.value=''; try{ await importMapping(f); }catch(err){ toast('לא הצלחנו לקרוא את קובץ ההתאמה'); } }
   else if(d.assignSite) await assign('site', d.assignSite, t.value);
   else if(d.assignClient) await assign('client', d.assignClient, t.value);
+  else if(d.gbranch){ const g=mapping.groups.find(x=>x.id===d.gbranch); if(g){ if(t.value) g.branch=t.value; else delete g.branch; await store.saveMapping(); render(); toast(t.value?`${g.name} שויך לסניף ${t.value}`:'הסניף הוסר'); } }
   else if(d.fee && t.tagName==='INPUT'){ const g=mapping.groups.find(x=>x.id===d.fee); const n=parseFloat(String(t.value).replace(/[,₪\s]/g,''))||0; if(g){ if(n>0) g.fixedFee=n; else delete g.fixedFee; await store.saveMapping(); render(); toast(n>0?`חיוב קבוע של ${moneyRaw(n)} בחודש נשמר`:'החיוב הקבוע הוסר'); } }
   else if(d.ratefrom){ const r=(mapping.rateTables||[]).find(x=>x.id===d.ratefrom); if(r){ r.from=t.value; await store.saveMapping(); render(); toast(`התעריפים בתוקף מ${monthName(t.value)}`); } }
   else if(d.splitby){ const g=mapping.groups.find(x=>x.id===d.splitby); if(g){ if(t.value) g.splitBy=t.value; else delete g.splitBy; await store.saveMapping(); render(); toast('אופן החלוקה עודכן'); } }
