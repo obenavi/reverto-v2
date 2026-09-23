@@ -252,6 +252,7 @@ const store = {
 function normalizeMapping(m){
   return {
     groups:(m.groups||[]).map(g=>({id:g.id, name:g.name, sites:(g.sites||[]).map(String), clients:(g.clients||[]).map(normName), ...(g.splitBy?{splitBy:g.splitBy}:{})})),
+    rateTables:(m.rateTables||[]).map(t=>({...t, rates:{...t.rates}, fixed:[...(t.fixed||[])], missing:[...(t.missing||[])]})),
     overheadSites:(m.overheadSites||['999']).map(String), updatedAt:m.updatedAt||null,
   };
 }
@@ -278,6 +279,10 @@ function detectType(wb){
   for(const aoa of Object.values(wb.sheets)){
     const flat = aoa.slice(0,30).flat().map(normName);
     if(flat.includes('סוג נתון') && flat.includes('תאור סמל')) return 'components';
+    const rows = aoa.filter(r=>normName(r[0]));
+    // קובץ תעריפים: בעמודה הראשונה אתר עם קוד בסוגריים, ובשאר העמודות רק מספרים, "פיקס" או ריק
+    const rateCell = c => normName(c)==='' || num(c)!=null || /פיקס|קבוע/.test(normName(c));
+    if(rows.length>=3 && rows.filter(r=>/\(\d+\)\s*$/.test(normName(r[0]))).length>=rows.length*0.8 && rows.every(r=>r.slice(1).every(rateCell))) return 'rates';
     if(flat.some(c=>c.includes('לפני מע"מ')) && flat.includes('לקוח')) return 'revenue';
     if(flat.some(c=>c==='עלות מעביד'||c==='עלות עובד')) return 'payroll';
     if(flat.includes('סה"כ שעות') && flat.includes('משימה')) return 'hours';
@@ -477,6 +482,14 @@ function knownBranch(code, ym){
   return ms.length ? months[ms[0]].hours.sites[code].branch : NO_BRANCH;
 }
 const dist = (a,b) => (+a.slice(0,4)*12 + +a.slice(5)) - (+b.slice(0,4)*12 + +b.slice(5));
+// טבלת התעריפים לחודש: האחרונה שנכנסה לתוקף עד החודש. לפני תחילת התוקף של הטבלה הראשונה,
+// התעריפים שלה משמשים רק כיחס חלוקה בין האתרים (applies=false), בלי בדיקת חיוב.
+function rateTableFor(ym){
+  const ts = (mapping.rateTables||[]).slice().sort((a,b)=>a.from.localeCompare(b.from));
+  if(!ts.length) return null;
+  const t = ts.filter(x=>x.from<=ym).pop();
+  return t ? {...t, applies:true} : {...ts[0], applies:false};
+}
 function compute(ym){
   const M = months[ym] || {};
   const rev = M.revenue?.clients || {}, hs = M.hours?.sites || {}, pay = M.payroll?.sites || {}, comp = M.components?.sites || null;
@@ -505,21 +518,32 @@ function compute(ym){
   for(const r of Object.values(G)){
     const sites = Object.values(r.sites);
     const weightOf = s => r.h>0 ? s.h/r.h : r.cost>0 ? s.cost/r.cost : 1/sites.length;
-    // חלוקת ההכנסה בין האתרים: ברירת המחדל לפי שעות. בלקוח שהוגדר "לפי תעריף", כל אתר עם תעריף בדוח השעות
-    // מקבל את הסכום לפי התעריף, והיתרה של החשבונית מתחלקת בין האתרים שאין להם תעריף, לפי שעות.
-    const wantPrice = r.group.splitBy==='price', P = sites.reduce((a,s)=>a+(s.price||0),0);
-    if(wantPrice && M.hours?.hasPrice && P>0){
-      const scale = P>r.rev ? r.rev/P : 1;
-      sites.forEach(s=>{ s.revShare = (s.price||0)*scale; s.byPrice = s.price>0; });
-      const rem = r.rev - P*scale, un = sites.filter(s=>!(s.price>0));
-      if(rem>0.005){
-        if(un.length){ const H=un.reduce((a,s)=>a+s.h,0), C=un.reduce((a,s)=>a+s.cost,0); un.forEach(s=>s.revShare += rem*(H ? s.h/H : C ? s.cost/C : 1/un.length)); }
-        else sites.forEach(s=>s.revShare += rem*s.price/P);
+    // חלוקת ההכנסה בין האתרים: ברירת המחדל לפי שעות. בלקוח שהוגדר "לפי תעריף" המשקל של כל אתר הוא
+    // תעריף × שעות מטבלת התעריפים. אתר בלי תעריף מקבל את התעריף הממוצע של הלקוח. אתר "פיקס" (סכום קבוע)
+    // מקבל את יתרת החשבונית אחרי האתרים לפי תעריף.
+    const RT = rateTableFor(ym);
+    r.split = 'hours'; r.expected = null;
+    sites.forEach(s=>{ s.revShare = r.rev*weightOf(s); s.rate = RT?.rates[s.code] ?? null; s.fixed = !!RT?.fixed.includes(s.code); });
+    if(r.group.splitBy==='price'){
+      const rated = sites.filter(s=>s.rate!=null && s.h>0), fixed = sites.filter(s=>s.fixed), rH = rated.reduce((a,s)=>a+s.h,0);
+      if(!RT || !rated.length){ r.split = 'rate-missing'; }
+      else {
+        const avg = rated.reduce((a,s)=>a+s.rate*s.h,0)/rH;
+        sites.forEach(s=>{ s.expectedRev = s.fixed ? 0 : (s.rate ?? avg)*s.h; s.byRate = !s.fixed && s.h>0; });
+        const E = sites.reduce((a,s)=>a+s.expectedRev,0);
+        if(fixed.length){
+          const scale = E>r.rev ? r.rev/E : 1, rem = r.rev - E*scale, FH = fixed.reduce((a,s)=>a+s.h,0);
+          sites.forEach(s=>{ s.revShare = s.fixed ? rem*(FH ? s.h/FH : 1/fixed.length) : s.expectedRev*scale; });
+        } else if(E>0){
+          sites.forEach(s=>{ s.revShare = r.rev*s.expectedRev/E; });
+        }
+        r.split = 'rate'; r.rateFrom = RT.from; r.rateProxy = !RT.applies;
       }
-      r.split = 'price';
-    } else {
-      sites.forEach(s=>{ s.revShare = r.rev*weightOf(s); });
-      r.split = wantPrice ? 'price-missing' : 'hours';
+    }
+    // בדיקת חיוב לכל לקוח עם תעריפים: רק בחודשים שהתעריפים בתוקף, כשלכל האתרים עם שעות יש תעריף ואין אתר "פיקס"
+    const withH = sites.filter(s=>s.h>0);
+    if(RT?.applies && r.rev>0 && withH.length && withH.every(s=>s.rate!=null) && !sites.some(s=>s.fixed)){
+      r.expected = withH.reduce((a,s)=>a+s.rate*s.h,0); r.billGap = r.rev - r.expected;
     }
     const share = {};
     sites.forEach(s=>{ const w = r.rev ? s.revShare/r.rev : weightOf(s); share[s.branch]=(share[s.branch]||0)+w; });
@@ -618,8 +642,10 @@ function computePeriod(yms){
     for(const g of R.groups){
       const x = G[g.id] ||= {id:g.id, name:g.name, group:g.group, rev:0, h:0, cost:0, gross:0, comp:{}, sites:{}, clients:{}, weight:{}, splits:{}};
       x.splits[g.split] = (x.splits[g.split]||[]).concat(R.ym);
+      if(g.rateProxy) x.rateProxy = (x.rateProxy||[]).concat(R.ym);
+      if(g.expected!=null){ x.expected = (x.expected||0) + g.expected; x.billRev = (x.billRev||0) + g.rev; }
       x.rev+=g.rev; x.h+=g.h; x.cost+=g.cost; x.gross+=g.gross||0; addComp(x.comp, g.comp);
-      for(const st of Object.values(g.sites)){ const y = x.sites[st.code] ||= {code:st.code, name:st.name, branch:st.branch, h:0, cost:0, revShare:0}; y.h+=st.h; y.cost+=st.cost; y.revShare+=st.revShare||0; }
+      for(const st of Object.values(g.sites)){ const y = x.sites[st.code] ||= {code:st.code, name:st.name, branch:st.branch, h:0, cost:0, revShare:0}; y.h+=st.h; y.cost+=st.cost; y.revShare+=st.revShare||0; y.rate = st.rate; y.fixed = st.fixed; y.byRate = y.byRate || st.byRate; }
       for(const [c,a] of Object.entries(g.clients)) x.clients[c]=(x.clients[c]||0)+a;
       for(const [b,w] of Object.entries(g.branchShare)) x.weight[b]=(x.weight[b]||0)+w*(g.rev+g.h+1);
     }
@@ -629,7 +655,7 @@ function computePeriod(yms){
   }
   const groups = Object.values(G);
   for(const r of groups){
-    r.split = r.splits['price-missing'] ? 'price-missing' : r.splits.price ? 'price' : 'hours';
+    r.split = r.splits['rate-missing'] ? 'rate-missing' : r.splits.rate ? 'rate' : 'hours';
     const w = Object.entries(r.weight).sort((a,b)=>b[1]-a[1]);
     r.branchList = w.map(x=>x[0]); r.branch = w[0][0];
     r.gp = r.rev-r.cost; r.margin = r.rev? r.gp/r.rev : NaN; r.revH = r.h? r.rev/r.h : NaN; r.costH = r.h? r.cost/r.h : NaN; r.flags = flagsOf(r); finishComp(r);
@@ -775,6 +801,10 @@ function insights(R, P, per){
     out.push({level: ch>=0?'good':'warn', title:`ההכנסות ${ch>=0?'עלו':'ירדו'} ב-${pct(Math.abs(ch))} מול ${per.prev.short}`,
       text:`${money(T.rev)} לעומת ${money(P.tot.rev)}. השעות ${T.h>=P.tot.h?'עלו':'ירדו'} ב-${pct(Math.abs((T.h-P.tot.h)/P.tot.h))}.`});
   }
+  const billed = R.groups.filter(g=>g.expected!=null).map(g=>({g, gap:(g.billRev??g.rev)-g.expected})).map(x=>({...x, p:x.gap/x.g.expected}))
+    .filter(x=>Math.abs(x.p)>0.03 && Math.abs(x.gap)>300).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap));
+  if(billed.length) out.push({level:'warn', title:`${billed.length} לקוחות שהחיוב שלהם שונה מתעריף × שעות`,
+    text: billed.slice(0,5).map(x=>`<b>${esc(x.g.name)}</b>: ${x.gap>0?'חויב יותר':'חויב פחות'} ב-${money(Math.abs(x.gap))} (${pct(x.p)})`).join(' · ') + `. חיוב נמוך מהתעריף הוא הכנסה שלא נגבתה; חיוב גבוה עשוי להיות תוספת שסוכמה או תעריף שלא עודכן בטבלה.`});
   const unS = Object.values(R.unSites), unC = Object.values(R.unClients);
   if(unS.length || unC.length) out.push({level:'warn', title:`${unS.length+unC.length} פריטים ממתינים להתאמה`,
     text:`${unC.length?`${unC.length} לקוחות מהנהלת החשבונות (${money(unC.reduce((a,c)=>a+c.rev,0))})`:''}${unC.length&&unS.length?' ו-':''}${unS.length?`${unS.length} אתרים (${hrs(unS.reduce((a,s)=>a+s.h,0))} שעות, ${money(unS.reduce((a,s)=>a+s.cost,0))} עלות)`:''}. הם נספרים בסיכום הכללי אבל לא בלקוחות. <button class="btn sm" type="button" data-tab="match">להתאמה</button>`});
@@ -805,9 +835,15 @@ function renderClients(v){
   </section>`;
 }
 function splitNote(g){
-  if(g.split==='price') return '<p class="hint">ההכנסה מתחלקת בין האתרים לפי התעריף בדוח השעות. אתרים בלי תעריף מקבלים את יתרת החשבונית לפי שעות.</p>';
-  if(g.split==='price-missing') return `<p class="hint" style="color:var(--warn)">הלקוח מוגדר לחלוקה לפי תעריף, אבל בדוח השעות של ${g.splits?.['price-missing'] ? g.splits['price-missing'].map(m=>MONTHS[+m.slice(5)-1]).join(', ') : 'החודש'} אין נתוני תעריף (נקלט בגרסה קודמת). בינתיים החלוקה לפי שעות. כדי לתקן, יש להעלות מחדש את דוח השעות.</p>`;
+  const proxy = Array.isArray(g.rateProxy) ? g.rateProxy : (g.rateProxy ? [g.ym||''] : []);
+  if(g.split==='rate') return `<p class="hint">ההכנסה מתחלקת בין האתרים לפי תעריף × שעות מטבלת התעריפים${g.rateFrom?` (בתוקף מ${monthName(g.rateFrom)})`:''}. אתר בלי תעריף מקבל את התעריף הממוצע של הלקוח, ואתר "פיקס" מקבל את יתרת החשבונית.${proxy.length?' בחודשים שלפני תחילת התוקף התעריפים משמשים רק כיחס חלוקה.':''}</p>`;
+  if(g.split==='rate-missing') return '<p class="hint" style="color:var(--warn)">הלקוח מוגדר לחלוקה לפי תעריף, אבל אין תעריפים לאתרים שלו. בינתיים החלוקה לפי שעות. אפשר להעלות טבלת תעריפים בלשונית "קליטת נתונים".</p>';
   return '<p class="hint">ההכנסה מתחלקת בין האתרים לפי חלק השעות. אפשר לשנות לחלוקה לפי תעריף בלשונית "התאמת לקוחות".</p>';
+}
+function billNote(g){
+  if(g.expected==null) return '';
+  const rev = g.billRev ?? g.rev, gap = rev - g.expected, p = g.expected ? gap/g.expected : 0;
+  return `<p class="hint">בדיקת חיוב: תעריף × שעות = ${money(g.expected)}, בחשבונית ${money(rev)}. ${Math.abs(p)<0.01?'<span class="pill good">תואם</span>':`<span class="pill ${Math.abs(p)>0.03?'warn':'info'}">פער ${money(gap)} (${pct(p)})</span>`}</p>`;
 }
 function detailRow(g){
   const sites = Object.values(g.sites).sort((a,b)=>b.h-a.h);
@@ -816,8 +852,8 @@ function detailRow(g){
       <div><button class="btn sm primary" type="button" data-client="${g.id}">כרטיס לקוח: התפלגות מתחילת השנה</button></div>
       <div><b>שמות בהנהלת החשבונות:</b> ${Object.entries(g.clients).map(([c,a])=>`${esc(c)} (${money(a)})`).join(' · ') || '<span class="muted">אין הכנסה החודש</span>'}</div>
       ${sites.length?`<div class="tbl-wrap"><table><thead><tr><th>קוד</th><th>אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">עלות לשעה</th></tr></thead><tbody>
-        ${sites.map(s=>`<tr><td class="num">${esc(s.code)}</td><td>${esc(s.name)}</td><td>${esc(s.branch)}</td><td class="n">${nf1.format(s.h)}</td><td class="n">${money(s.cost)}</td><td class="n">${money(s.revShare||0)}${s.byPrice?' <span class="muted small">לפי תעריף</span>':''}</td><td class="n">${money((s.revShare||0)-s.cost)}</td><td class="n">${marginPill(s.revShare?((s.revShare-s.cost)/s.revShare):NaN, s.revShare)}</td><td class="n">${perH(s.h?s.cost/s.h:NaN)}</td></tr>`).join('')}
-      </tbody></table></div>${sites.length>1?splitNote(g):''}`:'<p class="muted">אין אתרים משויכים.</p>'}
+        ${sites.map(s=>`<tr><td class="num">${esc(s.code)}</td><td>${esc(s.name)}</td><td>${esc(s.branch)}</td><td class="n">${nf1.format(s.h)}</td><td class="n">${money(s.cost)}</td><td class="n">${money(s.revShare||0)}${s.fixed?' <span class="muted small">פיקס</span>':s.rate!=null&&g.split==='rate'?` <span class="muted small">${ltr('₪'+s.rate)}</span>`:''}</td><td class="n">${money((s.revShare||0)-s.cost)}</td><td class="n">${marginPill(s.revShare?((s.revShare-s.cost)/s.revShare):NaN, s.revShare)}</td><td class="n">${perH(s.h?s.cost/s.h:NaN)}</td></tr>`).join('')}
+      </tbody></table></div>${sites.length>1?splitNote(g):''}${billNote(g)}`:'<p class="muted">אין אתרים משויכים.</p>'}
     </div></td></tr>`;
 }
 
@@ -980,7 +1016,7 @@ function renderClient(v){
       <div class="panel-head"><h2>לפי אתר, מתחילת השנה</h2></div>
       <div class="tbl-wrap"><table><thead><tr><th class="first">אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">עלות לשעה</th></tr></thead><tbody>
       ${sites.map(st=>`<tr><td class="first">${esc(st.name)} <span class="muted small">(${esc(st.code)})</span></td><td>${esc(st.branch)}</td><td class="n">${nf1.format(st.h)}</td><td class="n">${money(st.cost)}</td><td class="n">${money(st.revShare||0)}</td><td class="n">${money((st.revShare||0)-st.cost)}</td><td class="n">${marginPill(st.revShare?((st.revShare-st.cost)/st.revShare):NaN, st.revShare)}</td><td class="n">${perH(st.h?st.cost/st.h:NaN)}</td></tr>`).join('')}
-      </tbody></table></div><div style="margin-top:8px">${splitNote(T)}</div></section>`:''}
+      </tbody></table></div><div style="margin-top:8px">${splitNote(T)}${billNote(T)}</div></section>`:''}
   </div>`;
   const labels = rows.map(r=>MONTHS[+r.m.slice(5)-1]);
   const val = k => rows.map(r=>r.absent||r.partial?null:r[k]);
@@ -995,6 +1031,7 @@ function renderClient(v){
 function renderMatch(v){
   const un = allUnmatched();
   const opts = `<option value="">שיוך ל…</option><option value="__new">+ לקוח חדש בשם הזה</option>${mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}`;
+  const RTn = rateTableFor(monthList().slice(-1)[0] || '9999-12');
   const allSiteInfo = {}; Object.values(months).forEach(M=>{ Object.entries(M.hours?.sites||{}).forEach(([c,s])=>allSiteInfo[c]={name:s.name, branch:s.branch}); Object.entries(M.payroll?.sites||{}).forEach(([c,s])=>allSiteInfo[c] ||= {name:s.name, branch:NO_BRANCH}); });
   v.innerHTML = `<div class="stack">
     <section class="panel">
@@ -1006,18 +1043,32 @@ function renderMatch(v){
           <select data-assign-site="${esc(s.code)}" aria-label="שיוך אתר ${esc(s.name)}">${opts}<option value="__overhead">עלות הנהלה (לא לקוח)</option></select></div>`).join('')}`
         : '<p class="muted">כל האתרים והלקוחות משויכים.</p>'}
     </section>
+    ${rateTablesPanel()}
     <section class="panel">
       <div class="panel-head"><h2>טבלת ההתאמה</h2>
         <div class="actions"><label class="btn" for="map-file">ייבוא מאקסל</label><input type="file" id="map-file" accept=".xlsx,.xls" hidden><button class="btn" type="button" id="map-export">ייצוא לאקסל</button></div></div>
       <p class="hint" style="margin-bottom:10px">כל לקוח מחבר אתרים (לפי הקוד ב-TimeWatch ובשכר) לשמות בהנהלת החשבונות. הסרת פריט מחזירה אותו לרשימת הממתינים. ${mapping.updatedAt?`עודכן לאחרונה ${new Date(mapping.updatedAt).toLocaleString('he-IL')}.`:''}</p>
       ${mapping.groups.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">לקוח</th><th>אתרים</th><th>שמות בהנהלת החשבונות</th></tr></thead><tbody>
-        ${mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<tr><td class="first"><input type="text" value="${esc(g.name)}" data-rename="${g.id}" aria-label="שם הלקוח" style="width:190px">${g.sites.length>1?`<div style="margin-top:4px"><select data-splitby="${g.id}" aria-label="חלוקת ההכנסה בין האתרים" style="font-size:12px;padding:2px 4px"><option value="">הכנסה בין האתרים: לפי שעות</option><option value="price" ${g.splitBy==='price'?'selected':''}>הכנסה בין האתרים: לפי תעריף בדוח השעות</option></select></div>`:''}</td>
-          <td class="wrap">${g.sites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}<button type="button" data-unsite="${g.id}|${esc(c)}" aria-label="הסרת אתר ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td>
+        ${mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<tr><td class="first"><input type="text" value="${esc(g.name)}" data-rename="${g.id}" aria-label="שם הלקוח" style="width:190px">${g.sites.length>1?`<div style="margin-top:4px"><select data-splitby="${g.id}" aria-label="חלוקת ההכנסה בין האתרים" style="font-size:12px;padding:2px 4px"><option value="">הכנסה בין האתרים: לפי שעות</option><option value="price" ${g.splitBy==='price'?'selected':''}>הכנסה בין האתרים: לפי תעריף × שעות</option></select></div>`:''}</td>
+          <td class="wrap">${g.sites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}${RTn?.rates[c]!=null?` · ${ltr('₪'+RTn.rates[c])}`:RTn?.fixed.includes(c)?' · פיקס':''}<button type="button" data-unsite="${g.id}|${esc(c)}" aria-label="הסרת אתר ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td>
           <td class="wrap">${g.clients.map(c=>`<span class="chip">${esc(c)}<button type="button" data-unclient="${g.id}|${esc(c)}" aria-label="הסרת ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td></tr>`).join('')}
         <tr><td class="first">עלות הנהלה</td><td class="wrap" colspan="2">${mapping.overheadSites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}<button type="button" data-unoverhead="${esc(c)}" aria-label="הסרה">×</button></span>`).join('')}</td></tr>
       </tbody></table></div>`:'<p class="muted">עדיין אין התאמות. אפשר לייבא את קובץ ההתאמה או לשייך מהרשימה שלמעלה.</p>'}
     </section>
   </div>`;
+}
+function rateTablesPanel(){
+  const ts = (mapping.rateTables||[]).slice().sort((a,b)=>b.from.localeCompare(a.from));
+  const opts = sel => { const ms = monthList(); const y = +(ms[0]||'2026').slice(0,4); const all=[]; for(let yy=y-1; yy<=y+1; yy++) for(let m=1;m<=12;m++) all.push(ymOf(yy,m));
+    return all.map(m=>`<option value="${m}" ${m===sel?'selected':''}>${monthName(m)}</option>`).join(''); };
+  return `<section class="panel">
+    <div class="panel-head"><h2>תעריפים ללקוח</h2><span class="small muted">מעלים בלשונית "קליטת נתונים" קובץ עם אתר (כולל הקוד בסוגריים) ותעריף לשעה</span></div>
+    ${ts.length?`<div class="tbl-wrap"><table><thead><tr><th>בתוקף מחודש</th><th class="n">אתרים עם תעריף</th><th>פיקס</th><th>בלי תעריף בקובץ</th><th>קובץ</th><th></th></tr></thead><tbody>
+      ${ts.map(t=>`<tr><td><select data-ratefrom="${t.id}" aria-label="בתוקף מחודש">${opts(t.from)}</select></td><td class="n">${Object.keys(t.rates).length}</td><td class="wrap">${t.fixed.join(', ')||'—'}</td><td class="wrap">${(t.missing||[]).map(esc).join(', ')||'—'}</td><td class="small muted">${esc(t.file||'')}</td>
+        <td><button class="btn danger sm" type="button" data-delrates="${t.id}">מחיקה</button></td></tr>`).join('')}
+      </tbody></table></div><p class="hint" style="margin-top:8px">כל טבלה חלה מהחודש שנבחר ועד הטבלה הבאה. בחודשים שלפני הטבלה הראשונה התעריפים משמשים רק כיחס חלוקה בין האתרים, בלי בדיקת חיוב. החלוקה לפי תעריף פועלת בלקוחות שהוגדרו כך בטבלה למטה.</p>`
+      :'<p class="muted">עדיין לא הועלו תעריפים.</p>'}
+  </section>`;
 }
 async function assign(kind, key, target){
   if(!target) return;
@@ -1039,7 +1090,7 @@ function renderData(v){
   v.innerHTML = `<div class="stack">
     <label class="drop" id="drop" for="file-in">
       <strong>גררו לכאן את שלושת הדוחות החודשיים</strong>
-      <span class="muted small">דוח הכנסות מהנהלת החשבונות · דוח משימות מ-TimeWatch · דוח שכר עם פיצול לפי אתר. סוג הדוח והחודש מזוהים אוטומטית. נשמרים רק סיכומים לפי לקוח ואתר, בלי פרטי עובדים.</span>
+      <span class="muted small">דוח הכנסות מהנהלת החשבונות · דוח משימות מ-TimeWatch · דוח שכר עם פיצול לפי אתר · אופציונלי: רכיבי שכר, טבלת תעריפים ללקוח. סוג הדוח והחודש מזוהים אוטומטית. נשמרים רק סיכומים לפי לקוח ואתר, בלי פרטי עובדים.</span>
       <input type="file" id="file-in" accept=".xlsx,.xls,.html,.htm" multiple hidden>
     </label>
     ${ms.length?`<div class="months">${ms.map(monthCard).join('')}</div>`:'<div class="panel empty">עדיין לא נקלטו חודשים.</div>'}
@@ -1060,8 +1111,6 @@ function monthCard(ym){
       const c=[[x.footer==null?'warn':near(x.total,x.footer)?'':'bad', `${hrs(x.total)} שעות ב-${nf0.format(x.shifts)} משמרות, ${Object.keys(x.sites).length} אתרים${x.footer!=null&&near(x.total,x.footer)?' · תואם לסיכום':''}`]];
       const f=x.flags; if(f.zero||f.long||f.noexit) c.push(['warn', `חריגים: ${f.zero} משמרות של 0 שעות, ${f.long} משמרות מעל 12 שעות, ${f.noexit} בלי שעת יציאה`]);
       const multi = Object.values(x.sites).filter(s=>s.multiBranch).length; if(multi) c.push(['warn', `${multi} אתרים רשומים ביותר מסניף אחד`]);
-      if(!x.hasPrice && mapping.groups.some(g=>g.splitBy==='price')) c.push(['warn','נקלט בגרסה קודמת, בלי עמודת התעריף. לחלוקת הכנסה לפי תעריף יש להעלות את דוח השעות מחדש']);
-      else if(x.hasPrice){ const pr = Object.values(x.sites).filter(s=>s.price>0); if(pr.length) c.push(['', `תעריף ללקוח מולא ב-${pr.length} אתרים (${money(pr.reduce((a,s)=>a+s.price,0))})`]); }
       return c; })}
     ${slot('שכר · עלות מעביד', M.payroll, x=>{
       const c=[[x.employerTotal==null?'warn':near(x.total,x.employerTotal)?'':'bad', `עלות מעביד ${money(x.total)} · ${x.employees} עובדים${x.employerTotal!=null?(near(x.total,x.employerTotal)?(x.checkSource==='plant'?' · תואם לשורת "סיכום למפעל"':' · הפיצול לאתרים תואם לדוח המעסיק'):` · ${x.checkSource==='plant'?'בשורת הסיכום':'בדוח המעסיק'}: ${money(x.employerTotal)}`):''}`]];
@@ -1075,6 +1124,23 @@ function monthCard(ym){
   </article>`;
 }
 const TYPE_LABEL = {revenue:'דוח ההכנסות', hours:'דוח השעות', payroll:'דוח השכר', components:'דוח רכיבי השכר'};
+// טבלת תעריפים: אתר (עם הקוד בסוגריים) ותעריף לשעה, בעמודה אחת או יותר. כותרת עמודה עם תאריך
+// (למשל 01/04/2026) = החודש שממנו התעריף בתוקף. "פיקס" = סכום קבוע. תא ריק = אין תעריף.
+function parseRates(wb, fileName){
+  const aoa = Object.values(wb.sheets)[0];
+  const head = aoa.find(r=>!normName(r[0]) && r.slice(1).some(c=>dateYm(c)));
+  const cols = head ? head.map((c,i)=>[i, dateYm(c)]).filter(([i,ym])=>i>0 && ym) : [[1, null]];
+  const ms = monthList(), def = ms[0] || ymOf(new Date().getFullYear(), new Date().getMonth()+1);
+  return cols.map(([ci, ym], k)=>{
+    const rates = {}, fixed = [], missing = [];
+    for(const r of aoa){
+      const m = normName(r[0]).match(/\((\d+)\)\s*$/); if(!m) continue;
+      const v = num(r[ci]), txt = normName(r[ci]);
+      if(v!=null && v>0) rates[m[1]] = v; else if(/פיקס|קבוע/.test(txt)) fixed.push(m[1]); else missing.push(normName(r[0]));
+    }
+    return {id:'rt'+Date.now().toString(36)+k, from: ym || def, fromFile: !!ym, file:fileName, uploadedAt:new Date().toISOString(), rates, fixed, missing};
+  });
+}
 async function handleFiles(files){
   // קוראים את כל הקבצים ומעבדים לפי סדר: רכיבי השכר תלויים בדוח השכר של אותו חודש
   const items = [];
@@ -1083,10 +1149,17 @@ async function handleFiles(files){
       if(!type){ toast(`לא זוהה סוג הדוח בקובץ ${f.name}`); continue; } items.push({f, wb, type}); }
     catch(err){ toast(`לא הצלחנו לקרוא את ${f.name}`); }
   }
-  const order = {revenue:0, hours:1, payroll:2, components:3};
+  const order = {rates:-1, revenue:0, hours:1, payroll:2, components:3};
   items.sort((a,b)=>order[a.type]-order[b.type]);
   for(const {f, wb, type} of items){
     try{
+      if(type==='rates'){
+        const ts = parseRates(wb, f.name);
+        // טבלה חדשה מחליפה טבלה קיימת מאותו חודש תחילה
+        mapping.rateTables = (mapping.rateTables||[]).filter(x=>!ts.some(t=>t.from===x.from)).concat(ts); await store.saveMapping();
+        toast(ts.every(t=>t.fromFile) ? `נקלטו תעריפים בתוקף מ: ${ts.map(t=>monthName(t.from)).join(', ')}` : `נקלטו ${Object.keys(ts[0].rates).length} תעריפים. יש לבחור מאיזה חודש הם בתוקף בלשונית "התאמת לקוחות"`);
+        ui.tab='match'; continue;
+      }
       const res = ({revenue:parseRevenue, hours:parseHours, payroll:parsePayroll, components:parseComponents})[type](wb, f.name);
       for(const {ym, data} of [].concat(res)){
         if(!ym){ toast(`לא זוהה החודש בקובץ ${f.name}`); continue; }
@@ -1172,6 +1245,10 @@ document.addEventListener('click', async e=>{
   if(t.id==='map-export'){ const wb=XLSX.utils.book_new(); wb.Workbook={Views:[{RTL:true}]}; XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mappingAoa()), 'טבלת התאמה'); return saveXlsx(wb, 'טבלת-התאמת-לקוחות.xlsx'); }
   if(d.unsite){ const [gid,c]=d.unsite.split('|'); const g=mapping.groups.find(x=>x.id===gid); g.sites=g.sites.filter(x=>x!==c); await store.saveMapping(); render(); return; }
   if(d.unclient){ const i=d.unclient.indexOf('|'); const g=mapping.groups.find(x=>x.id===d.unclient.slice(0,i)); const c=d.unclient.slice(i+1); g.clients=g.clients.filter(x=>x!==c); await store.saveMapping(); render(); return; }
+  if(d.delrates){
+    if(!t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לאשר מחיקה'; return; }
+    mapping.rateTables = (mapping.rateTables||[]).filter(x=>x.id!==d.delrates); await store.saveMapping(); render(); toast('טבלת התעריפים נמחקה'); return;
+  }
   if(d.unoverhead){ mapping.overheadSites = mapping.overheadSites.filter(x=>x!==d.unoverhead); await store.saveMapping(); render(); return; }
   if(d.delmonth){
     if(!t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לחיצה נוספת תמחק את החודש'; return; }
@@ -1190,6 +1267,7 @@ document.addEventListener('change', async e=>{
   else if(t.id==='map-file' && t.files[0]){ const f=t.files[0]; t.value=''; try{ await importMapping(f); }catch(err){ toast('לא הצלחנו לקרוא את קובץ ההתאמה'); } }
   else if(d.assignSite) await assign('site', d.assignSite, t.value);
   else if(d.assignClient) await assign('client', d.assignClient, t.value);
+  else if(d.ratefrom){ const r=(mapping.rateTables||[]).find(x=>x.id===d.ratefrom); if(r){ r.from=t.value; await store.saveMapping(); render(); toast(`התעריפים בתוקף מ${monthName(t.value)}`); } }
   else if(d.splitby){ const g=mapping.groups.find(x=>x.id===d.splitby); if(g){ if(t.value) g.splitBy=t.value; else delete g.splitBy; await store.saveMapping(); render(); toast('אופן החלוקה עודכן'); } }
   else if(d.rename){ const g=mapping.groups.find(x=>x.id===d.rename); const n=normName(t.value); if(n && g && n!==g.name){ g.name=n; await store.saveMapping(); toast('השם עודכן'); } }
 });
