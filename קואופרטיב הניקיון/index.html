@@ -386,7 +386,7 @@ function parsePayroll(wb, fileName){
     const s = sites[k] ||= {name:siteLabel(r[iSub+1]||k), cost:0, gross:0, emps:{}};
     const gross = iGross>=0 ? (num(r[iGross])||0) : 0;
     s.cost += cost; s.gross += gross; s.emps[emp]=1; emps[emp]=1; total += cost; yms.push(dateYm(r[iDate]));
-    (empSites[emp] ||= {})[k] = (empSites[emp][k]||0) + (iGross>=0 ? gross : cost);
+    (empSites[emp] ||= {})[k] = (empSites[emp][k]||0) + cost;
   }
   let employerTotal = null, employerCount = null, checkSource = null;
   const plantRow = aoa.slice(hi+1).find(r=>/סיכום\s+למפעל/.test(normName(r[0])));
@@ -397,7 +397,8 @@ function parsePayroll(wb, fileName){
     employerTotal = round2(rows.reduce((a,r)=>a+num(r[iEC]),0)); employerCount = rows.length;
   }
   const out = {}; for(const [k,s] of Object.entries(sites)) out[k] = {name:s.name, cost:round2(s.cost), gross:round2(s.gross), emps:Object.keys(s.emps).length};
-  // חלוקת כל עובד בין האתרים (לפי ברוטו), כדי לשייך את רכיבי השכר שלו לאתרים. מספרי עובד וחלקים בלבד, בלי שמות וסכומים.
+  // חלוקת כל עובד בין האתרים לפי החלק היחסי של עלות המעביד שלו בכל אתר. לפי החלוקה הזו משויכים
+  // רכיבי השכר שלו (למשל: 50% מעלות המעביד באתר = 50% מהנסיעות שלו לאתר). מספרי עובד ואחוזים בלבד.
   const empShares = {};
   for(const [e,m] of Object.entries(empSites)){ const t = Object.values(m).reduce((a,b)=>a+b,0); if(t>0) empShares[e] = Object.fromEntries(Object.entries(m).map(([k,v])=>[k, Math.round(v/t*1e6)/1e6])); }
   return {ym: majority(yms), data:{file:fileName, uploadedAt:new Date().toISOString(), sites:out, total:round2(total), gross:round2(Object.values(sites).reduce((a,x)=>a+x.gross,0)), employees:Object.keys(emps).length, employerTotal, employerCount, checkSource, empShares}};
@@ -405,7 +406,7 @@ function parsePayroll(wb, fileName){
 
 /* --- דוח רכיבי שכר (ברוטו לפי סמל) ---
    נלקח רק סוג הנתון "תשלומים" (רכיבי הברוטו). כל רכיב של עובד מתחלק בין האתרים לפי חלוקת
-   הברוטו שלו בדוח השכר של אותו חודש, ולכן דוח השכר צריך להיקלט קודם. נשמרים רק סיכומים לפי אתר ורכיב. */
+   עלות המעביד שלו בדוח השכר של אותו חודש, ולכן דוח השכר צריך להיקלט קודם. נשמרים רק סיכומים לפי אתר ורכיב. */
 const BUCKETS = [['base','בסיס: שעות רגילות ומשכורת'],['topup','השלמת שעות והפסקות'],['ot','שעות נוספות, שבת וחג'],['absence','היעדרויות בתשלום (חופשה, מחלה, חג)'],
   ['travel','נסיעות ורכב'],['allow','הבראה, ותק ותוספות'],['prov','הפרשות ששולמו בשכר'],['once','חד-פעמי: פדיון, מענקים, בונוסים'],['other','אחר']];
 const BUCKET = Object.fromEntries(BUCKETS);
