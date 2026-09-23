@@ -1,0 +1,1065 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>כספי הקואופרטיב</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;500;600&family=Rubik:wght@500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F2F6F5; --surface:#FFFFFF; --surface-2:#F7FAF9; --ink:#13211E; --ink-2:#485753; --muted:#76837F;
+  --line:#DCE4E1; --line-2:#EBF0EE; --accent:#0B6B63; --accent-ink:#FFFFFF; --accent-soft:#DDEFEC;
+  --good:#1D7A3A; --good-soft:#E1F2E6; --bad:#BF3A31; --bad-soft:#FBE5E2; --warn:#9A6400; --warn-soft:#FBF0DA;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --grid:#E6ECEA;
+  --display:"Rubik","Segoe UI","Arial Hebrew",Arial,sans-serif;
+  --body:"IBM Plex Sans Hebrew","Segoe UI","Arial Hebrew",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0E1614; --surface:#15201E; --surface-2:#1A2725; --ink:#E6EEEC; --ink-2:#B2C0BC; --muted:#879591;
+    --line:#2A3835; --line-2:#22302D; --accent:#4DB6AA; --accent-ink:#06201D; --accent-soft:#193531;
+    --good:#5CC27A; --good-soft:#173524; --bad:#F07068; --bad-soft:#3A1D1B; --warn:#E3AA4C; --warn-soft:#3A2D14;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --grid:#24322F;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0E1614; --surface:#15201E; --surface-2:#1A2725; --ink:#E6EEEC; --ink-2:#B2C0BC; --muted:#879591;
+  --line:#2A3835; --line-2:#22302D; --accent:#4DB6AA; --accent-ink:#06201D; --accent-soft:#193531;
+  --good:#5CC27A; --good-soft:#173524; --bad:#F07068; --bad-soft:#3A1D1B; --warn:#E3AA4C; --warn-soft:#3A2D14;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --grid:#24322F;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;margin:0}
+.app{max-width:1280px;margin:0 auto;padding-inline:20px;padding-block:20px 60px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:26px;font-weight:700}
+h2{font-size:19px;font-weight:600}
+h3{font-size:15px;font-weight:600}
+.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.brand{display:flex;gap:14px;align-items:center}
+.mark{width:44px;height:44px;border-radius:12px;background:var(--accent);display:grid;place-items:center;flex:none}
+.mark svg{width:26px;height:26px}
+.brand p{margin:2px 0 0;color:var(--ink-2);font-size:14px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:500;font-size:14px;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--bad)}
+.btn.danger.armed{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.ghost{border-color:transparent;background:transparent;padding-inline:8px}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* tabs */
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;gap:4px;overflow-x:auto;padding-block:10px;margin-bottom:6px;border-bottom:1px solid var(--line);scrollbar-width:none}
+.tab{border:0;background:transparent;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:500;color:var(--ink-2);white-space:nowrap;position:relative}
+.tab[aria-selected="true"]{background:var(--accent-soft);color:var(--ink);font-weight:600}
+.tab .badge{display:inline-block;min-width:18px;padding:0 5px;margin-inline-start:6px;border-radius:9px;background:var(--warn-soft);color:var(--warn);font-size:12px;font-weight:600;text-align:center}
+
+.banner{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:var(--warn-soft);color:var(--ink);border-radius:10px;padding:10px 14px;margin-block:14px;font-size:14px}
+.filters{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-block:14px}
+.filters label{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--ink-2)}
+select,input[type=text],input[type=number]{background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:14px;max-width:100%}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
+.stack{display:flex;flex-direction:column;gap:18px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.panel-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+
+/* KPI strip */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.kpi{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.kpi .label{font-size:13px;color:var(--ink-2)}
+.kpi .value{font-family:var(--display);font-size:24px;font-weight:600}
+.kpi .sub{font-size:13px;color:var(--muted)}
+.delta.good{color:var(--good)} .delta.bad{color:var(--bad)}
+
+.chart-box{position:relative;height:300px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-2);margin-bottom:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-inline-end:6px;vertical-align:-1px}
+.legend i.line{height:3px;border-radius:2px;vertical-align:3px;width:14px}
+
+/* tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line-2);white-space:nowrap}
+thead th{background:var(--surface-2);font-weight:600;color:var(--ink-2);font-size:13px;position:sticky;top:0}
+td.n,th.n{text-align:left;font-variant-numeric:tabular-nums}
+tr.sub td{font-weight:600;background:var(--surface-2)}
+tr.total td{font-weight:700;border-top:2px solid var(--line)}
+tr.pct td{color:var(--muted);font-size:13px;border-bottom-color:var(--line)}
+td.first,th.first{position:sticky;right:0;background:var(--surface);z-index:1}
+tr.sub td.first,tr.total td.first{background:var(--surface-2)}
+thead th.first{background:var(--surface-2);z-index:2}
+tbody tr:last-child td{border-bottom:0}
+
+.pill{display:inline-flex;gap:5px;align-items:center;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600}
+.pill.good{background:var(--good-soft);color:var(--good)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.info{background:var(--accent-soft);color:var(--accent)}
+.vbar{display:flex;width:120px;height:10px;align-items:center}
+.vbar span{display:block;height:10px}
+.vbar .half{flex:1;display:flex}
+.vbar .half.l{justify-content:flex-end}
+.vbar .axis{width:1px;height:14px;background:var(--muted)}
+
+/* insights */
+.insights{display:flex;flex-direction:column}
+.insight{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:12px 0;border-bottom:1px solid var(--line-2)}
+.insight:last-child{border-bottom:0}
+.insight .pill{grid-row:span 2;align-self:start;margin-top:2px}
+.insight p{margin:0;color:var(--ink-2);font-size:14px}
+.insight b{color:var(--ink);font-weight:600}
+
+/* sources */
+.drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;background:var(--surface);cursor:pointer;transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop strong{font-family:var(--display);font-size:17px;display:block;margin-bottom:4px}
+.sources{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.src{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.src .row{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{font-size:12px;padding:1px 8px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2)}
+.src dl{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0;font-size:13px}
+.src dt{color:var(--muted)} .src dd{margin:0}
+.switch{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
+.switch input{accent-color:var(--accent);width:16px;height:16px}
+
+.editor{border:1px solid var(--accent);border-radius:12px;background:var(--surface);padding:18px}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px 16px;margin-block:12px}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink-2)}
+.field select,.field input{width:100%}
+.hint{font-size:13px;color:var(--muted);margin:4px 0 0}
+
+.budget-table input{width:88px;text-align:left;padding:4px 6px;font-variant-numeric:tabular-nums;direction:ltr}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 18px;border-radius:9px;font-size:14px;z-index:20;box-shadow:0 6px 20px rgb(0 0 0 / .2)}
+details summary{cursor:pointer;color:var(--ink-2);font-size:14px}
+@media (max-width:600px){.app{padding-inline:16px}h1{font-size:22px}.kpi .value{font-size:20px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app" dir="rtl" lang="he">
+  <header class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 16V9"/><path d="M10 16V5"/><path d="M14 16v-5"/><path d="M18 16V7"/></svg>
+      </div>
+      <div>
+        <h1>כספי הקואופרטיב</h1>
+        <p>איחוד נתונים מכל המערכות · רווח והפסד · תקציב מול ביצוע</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btn-copy" type="button">העתקת הדוח</button>
+      <button class="btn" id="btn-export" type="button">ייצוא לאקסל</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <div id="banner"></div>
+  <div id="filters" class="filters"></div>
+  <main id="view"></main>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script>
+'use strict';
+/* ============================================================
+   הגדרות: שורות דוח רווח והפסד
+   contribution = השפעה על הרווח (+ הכנסה, − הוצאה)
+   ============================================================ */
+const LINES = [
+  {id:'rev', name:'הכנסות',                     kind:'income',  budget:true},
+  {id:'cos', name:'עלות השירות (חומרים וקבלני משנה)', kind:'expense', budget:true},
+  {id:'pay', name:'שכר ונלוות',                 kind:'expense', budget:true},
+  {id:'ops', name:'הוצאות תפעול (רכבים, שכירות)', kind:'expense', budget:true},
+  {id:'adm', name:'הנהלה וכלליות',              kind:'expense', budget:true},
+  {id:'fin', name:'מימון ועמלות',               kind:'expense', budget:true},
+  {id:'oth', name:'הכנסות/הוצאות אחרות',        kind:'net',     budget:true},
+  {id:'unk', name:'לא מסווג',                   kind:'net',     budget:false},
+  {id:'ign', name:'לא לכלול בדוח (העברות, מע״מ)', kind:'none',  budget:false},
+];
+const LINE = Object.fromEntries(LINES.map(l=>[l.id,l]));
+const PICKABLE = LINES.filter(l=>l.id!=='unk');
+
+// מילות מפתח לסיווג אוטומטי. הסדר חשוב: הבדיקה נעצרת בהתאמה הראשונה.
+const RULES = [
+  ['ign', ['מע"מ','מע״מ','מעמ','העברה בין חשבונות','העברה לחשבון','פיקדון','vat','transfer']],
+  ['pay', ['שכר','משכורת','ביטוח לאומי','פנסיה','קרן השתלמות','פיצויים','הבראה','עלות מעביד','salary','payroll','wage']],
+  ['rev', ['הכנסה','הכנסות','מכירות','מכירה','תקבול מלקוח','revenue','sales','income']],
+  ['cos', ['חומרי ניקוי','חומרי ניקיון','חומרים','קבלן משנה','קבלני משנה','ציוד ניקיון','ציוד ניקוי','materials','subcontract']],
+  ['fin', ['עמלה','עמלות','ריבית','מימון','הפרשי שער','fee','interest']],
+  ['ops', ['רכב','דלק','ליסינג','שכירות','שכ"ד','שכ״ד','חשמל','תיקון','תיקונים','אחזקה','מוסך','rent','fuel','vehicle','lease']],
+  ['adm', ['משרד','הנהלה','רואה חשבון','רו"ח','רו״ח','עו"ד','עו״ד','ייעוץ','תוכנה','מנוי','טלפון','סלולר','פרסום','שיווק','ביטוח','אינטרנט','office','software','insurance']],
+];
+const TYPE_DEFAULT_LINE = {payroll:'pay', sales:'rev'};
+const SOURCE_TYPES = {erp:'ERP / הנהלת חשבונות', bank:'בנק / אשראי', payroll:'שכר', sales:'CRM / מכירות', other:'אקסל / אחר'};
+const FIELDS = [
+  ['date','תאריך',['תאריך','date','ערך','חודש','month','period']],
+  ['amount','סכום',['סכום','amount','total','סה"כ','סה״כ','עלות מעביד','עלות','ש"ח','₪']],
+  ['debit','חובה',['חובה','debit','חיוב']],
+  ['credit','זכות',['זכות','credit','זיכוי']],
+  ['account','חשבון / סעיף',['כרטיס','חשבון','סעיף','קטגוריה','סוג הוצאה','סוג','account','category','מיון']],
+  ['desc','תיאור',['פרטים','תיאור','description','memo','שם','ספק','לקוח']],
+  ['dept','מחלקה / אתר',['מחלקה','אתר','פרויקט','מרכז רווח','מרכז עלות','department','cost center','site']],
+];
+const AMOUNT_MODES = {
+  signed:'עמודת סכום: חיובי = הכנסה, שלילי = הוצאה',
+  dc:'עמודות חובה/זכות (זכות = הכנסה)',
+  expense:'עמודת סכום: כל השורות הוצאות',
+  income:'עמודת סכום: כל השורות הכנסות',
+};
+const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+const MSHORT = ['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
+const NO_DEPT = 'ללא מחלקה';
+
+/* ============================================================ state */
+const STORE_KEY = 'coop-finance-v1';
+let state = {sources:[], lineMap:{}, budget:{}, demo:false, ui:{tab:'dash', year:null, from:1, to:12, dept:''}};
+let editor = null;       // מקור בעריכה
+let txCache = null;
+const charts = {};
+
+function load(){
+  try{ const raw = localStorage.getItem(STORE_KEY); if(raw){ const s = JSON.parse(raw); state = Object.assign(state, s); state.ui = Object.assign({tab:'dash',year:null,from:1,to:12,dept:''}, s.ui||{}); return true; } }catch(e){}
+  return false;
+}
+let saveWarned = false;
+function save(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch(e){ if(!saveWarned){ saveWarned = true; toast('הנתונים גדולים מדי לשמירה בדפדפן. הם יישארו זמינים עד רענון הדף.'); } }
+}
+function dirty(){ txCache = null; save(); }
+
+/* ============================================================ utils */
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Math.random().toString(36).slice(2,10);
+const nf0 = new Intl.NumberFormat('he-IL',{maximumFractionDigits:0});
+const nfc = new Intl.NumberFormat('he-IL',{notation:'compact',maximumFractionDigits:1});
+// בטקסט עברי סימן המינוס "קופץ" לצד הלא נכון, ולכן כל מספר עטוף בבידוד LTR
+const ltr = s => '\u2066' + s + '\u2069';
+const moneyRaw = v => (v<0?'−':'') + '₪' + nf0.format(Math.abs(Math.round(v)));
+const moneyCRaw = v => (v<0?'−':'') + '₪' + nfc.format(Math.abs(v));
+const money = v => ltr(moneyRaw(v));
+const moneyC = v => ltr(moneyCRaw(v));
+const pct = (v,d=1) => isFinite(v) ? ltr((v<0?'−':'') + Math.abs(v*100).toFixed(d) + '%') : '—';
+const ymKey = (y,m) => `${y}-${String(m).padStart(2,'0')}`;
+const ymLabel = ym => MSHORT[+ym.slice(5)-1] + ' ' + ym.slice(2,4);
+const norm = s => String(s??'').trim().toLowerCase().replace(/\s+/g,' ');
+let toastT;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,3200); }
+
+function parseNum(v){
+  if(v==null || v==='') return null;
+  if(typeof v==='number') return isFinite(v)?v:null;
+  let s = String(v).trim(); if(!s) return null;
+  let neg = false;
+  if(/^\(.*\)$/.test(s)){ neg=true; s=s.slice(1,-1); }
+  if(/-$/.test(s)){ neg=true; s=s.slice(0,-1); }
+  s = s.replace(/[₪$€\s]|ש"ח|ש״ח|nis/gi,'').replace(/,/g,'');
+  if(s.startsWith('−')) s='-'+s.slice(1);
+  const n = parseFloat(s);
+  if(!isFinite(n) || !/^-?[\d.]+$/.test(s)) return null;
+  return neg ? -Math.abs(n) : n;
+}
+function parseDate(v){
+  if(v==null || v==='') return null;
+  if(v instanceof Date && !isNaN(v)) return [v.getFullYear(), v.getMonth()+1, v.getDate()];
+  if(typeof v==='number'){
+    if(v>20000 && v<80000){ const d = new Date(Math.round((v-25569)*864e5)); return [d.getUTCFullYear(), d.getUTCMonth()+1, d.getUTCDate()]; }
+    return null;
+  }
+  const s = String(v).trim();
+  let m;
+  if((m = s.match(/^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?/))) return [+m[1], +m[2], +(m[3]||1)];
+  if((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/))){ let y=+m[3]; if(y<100) y+=2000; return [y, +m[2], +m[1]]; }
+  if((m = s.match(/^(\d{1,2})[-/.](\d{4})$/))) return [+m[2], +m[1], 1];
+  return null;
+}
+function validDate(d){ return d && d[0]>1990 && d[0]<2100 && d[1]>=1 && d[1]<=12; }
+
+/* ============================================================ קבצים */
+async function readFile(file){
+  const buf = await file.arrayBuffer();
+  let wb;
+  if(/\.(csv|txt|tsv)$/i.test(file.name)){
+    let text;
+    try{ text = new TextDecoder('utf-8',{fatal:true}).decode(buf); }
+    catch(e){ text = new TextDecoder('windows-1255').decode(buf); } // ייצוא ישראלי ישן
+    wb = XLSX.read(text.replace(/^\uFEFF/,''), {type:'string', raw:true}); // raw: לא לפרש 03/04 כתאריך אמריקאי
+  } else {
+    wb = XLSX.read(buf, {type:'array', cellDates:true});
+  }
+  const sheets = {};
+  for(const name of wb.SheetNames){
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:true, defval:'', blankrows:false});
+    const ymd = c => { const x = new Date(c.getTime()+12*3600e3); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; };
+    const clean = aoa.map(r=>r.map(c=> c instanceof Date ? ymd(c) : c))
+                     .filter(r=>r.some(c=>String(c).trim()!==''));
+    if(clean.length) sheets[name] = clean;
+  }
+  return sheets;
+}
+function detectHeader(aoa){
+  const kw = FIELDS.flatMap(f=>f[2]);
+  let best = 0, bestScore = -1;
+  for(let i=0;i<Math.min(15,aoa.length);i++){
+    const score = aoa[i].filter(c=>typeof c==='string' && kw.some(k=>norm(c).includes(k))).length;
+    if(score>bestScore){ bestScore=score; best=i; }
+  }
+  return best;
+}
+function autoMap(headers){
+  const map = {}; const used = new Set();
+  for(const [key,,kws] of FIELDS){
+    for(const k of kws){
+      const i = headers.findIndex((h,idx)=>!used.has(idx) && norm(h).includes(k));
+      if(i>=0){ map[key]=i; used.add(i); break; }
+    }
+  }
+  return map;
+}
+function guessType(name, headers){
+  const s = norm(name+' '+headers.join(' '));
+  if(/שכר|payroll|עלות מעביד|ברוטו/.test(s)) return 'payroll';
+  if(/בנק|bank|יתרה|אשראי|כרטיס אשראי/.test(s)) return 'bank';
+  if(/crm|מכירות|sales|עסקאות|pipeline/.test(s)) return 'sales';
+  if(/erp|הנהלת חשבונות|כרטסת|חובה|זכות|פקודות יומן|priority|פריוריטי|sap|חשבשבת/.test(s)) return 'erp';
+  return 'other';
+}
+
+/* ============================================================ נרמול */
+function normalizeSource(src){
+  const out = []; const m = src.map; const rows = src.aoa.slice(src.headerRow+1);
+  const get = (r,k) => m[k]==null ? '' : r[m[k]];
+  let skipped = 0;
+  for(const r of rows){
+    const d = parseDate(get(r,'date'));
+    let amt = null;
+    if(src.amountMode==='dc'){
+      const dr = parseNum(get(r,'debit'))||0, cr = parseNum(get(r,'credit'))||0;
+      if(dr||cr) amt = cr - dr;
+    } else {
+      const a = parseNum(get(r,'amount'));
+      if(a!=null) amt = src.amountMode==='expense' ? -Math.abs(a) : src.amountMode==='income' ? Math.abs(a) : a;
+    }
+    if(!validDate(d) || amt==null || amt===0){ skipped++; continue; }
+    const account = String(get(r,'account')??'').trim();
+    const desc = String(get(r,'desc')??'').trim();
+    out.push({src:src.id, y:d[0], m:d[1], d:d[2], ym:ymKey(d[0],d[1]), amount:amt, account, desc,
+              dept:String(get(r,'dept')??'').trim()||NO_DEPT, key:account||desc||src.name});
+  }
+  return {tx:out, skipped};
+}
+function guessLine(src, text){
+  const s = norm(text);
+  for(const [line, kws] of RULES) if(kws.some(k=>s.includes(k))) return line;
+  return TYPE_DEFAULT_LINE[src.type] || 'unk';
+}
+const guessCache = new Map();
+function lineOf(src, key){
+  const mk = src.id+'::'+key;
+  if(state.lineMap[mk]) return state.lineMap[mk];
+  if(!guessCache.has(mk)) guessCache.set(mk, guessLine(src, key));
+  return guessCache.get(mk);
+}
+function allTx(){
+  if(txCache) return txCache;
+  guessCache.clear();
+  const list = [];
+  for(const src of state.sources){
+    const {tx, skipped} = normalizeSource(src);
+    src._count = tx.length; src._skipped = skipped;
+    src._range = tx.length ? [tx.reduce((a,t)=>t.ym<a?t.ym:a,'9999'), tx.reduce((a,t)=>t.ym>a?t.ym:a,'0000')] : null;
+    for(const t of tx){ t.line = lineOf(src, t.key); t.inPnl = src.inPnl; list.push(t); }
+  }
+  txCache = list;
+  return list;
+}
+const pnlTx = () => allTx().filter(t=>t.inPnl && t.line!=='ign');
+
+/* ============================================================ חישובים */
+function years(){
+  const ys = new Set(pnlTx().map(t=>t.y));
+  Object.keys(state.budget).forEach(y=>ys.add(+y));
+  if(!ys.size) ys.add(new Date().getFullYear());
+  return [...ys].sort((a,b)=>b-a);
+}
+function lastDataMonth(y){
+  let m = 0; for(const t of pnlTx()) if(t.y===y && t.m>m) m=t.m;
+  return m;
+}
+function range(){
+  const {year,from,to} = state.ui; const ms=[];
+  for(let m=from;m<=to;m++) ms.push(ymKey(year,m));
+  return ms;
+}
+// מחזיר contribution לפי שורה × חודש
+function compute(months, dept){
+  const set = new Set(months);
+  const res = {}; LINES.forEach(l=>res[l.id]=Object.fromEntries(months.map(m=>[m,0])));
+  for(const t of pnlTx()){
+    if(!set.has(t.ym)) continue;
+    if(dept && t.dept!==dept) continue;
+    res[t.line][t.ym] += t.amount;
+  }
+  return res;
+}
+const sum = o => Object.values(o).reduce((a,b)=>a+b,0);
+function budgetContrib(line, ym){
+  const b = state.budget[ym.slice(0,4)]; if(!b || !b[line]) return 0;
+  const v = +b[line][+ym.slice(5)-1] || 0;
+  return LINE[line].kind==='expense' ? -v : v;
+}
+function hasBudget(year){ const b=state.budget[year]; return !!b && Object.values(b).some(a=>a.some(v=>+v)); }
+const disp = (line, c) => LINE[line].kind==='expense' ? -c : c;
+
+// שורות הדוח כולל סיכומי ביניים
+function pnlRows(res, months, withBudget){
+  const val = (ids) => { const o={}; months.forEach(m=>o[m]=ids.reduce((a,id)=>a+res[id][m],0)); return o; };
+  const bud = (ids) => months.reduce((a,m)=>a+ids.reduce((x,id)=>x+budgetContrib(id,m),0),0);
+  const row = (id) => ({type:'line', id, name:LINE[id].name, vals:Object.fromEntries(months.map(m=>[m,disp(id,res[id][m])])),
+                        total:disp(id,sum(res[id])), budget: withBudget && LINE[id].budget ? disp(id,bud([id])) : null, favor: sum(res[id]) - bud([id])});
+  const subt = (name, ids, cls) => { const v=val(ids); const b=bud(ids); return {type:cls, name, vals:v, total:sum(v), budget: withBudget? b : null, favor: sum(v)-b}; };
+  const rows = [];
+  rows.push(row('rev'), row('cos'), row('pay'));
+  const gp = subt('רווח גולמי', ['rev','cos','pay'], 'sub'); rows.push(gp);
+  const rev = val(['rev']);
+  rows.push({type:'pct', name:'שיעור רווח גולמי', vals:Object.fromEntries(months.map(m=>[m, rev[m]? gp.vals[m]/rev[m] : NaN])), total: sum(rev)? gp.total/sum(rev):NaN,
+             budget: withBudget && bud(['rev']) ? gp.budget/bud(['rev']) : null});
+  rows.push(row('ops'), row('adm'));
+  rows.push(subt('רווח תפעולי', ['rev','cos','pay','ops','adm'], 'sub'));
+  rows.push(row('fin'), row('oth'));
+  if(Math.abs(sum(res.unk))>0.5) rows.push(row('unk'));
+  rows.push(subt('רווח נקי', ['rev','cos','pay','ops','adm','fin','oth','unk'], 'total'));
+  return rows;
+}
+
+/* ============================================================ רינדור כללי */
+const TABS = [['dash','סקירה ותובנות'],['pnl','רווח והפסד'],['bva','תקציב מול ביצוע'],['sources','מקורות נתונים'],['map','מיפוי סעיפים'],['budget','הזנת תקציב']];
+function render(){
+  allTx();
+  const ys = years();
+  if(!ys.includes(state.ui.year)){ state.ui.year = ys[0]; const lm = lastDataMonth(ys[0]); state.ui.from=1; state.ui.to = lm||12; }
+  const unk = pnlTx().filter(t=>t.line==='unk').length;
+  $('#tabs').innerHTML = TABS.map(([id,name])=>`<button class="tab" role="tab" type="button" data-tab="${id}" aria-selected="${state.ui.tab===id}">${name}${id==='map'&&unk?`<span class="badge num">${unk}</span>`:''}</button>`).join('');
+  $('#banner').innerHTML = state.demo ? `<div class="banner"><span><b>מוצגים נתוני דוגמה</b> של קואופרטיב ניקיון (ינואר–אוגוסט 2026). כדי לעבוד עם הנתונים שלכם יש להעלות קבצי ייצוא בלשונית "מקורות נתונים".</span><button class="btn" type="button" id="btn-clear-demo">ניקוי נתוני הדוגמה</button></div>` : '';
+  const showFilters = ['dash','pnl','bva'].includes(state.ui.tab);
+  $('#filters').hidden = !showFilters;
+  if(showFilters) renderFilters(ys);
+  Object.values(charts).forEach(c=>c.destroy()); for(const k in charts) delete charts[k];
+  const v = $('#view');
+  ({dash:renderDash, pnl:renderPnl, bva:renderBva, sources:renderSources, map:renderMap, budget:renderBudget})[state.ui.tab](v);
+}
+function renderFilters(ys){
+  const depts = [...new Set(pnlTx().map(t=>t.dept))].sort();
+  const mopts = (sel) => MONTHS.map((n,i)=>`<option value="${i+1}" ${sel===i+1?'selected':''}>${n}</option>`).join('');
+  $('#filters').innerHTML = `
+    <label>שנה <select id="f-year">${ys.map(y=>`<option ${y===state.ui.year?'selected':''}>${y}</option>`).join('')}</select></label>
+    <label>מחודש <select id="f-from">${mopts(state.ui.from)}</select></label>
+    <label>עד חודש <select id="f-to">${mopts(state.ui.to)}</select></label>
+    <label>מחלקה <select id="f-dept"><option value="">כל הארגון</option>${depts.map(d=>`<option ${d===state.ui.dept?'selected':''}>${esc(d)}</option>`).join('')}</select></label>
+    ${state.ui.dept?'<span class="small muted">השוואה לתקציב זמינה ברמת הארגון בלבד</span>':''}`;
+}
+
+/* ============================================================ סקירה */
+function renderDash(v){
+  const months = range(), dept = state.ui.dept;
+  if(!pnlTx().length){ v.innerHTML = emptyState(); return; }
+  const res = compute(months, dept);
+  const withB = !dept && hasBudget(state.ui.year);
+  const rows = pnlRows(res, months, withB);
+  const R = n => rows.find(r=>r.name===n);
+  const rev = sum(res.rev), gp = R('רווח גולמי'), net = R('רווח נקי'), pay = -sum(res.pay);
+  const kpi = (label, value, sub) => `<div class="kpi"><span class="label">${label}</span><span class="value num">${value}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
+  const vsB = (actual, budget, isCost) => {
+    if(budget==null || !budget) return '';
+    const d = actual-budget, good = isCost ? d<=0 : d>=0;
+    return `<span class="delta ${good?'good':'bad'}">${d>=0?'▲':'▼'} <span class="num">${pct(Math.abs(d)/Math.abs(budget))}</span> ${d>=0?'מעל התקציב':'מתחת לתקציב'}</span>`;
+  };
+  const revRow = rows.find(r=>r.id==='rev'), payRow = rows.find(r=>r.id==='pay');
+  v.innerHTML = `<div class="stack">
+    <div class="kpis">
+      ${kpi('הכנסות', moneyC(rev), vsB(rev, revRow.budget, false))}
+      ${kpi('רווח גולמי', moneyC(gp.total), `שיעור <span class="num">${pct(rev?gp.total/rev:NaN)}</span>`)}
+      ${kpi('שכר מתוך ההכנסות', pct(rev?pay/rev:NaN), vsB(pay, payRow.budget, true))}
+      ${kpi('רווח נקי', moneyC(net.total), withB ? `תקציב <span class="num">${moneyC(net.budget)}</span>` : `שיעור <span class="num">${pct(rev?net.total/rev:NaN)}</span>`)}
+    </div>
+    <div class="grid2">
+      <div class="stack">
+      <section class="panel">
+        <div class="panel-head"><h2>הכנסות, הוצאות ורווח לפי חודש</h2></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>הכנסות</span><span><i style="background:var(--s2)"></i>סך הוצאות</span><span><i class="line" style="background:var(--s3)"></i>רווח נקי</span></div>
+        <div class="chart-box"><canvas id="ch-main" aria-label="גרף הכנסות, הוצאות ורווח נקי לפי חודש"></canvas></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>רווחיות לפי מחלקה</h2><span class="small muted">הכנסות והוצאות שסומנו במחלקה בקבצי המקור</span></div>
+        ${deptTable(months)}
+      </section>
+      </div>
+      <section class="panel">
+        <div class="panel-head"><h2>תובנות</h2><span class="small muted">מחושב אוטומטית לתקופה שנבחרה</span></div>
+        <div class="insights">${insights(months, dept, res, rows).map(i=>`<div class="insight"><span class="pill ${i.level}">${{good:'▲ חיובי',bad:'▼ דורש תשומת לב',warn:'● לבדיקה',info:'● מידע'}[i.level]}</span><h3>${i.title}</h3><p>${i.text}</p></div>`).join('')}</div>
+      </section>
+    </div>
+  </div>`;
+  const costs = months.map(m=>-(['cos','pay','ops','adm','fin'].reduce((a,id)=>a+res[id][m],0)+Math.min(0,res.oth[m]+res.unk[m])));
+  const netM = months.map(m=>LINES.filter(l=>l.id!=='ign').reduce((a,l)=>a+res[l.id][m],0));
+  drawChart('main', 'ch-main', {
+    type:'bar',
+    data:{labels:months.map(ymLabel), datasets:[
+      {label:'הכנסות', data:months.map(m=>res.rev[m]), backgroundColor:cv('--s1'), borderRadius:4, maxBarThickness:22, order:2},
+      {label:'סך הוצאות', data:costs, backgroundColor:cv('--s2'), borderRadius:4, maxBarThickness:22, order:2},
+      {label:'רווח נקי', type:'line', data:netM, borderColor:cv('--s3'), backgroundColor:cv('--s3'), borderWidth:2, pointRadius:4, pointBorderColor:cv('--surface'), pointBorderWidth:2, tension:.25, order:1},
+    ]}
+  });
+}
+function deptTable(months){
+  const set = new Set(months); const agg = {};
+  for(const t of pnlTx()){
+    if(!set.has(t.ym)) continue;
+    const a = agg[t.dept] ||= {rev:0, pay:0, other:0};
+    if(t.line==='rev') a.rev += t.amount; else if(t.line==='pay') a.pay -= t.amount; else a.other -= t.amount;
+  }
+  const list = Object.entries(agg).sort((a,b)=>b[1].rev-a[1].rev);
+  if(list.length<2) return `<p class="muted small">לא נמצאה עמודת מחלקה בקבצים. כדי לקבל פילוח יש למפות עמודת "מחלקה / אתר" בלשונית מקורות נתונים.</p>`;
+  return `<div class="tbl-wrap"><table><thead><tr><th class="first">מחלקה</th><th class="n">הכנסות</th><th class="n">שכר</th><th class="n">הוצאות אחרות</th><th class="n">תרומה</th><th class="n">שיעור תרומה</th><th class="n">שכר / הכנסות</th></tr></thead><tbody>
+    ${list.map(([d,a])=>{ const c=a.rev-a.pay-a.other; const r=a.rev?c/a.rev:NaN; const pr=a.rev?a.pay/a.rev:NaN;
+      return `<tr><td class="first">${esc(d)}</td><td class="n">${money(a.rev)}</td><td class="n">${money(a.pay)}</td><td class="n">${money(a.other)}</td><td class="n">${money(c)}</td>
+      <td class="n">${a.rev?`<span class="pill ${r<0?'bad':r<0.1?'warn':'good'}"><span class="num">${pct(r)}</span></span>`:'<span class="muted">מרכז עלות</span>'}</td><td class="n">${pct(pr)}</td></tr>`;}).join('')}
+  </tbody></table></div>`;
+}
+
+/* ============================================================ תובנות */
+function insights(months, dept, res, rows){
+  const out = []; const withB = !dept && hasBudget(state.ui.year);
+  const data = months.filter(m=>LINES.some(l=>l.id!=='ign' && Math.abs(res[l.id][m])>0.5));
+  const revM = m => res.rev[m];
+  const netOf = m => LINES.filter(l=>l.id!=='ign').reduce((a,l)=>a+res[l.id][m],0);
+  const netRow = rows.find(r=>r.name==='רווח נקי');
+
+  // 1. רווח מול תקציב
+  if(withB && netRow.budget!=null){
+    const d = netRow.total - netRow.budget;
+    out.push({level: d>=0?'good':'bad', title: d>=0?'הרווח הנקי מעל התקציב':'הרווח הנקי מתחת לתקציב',
+      text:`בתקופה נרשם רווח נקי של <b class="num">${money(netRow.total)}</b> מול תקציב של <span class="num">${money(netRow.budget)}</span>: פער של <b class="num">${money(d)}</b>.`});
+    // 2. הסעיפים שתרמו הכי הרבה לפער
+    const lines = rows.filter(r=>r.type==='line' && r.budget!=null).sort((a,b)=>a.favor-b.favor);
+    const worst = lines[0], best = lines[lines.length-1];
+    if(worst && worst.favor < -1000) out.push({level:'bad', title:`החריגה הגדולה ביותר: ${worst.name}`,
+      text:`${LINE[worst.id].kind==='income'?'ההכנסות נמוכות מהתקציב':'ההוצאה גבוהה מהתקציב'} ב-<b class="num">${money(Math.abs(worst.favor))}</b> (<span class="num">${pct(Math.abs(worst.favor)/Math.abs(worst.budget||1))}</span>). ${worstMonthText(worst.id, months)}`});
+    if(best && best.favor > 1000) out.push({level:'good', title:`החיסכון/העודף הגדול ביותר: ${best.name}`,
+      text:`טוב מהתקציב ב-<b class="num">${money(best.favor)}</b>.`});
+  }
+  // 3. יחס שכר להכנסות
+  const pr = data.map(m=>({m, r: revM(m)? -res.pay[m]/revM(m) : NaN})).filter(x=>isFinite(x.r));
+  if(pr.length){
+    const avg = -sum(res.pay)/sum(res.rev); const top = pr.reduce((a,b)=>b.r>a.r?b:a);
+    out.push({level: top.r>0.8?'bad':avg>0.72?'warn':'info', title:`השכר מהווה ${pct(avg,0)} מההכנסות`,
+      text:`היחס הגבוה ביותר היה ב${MONTHS[+top.m.slice(5)-1]}: <b class="num">${pct(top.r)}</b>. ${top.r-avg>0.05?'ההכנסות ירדו באותו חודש יותר מהשכר, ולכן כדאי לבדוק התאמה של כוח האדם להיקף העבודה.':''}`});
+  }
+  // 4. מגמת הכנסות
+  if(data.length>=2){
+    const last = data[data.length-1], prev = data[data.length-2];
+    const ch = revM(prev)? (revM(last)-revM(prev))/revM(prev) : NaN;
+    if(isFinite(ch) && Math.abs(ch)>0.03) out.push({level: ch>0?'good':'warn', title:`ההכנסות ב${MONTHS[+last.slice(5)-1]} ${ch>0?'עלו':'ירדו'} ב-${pct(Math.abs(ch),0)}`,
+      text:`<span class="num">${money(revM(last))}</span> לעומת <span class="num">${money(revM(prev))}</span> בחודש הקודם.`});
+  }
+  // 5. קפיצה חריגה בסעיף הוצאה
+  if(data.length>=3){
+    const last = data[data.length-1], prevs = data.slice(0,-1);
+    let spike=null;
+    for(const id of ['cos','ops','adm','fin']){
+      const avg = -prevs.reduce((a,m)=>a+res[id][m],0)/prevs.length, cur = -res[id][last];
+      if(avg>1000 && cur>avg*1.15 && (!spike || cur-avg>spike.diff)) spike={id,cur,avg,diff:cur-avg};
+    }
+    if(spike) out.push({level:'warn', title:`קפיצה ב${LINE[spike.id].name}`,
+      text:`ב${MONTHS[+last.slice(5)-1]} נרשמו <b class="num">${money(spike.cur)}</b>, <span class="num">${pct(spike.cur/spike.avg-1,0)}</span> מעל הממוצע החודשי בתקופה (<span class="num">${money(spike.avg)}</span>).`});
+  }
+  // 6. מחלקה עם התרומה הנמוכה
+  if(!dept){
+    const set=new Set(months), agg={};
+    for(const t of pnlTx()){ if(!set.has(t.ym)||t.dept===NO_DEPT) continue; const a=agg[t.dept] ||= {rev:0,net:0}; if(t.line==='rev') a.rev+=t.amount; a.net+=t.amount; }
+    const ranked = Object.entries(agg).filter(([,a])=>a.rev>0).map(([d,a])=>({d, r:a.net/a.rev})).sort((a,b)=>a.r-b.r);
+    if(ranked.length>=2) out.push({level: ranked[0].r<0.05?'warn':'info', title:`שיעור התרומה הנמוך ביותר: ${esc(ranked[0].d)}`,
+      text:`<b class="num">${pct(ranked[0].r)}</b> לעומת <span class="num">${pct(ranked[ranked.length-1].r)}</span> ב${esc(ranked[ranked.length-1].d)}.`});
+  }
+  // 7. תחזית לסוף שנה
+  if(!dept && hasBudget(state.ui.year)){
+    const y = state.ui.year, lm = lastDataMonth(y);
+    if(lm && lm<12){
+      const ms = Array.from({length:lm},(_,i)=>ymKey(y,i+1)); const r = compute(ms,'');
+      const net = m => LINES.filter(l=>l.id!=='ign').reduce((a,l)=>a+r[l.id][m],0);
+      const ytd = ms.reduce((a,m)=>a+net(m),0);
+      const last3 = ms.slice(-3); const rate = last3.reduce((a,m)=>a+net(m),0)/last3.length;
+      const fc = ytd + rate*(12-lm);
+      const bud = Array.from({length:12},(_,i)=>ymKey(y,i+1)).reduce((a,m)=>a+['rev','cos','pay','ops','adm','fin','oth'].reduce((x,id)=>x+budgetContrib(id,m),0),0);
+      out.push({level: fc>=bud?'good':'warn', title:'תחזית רווח לסוף השנה',
+        text:`לפי קצב שלושת החודשים האחרונים, הרווח הנקי השנתי צפוי להגיע ל-<b class="num">${money(fc)}</b> מול תקציב שנתי של <span class="num">${money(bud)}</span>.`});
+    }
+  }
+  // 8. איכות נתונים
+  const unk = pnlTx().filter(t=>t.line==='unk' && new Set(months).has(t.ym));
+  if(unk.length) out.push({level:'warn', title:`${unk.length} תנועות לא מסווגות`,
+    text:`בסך <b class="num">${money(unk.reduce((a,t)=>a+t.amount,0))}</b>. אפשר לשייך אותן לסעיפים בלשונית "מיפוי סעיפים".`});
+  const dups = findDuplicates();
+  if(dups.length) out.push({level:'warn', title:`${dups.length} תנועות שנראות כפולות בין מערכות`,
+    text:`אותו סכום הופיע בשני מקורות שנכללים בדוח, בהפרש של עד 3 ימים (סה״כ <span class="num">${money(dups.reduce((a,p)=>a+Math.abs(p[0].amount),0))}</span>). הפירוט בלשונית "מקורות נתונים".`});
+  if(!out.length) out.push({level:'info', title:'אין מספיק נתונים לתובנות', text:'כדאי להרחיב את טווח החודשים או להזין תקציב.'});
+  return out;
+}
+function worstMonthText(id, months){
+  let w=null; for(const m of months){ const f = compute([m],'')[id][m] - budgetContrib(id,m); if(!w||f<w.f) w={m,f}; }
+  return w && w.f<0 ? `הפער הגדול ביותר נרשם ב${MONTHS[+w.m.slice(5)-1]}.` : '';
+}
+function findDuplicates(){
+  const tx = pnlTx(); const by = new Map(); const pairs=[];
+  for(const t of tx){ const k=Math.round(Math.abs(t.amount)*100); if(Math.abs(t.amount)<200) continue; (by.get(k)||by.set(k,[]).get(k)).push(t); }
+  for(const list of by.values()){
+    if(list.length<2) continue;
+    for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){
+      const a=list[i], b=list[j]; if(a.src===b.src || Math.sign(a.amount)!==Math.sign(b.amount)) continue;
+      const da=Date.UTC(a.y,a.m-1,a.d), db=Date.UTC(b.y,b.m-1,b.d);
+      if(Math.abs(da-db)<=3*864e5) pairs.push([a,b]);
+    }
+  }
+  return pairs;
+}
+
+/* ============================================================ רווח והפסד */
+function renderPnl(v){
+  const months = range(), dept = state.ui.dept;
+  if(!pnlTx().length){ v.innerHTML = emptyState(); return; }
+  const withB = !dept && hasBudget(state.ui.year);
+  const rows = pnlRows(compute(months, dept), months, withB);
+  const cell = (r,x) => r.type==='pct' ? `<td class="n">${x==null?'':pct(x)}</td>` : `<td class="n">${x==null?'':money(x)}</td>`;
+  v.innerHTML = `<section class="panel">
+    <div class="panel-head"><h2>דוח רווח והפסד מאוחד${dept?` · ${esc(dept)}`:''}</h2><span class="small muted">הוצאות מוצגות כמספר חיובי; שורות הסיכום מציגות רווח</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th class="first">סעיף</th>${months.map(m=>`<th class="n">${ymLabel(m)}</th>`).join('')}<th class="n">סה״כ</th>${withB?'<th class="n">תקציב</th><th class="n">סטייה</th>':''}</tr></thead>
+      <tbody>${rows.map(r=>`<tr class="${r.type}"><td class="first">${r.name}</td>${months.map(m=>cell(r,r.vals[m])).join('')}${cell(r,r.total)}
+        ${withB? (r.type==='pct' ? cell(r,r.budget)+'<td></td>' : cell(r,r.budget) + `<td class="n">${r.budget==null?'':`<span class="pill ${r.favor>=0?'good':'bad'}"><span class="num">${money(r.favor)}</span></span>`}</td>`) : ''}</tr>`).join('')}</tbody>
+    </table></div>
+    <p class="hint">סטייה חיובית (ירוק) = טוב מהתקציב: הכנסה גבוהה יותר או הוצאה נמוכה יותר.</p>
+  </section>`;
+}
+
+/* ============================================================ תקציב מול ביצוע */
+function renderBva(v){
+  const months = range();
+  if(state.ui.dept){ v.innerHTML = `<div class="panel empty">התקציב מוגדר ברמת הארגון. יש לבחור "כל הארגון" בסינון המחלקה.</div>`; return; }
+  if(!hasBudget(state.ui.year)){ v.innerHTML = `<div class="panel empty">עדיין לא הוזן תקציב לשנת ${state.ui.year}. אפשר להזין או לייבא אותו בלשונית <button class="btn" type="button" data-goto="budget">הזנת תקציב</button></div>`; return; }
+  const res = compute(months, '');
+  const rows = pnlRows(res, months, true).filter(r=>r.type!=='pct' && r.budget!=null);
+  const maxAbs = Math.max(1,...rows.map(r=>Math.abs(r.favor)));
+  const status = r => { const p = r.budget? r.favor/Math.abs(r.budget):0;
+    if(Math.abs(p)<0.02) return '<span class="pill info">● בתקציב</span>';
+    return r.favor>0 ? '<span class="pill good">▲ טוב מהתקציב</span>' : `<span class="pill ${p<-0.08?'bad':'warn'}">▼ ${r.type==='line'&&LINE[r.id].kind==='income'?'מתחת ליעד':r.type!=='line'?'מתחת ליעד':'חריגה'}</span>`; };
+  const bar = f => { const w = Math.round(Math.abs(f)/maxAbs*58);
+    return `<div class="vbar" aria-hidden="true"><div class="half l">${f<0?`<span style="width:${w}px;background:var(--bad);border-radius:4px 0 0 4px"></span>`:''}</div><div class="axis"></div><div class="half">${f>0?`<span style="width:${w}px;background:var(--good);border-radius:0 4px 4px 0"></span>`:''}</div></div>`; };
+  const netA = months.map(m=>LINES.filter(l=>l.id!=='ign').reduce((a,l)=>a+res[l.id][m],0));
+  const netB = months.map(m=>['rev','cos','pay','ops','adm','fin','oth'].reduce((a,id)=>a+budgetContrib(id,m),0));
+  v.innerHTML = `<div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>ביצוע מול תקציב לפי סעיף</h2><span class="small muted">${MONTHS[state.ui.from-1]}–${MONTHS[state.ui.to-1]} ${state.ui.year}</span></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th class="first">סעיף</th><th class="n">ביצוע</th><th class="n">תקציב</th><th class="n">סטייה ₪</th><th class="n">סטייה %</th><th>השפעה על הרווח</th><th>סטטוס</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr class="${r.type==='line'?'':r.type}"><td class="first">${r.name}</td><td class="n">${money(r.total)}</td><td class="n">${money(r.budget)}</td>
+          <td class="n">${money(r.total-r.budget)}</td><td class="n">${r.budget?pct((r.total-r.budget)/Math.abs(r.budget)):'—'}</td><td>${bar(r.favor)}</td><td>${status(r)}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>רווח נקי חודשי: ביצוע מול תקציב</h2></div>
+      <div class="legend"><span><i style="background:var(--s1)"></i>ביצוע</span><span><i class="line" style="background:var(--muted)"></i>תקציב</span></div>
+      <div class="chart-box"><canvas id="ch-bva" aria-label="רווח נקי חודשי מול תקציב"></canvas></div>
+    </section>
+  </div>`;
+  drawChart('bva','ch-bva',{type:'bar', data:{labels:months.map(ymLabel), datasets:[
+    {label:'ביצוע', data:netA, backgroundColor:cv('--s1'), borderRadius:4, maxBarThickness:28, order:2},
+    {label:'תקציב', type:'line', data:netB, borderColor:cv('--muted'), borderDash:[5,4], borderWidth:2, pointRadius:3, pointBackgroundColor:cv('--muted'), order:1},
+  ]}});
+}
+
+/* ============================================================ מקורות נתונים */
+function renderSources(v){
+  const dups = findDuplicates();
+  v.innerHTML = `<div class="stack">
+    <label class="drop" id="drop" for="file-in">
+      <strong>גררו לכאן קבצי ייצוא (Excel או CSV)</strong>
+      <span class="muted small">ERP, בנק, שכר, CRM או כל גיליון אחר. אפשר כמה קבצים בבת אחת. הקבצים נקראים בדפדפן ולא נשלחים לשום שרת.</span>
+      <input type="file" id="file-in" accept=".xlsx,.xls,.xlsm,.csv,.txt,.tsv" multiple hidden>
+    </label>
+    <div id="editor-slot">${editor?editorHtml():''}</div>
+    ${state.sources.length ? `<div class="sources">${state.sources.map(srcCard).join('')}</div>` : `<div class="panel empty">עדיין לא נטענו מקורות. <button class="btn" type="button" id="btn-demo">טעינת נתוני דוגמה</button></div>`}
+    ${dups.length?`<section class="panel"><div class="panel-head"><h2>חשד לכפילויות בין מערכות</h2><span class="small muted">אותו סכום בשני מקורות שנכללים בדוח, בהפרש של עד 3 ימים</span></div>
+      <div class="tbl-wrap"><table><thead><tr><th>סכום</th><th>מקור א׳</th><th>תאריך</th><th>תיאור</th><th>מקור ב׳</th><th>תאריך</th><th>תיאור</th></tr></thead><tbody>
+      ${dups.slice(0,50).map(([a,b])=>`<tr><td class="n">${money(a.amount)}</td><td>${esc(srcName(a.src))}</td><td class="num">${a.d}/${a.m}/${a.y}</td><td>${esc(a.desc||a.account)}</td><td>${esc(srcName(b.src))}</td><td class="num">${b.d}/${b.m}/${b.y}</td><td>${esc(b.desc||b.account)}</td></tr>`).join('')}
+      </tbody></table></div><p class="hint">אם זו אכן אותה הוצאה, אפשר לסמן את הסעיף באחד המקורות כ"לא לכלול בדוח" בלשונית מיפוי סעיפים.</p></section>`:''}
+    ${state.sources.length?`<div><button class="btn danger" type="button" id="btn-wipe">מחיקת כל הנתונים</button></div>`:''}
+  </div>`;
+}
+const srcName = id => (state.sources.find(s=>s.id===id)||{}).name||'';
+function srcCard(s){
+  return `<article class="src">
+    <div class="row"><h3>${esc(s.name)}</h3><span class="chip">${SOURCE_TYPES[s.type]}</span></div>
+    <dl>
+      <dt>קובץ</dt><dd>${esc(s.fileName)}</dd>
+      <dt>תנועות</dt><dd class="num">${nf0.format(s._count||0)}${s._skipped?` <span class="muted">(${s._skipped} שורות דולגו)</span>`:''}</dd>
+      <dt>תקופה</dt><dd class="num">${s._range?`${ymLabel(s._range[0])} – ${ymLabel(s._range[1])}`:'—'}</dd>
+    </dl>
+    <label class="switch"><input type="checkbox" data-inpnl="${s.id}" ${s.inPnl?'checked':''}> נכלל בדוח רווח והפסד</label>
+    ${s.type==='bank' && !s.inPnl?'<p class="hint" style="margin:0">תנועות בנק בדרך כלל כבר רשומות ב-ERP, ולכן אינן נכללות כברירת מחדל כדי למנוע ספירה כפולה.</p>':''}
+    <div class="row" style="justify-content:flex-start"><button class="btn" type="button" data-edit="${s.id}">הגדרות עמודות</button><button class="btn danger" type="button" data-del="${s.id}">הסרה</button></div>
+  </article>`;
+}
+function editorHtml(){
+  const e = editor, aoa = e.aoa, headers = (aoa[e.headerRow]||[]).map((h,i)=>String(h).trim()||`עמודה ${i+1}`);
+  const opt = (key) => `<option value="">—</option>` + headers.map((h,i)=>`<option value="${i}" ${e.map[key]===i?'selected':''}>${esc(h)}</option>`).join('');
+  const {tx, skipped} = normalizeSource(e);
+  const preview = tx.slice(0,6);
+  return `<section class="editor">
+    <div class="panel-head"><h2>${e.isNew?'מקור חדש':'עריכת מקור'}: ${esc(e.fileName)}</h2><span class="small muted">המערכת זיהתה את העמודות אוטומטית. כדאי לבדוק את התצוגה המקדימה.</span></div>
+    <div class="form-grid">
+      <label class="field">שם המקור<input type="text" id="ed-name" value="${esc(e.name)}"></label>
+      <label class="field">סוג מערכת<select id="ed-type">${Object.entries(SOURCE_TYPES).map(([k,n])=>`<option value="${k}" ${e.type===k?'selected':''}>${n}</option>`).join('')}</select></label>
+      ${e.sheets && Object.keys(e.sheets).length>1?`<label class="field">גיליון<select id="ed-sheet">${Object.keys(e.sheets).map(n=>`<option ${n===e.sheet?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`:''}
+      <label class="field">שורת כותרות<input type="number" id="ed-header" min="1" max="${aoa.length}" value="${e.headerRow+1}"></label>
+      <label class="field">אופן קריאת הסכום<select id="ed-mode">${Object.entries(AMOUNT_MODES).map(([k,n])=>`<option value="${k}" ${e.amountMode===k?'selected':''}>${n}</option>`).join('')}</select></label>
+    </div>
+    <div class="form-grid">
+      ${FIELDS.filter(([k])=> e.amountMode==='dc' ? k!=='amount' : (k!=='debit'&&k!=='credit')).map(([k,label])=>`<label class="field">${label}<select data-map="${k}">${opt(k)}</select></label>`).join('')}
+    </div>
+    <label class="switch"><input type="checkbox" id="ed-inpnl" ${e.inPnl?'checked':''}> לכלול בדוח רווח והפסד</label>
+    <h3 style="margin-top:16px">תצוגה מקדימה <span class="muted small">(${nf0.format(tx.length)} תנועות תקינות${skipped?`, ${skipped} שורות ללא תאריך או סכום ידולגו`:''})</span></h3>
+    <div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>תאריך</th><th class="n">סכום</th><th>חשבון / סעיף</th><th>תיאור</th><th>מחלקה</th><th>סיווג משוער</th></tr></thead>
+      <tbody>${preview.length?preview.map(t=>`<tr><td class="num">${t.d}/${t.m}/${t.y}</td><td class="n">${money(t.amount)}</td><td>${esc(t.account)}</td><td>${esc(t.desc)}</td><td>${esc(t.dept)}</td><td>${LINE[guessLine(e,t.key)].name}</td></tr>`).join(''):'<tr><td colspan="6" class="muted">לא נמצאו שורות תקינות. יש לבדוק את שורת הכותרות ואת עמודות התאריך והסכום.</td></tr>'}</tbody></table></div>
+    <div class="actions" style="margin-top:14px"><button class="btn primary" type="button" id="ed-save" ${tx.length?'':'disabled'}>שמירת המקור</button><button class="btn" type="button" id="ed-cancel">ביטול</button></div>
+  </section>`;
+}
+function openEditor(fileName, sheets){
+  const sheet = Object.keys(sheets)[0]; const aoa = sheets[sheet];
+  const headerRow = detectHeader(aoa); const headers = aoa[headerRow].map(String);
+  const map = autoMap(headers); const type = guessType(fileName, headers);
+  editor = {isNew:true, id:uid(), fileName, sheets, sheet, aoa, headerRow, map, type, name: fileName.replace(/\.[^.]+$/,''),
+            inPnl: type!=='bank', amountMode: map.debit!=null && map.credit!=null ? 'dc' : type==='payroll' ? 'expense' : type==='sales' ? 'income' : 'signed'};
+}
+function refreshEditor(){ $('#editor-slot').innerHTML = editor?editorHtml():''; }
+async function handleFiles(files){
+  for(const f of files){
+    try{
+      const sheets = await readFile(f);
+      if(!Object.keys(sheets).length){ toast(`הקובץ ${f.name} ריק`); continue; }
+      if(editor){ pendingFiles.push([f.name, sheets]); continue; }
+      openEditor(f.name, sheets);
+    }catch(err){ toast(`לא הצלחנו לקרוא את ${f.name}. יש לשמור אותו כ-xlsx או csv ולנסות שוב.`); }
+  }
+  state.ui.tab='sources'; render();
+  $('#editor-slot')?.scrollIntoView({behavior:'smooth', block:'start'});
+}
+const pendingFiles = [];
+
+/* ============================================================ מיפוי סעיפים */
+let mapFilter = {unk:false, q:''};
+function renderMap(v){
+  const groups = new Map();
+  for(const t of allTx()){
+    const k = t.src+'::'+t.key; const g = groups.get(k) || {k, src:t.src, key:t.key, n:0, total:0, line:t.line, inPnl:t.inPnl};
+    g.n++; g.total+=t.amount; groups.set(k,g);
+  }
+  let list = [...groups.values()].sort((a,b)=>Math.abs(b.total)-Math.abs(a.total));
+  if(mapFilter.unk) list = list.filter(g=>g.line==='unk');
+  if(mapFilter.q) list = list.filter(g=>norm(g.key).includes(norm(mapFilter.q)) || norm(srcName(g.src)).includes(norm(mapFilter.q)));
+  v.innerHTML = `<section class="panel">
+    <div class="panel-head"><h2>מיפוי חשבונות וסעיפים לדוח</h2><span class="small muted">כל חשבון או תיאור מכל מערכת משויך לשורה בדוח. הסיווג האוטומטי מבוסס על מילות מפתח, ואפשר לשנות אותו כאן.</span></div>
+    <div class="filters" style="margin-top:0">
+      <label>חיפוש <input type="text" id="map-q" value="${esc(mapFilter.q)}" placeholder="שם חשבון או מקור"></label>
+      <label class="switch"><input type="checkbox" id="map-unk" ${mapFilter.unk?'checked':''}> רק לא מסווגים</label>
+    </div>
+    ${list.length?`<div class="tbl-wrap"><table><thead><tr><th>מקור</th><th>חשבון / תיאור</th><th class="n">תנועות</th><th class="n">סכום נטו</th><th>שורה בדוח</th></tr></thead><tbody>
+      ${list.slice(0,400).map(g=>`<tr${g.inPnl?'':' class="muted"'}><td>${esc(srcName(g.src))}${g.inPnl?'':' <span class="chip">לא בדוח</span>'}</td><td>${esc(g.key)}</td><td class="n">${g.n}</td><td class="n">${money(g.total)}</td>
+        <td><select data-line="${esc(g.k)}">${(g.line==='unk'?[LINE.unk,...PICKABLE]:PICKABLE).map(l=>`<option value="${l.id}" ${g.line===l.id?'selected':''}>${l.name}</option>`).join('')}</select>${state.lineMap[g.k]?' <span class="chip">ידני</span>':''}</td></tr>`).join('')}
+    </tbody></table></div>${list.length>400?`<p class="hint">מוצגות 400 השורות הגדולות. אפשר לצמצם בעזרת החיפוש.</p>`:''}`:`<div class="empty">${allTx().length?'אין סעיפים שתואמים את הסינון.':'עדיין לא נטענו נתונים.'}</div>`}
+  </section>`;
+}
+
+/* ============================================================ תקציב */
+function renderBudget(v){
+  const y = String(state.ui.year);
+  const b = state.budget[y] || {};
+  const lines = LINES.filter(l=>l.budget);
+  const tot = id => (b[id]||[]).reduce((a,x)=>a+(+x||0),0);
+  v.innerHTML = `<div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>תקציב ${y}</h2>
+        <div class="actions"><label class="small muted">שנה <select id="b-year">${years().concat([+y+1]).filter((x,i,a)=>a.indexOf(x)===i).sort((a,b)=>b-a).map(x=>`<option ${String(x)===y?'selected':''}>${x}</option>`).join('')}</select></label>
+        <label class="btn" for="b-file">ייבוא מאקסל</label><input type="file" id="b-file" accept=".xlsx,.xls,.csv" hidden>
+        <button class="btn" type="button" id="b-template">הורדת תבנית</button></div></div>
+      <p class="hint" style="margin-top:0">סכומים חודשיים בש״ח. הוצאות מוזנות כמספר חיובי. בקובץ ייבוא: עמודה ראשונה עם שם הסעיף ועמודה לכל חודש (ינואר, 01/${y} וכו׳).</p>
+      <div class="tbl-wrap budget-table"><table><thead><tr><th class="first">סעיף</th>${MSHORT.map(m=>`<th class="n">${m}</th>`).join('')}<th class="n">סה״כ שנתי</th><th></th></tr></thead><tbody>
+      ${lines.map(l=>`<tr><td class="first">${l.name}</td>${MSHORT.map((_,i)=>`<td class="n"><input type="text" inputmode="decimal" id="b-${l.id}-${i}" data-b="${l.id}" data-i="${i}" value="${b[l.id]&&+b[l.id][i]?nf0.format(b[l.id][i]):''}" aria-label="${l.name} ${MONTHS[i]}"></td>`).join('')}
+        <td class="n" data-tot="${l.id}">${money(tot(l.id))}</td><td><button class="btn ghost small" type="button" data-fill="${l.id}" title="העתקת ינואר לכל החודשים">מילוי שנתי</button></td></tr>`).join('')}
+      </tbody></table></div>
+    </section>
+  </div>`;
+}
+function monthFromHeader(h){
+  if(h==null || h==='') return null;
+  const s = norm(h);
+  const i = MONTHS.findIndex(n=>s.startsWith(n.slice(0,3)));
+  if(i>=0) return i+1;
+  const en = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].findIndex(n=>s.startsWith(n));
+  if(en>=0) return en+1;
+  const d = parseDate(h); if(validDate(d)) return d[1];
+  if(/^\d{1,2}$/.test(s) && +s>=1 && +s<=12) return +s;
+  return null;
+}
+async function importBudget(file){
+  const sheets = await readFile(file); const aoa = Object.values(sheets)[0]||[];
+  let hr=-1, cols=null;
+  for(let i=0;i<Math.min(15,aoa.length);i++){
+    const c = aoa[i].map(monthFromHeader); if(c.filter(Boolean).length>=3){ hr=i; cols=c; break; }
+  }
+  if(hr<0){ toast('לא נמצאה שורת כותרות עם חודשים בקובץ התקציב'); return; }
+  const y = String(state.ui.year); const b = {}; let matched=0, unmatched=[];
+  const nameCol = aoa[hr].findIndex((_,i)=>!cols[i]);
+  for(const r of aoa.slice(hr+1)){
+    const name = String(r[nameCol]??'').trim(); if(!name) continue;
+    if(/סה"כ|סה״כ|רווח|total/i.test(name)) continue;
+    const exact = LINES.find(l=>norm(l.name)===norm(name)) || LINES.filter(l=>norm(name).startsWith(norm(l.name).split(' (')[0])).sort((a,b)=>b.name.length-a.name.length)[0];
+    const line = exact ? exact.id : guessLine({type:'other'}, name);
+    if(!LINE[line].budget){ unmatched.push(name); continue; }
+    b[line] ||= Array(12).fill(0);
+    cols.forEach((m,i)=>{ if(m){ const n=parseNum(r[i]); if(n) b[line][m-1]+=Math.abs(n); } });
+    matched++;
+  }
+  state.budget[y] = b; dirty(); render();
+  toast(`יובאו ${matched} שורות תקציב${unmatched.length?`. לא זוהו: ${unmatched.slice(0,3).join(', ')}`:''}`);
+}
+
+/* ============================================================ גרפים */
+const cv = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+function drawChart(key, id, cfg){
+  const el = document.getElementById(id); if(!el || !window.Chart) return;
+  cfg.options = {
+    responsive:true, maintainAspectRatio:false, animation:false,
+    interaction:{mode:'index', intersect:false},
+    plugins:{legend:{display:false}, tooltip:{rtl:true, textDirection:'rtl', backgroundColor:cv('--ink'), titleColor:cv('--bg'), bodyColor:cv('--bg'),
+      padding:10, boxPadding:4, callbacks:{label:c=>` ${c.dataset.label}: ${moneyRaw(c.parsed.y)}`}}},
+    scales:{
+      x:{grid:{display:false}, border:{color:cv('--line')}, ticks:{color:cv('--ink-2'), font:{family:cv('--body')}}},
+      y:{grid:{color:cv('--grid')}, border:{display:false}, ticks:{color:cv('--muted'), font:{family:cv('--body')}, callback:v=>moneyCRaw(v), maxTicksLimit:6}},
+    },
+  };
+  charts[key] = new Chart(el, cfg);
+}
+
+/* ============================================================ ייצוא */
+function reportAoa(){
+  const months = range(), dept = state.ui.dept, withB = !dept && hasBudget(state.ui.year);
+  const rows = pnlRows(compute(months, dept), months, withB);
+  const head = ['סעיף', ...months.map(ymLabel), 'סה"כ', ...(withB?['תקציב','סטייה']:[])];
+  const r2 = r => r.type==='pct' ? v=> isFinite(v)&&v!=null? Math.round(v*1000)/10+'%' : '' : v=> v==null?'':Math.round(v);
+  return [head, ...rows.map(r=>{ const f=r2(r); return [r.name, ...months.map(m=>f(r.vals[m])), f(r.total), ...(withB?[f(r.budget), r.type==='pct'?'':Math.round(r.favor)]:[])]; })];
+}
+function exportXlsx(){
+  if(!allTx().length){ toast('אין נתונים לייצוא'); return; }
+  try{
+    const wb = XLSX.utils.book_new();
+    const p = XLSX.utils.aoa_to_sheet(reportAoa()); p['!cols']=[{wch:34}];
+    XLSX.utils.book_append_sheet(wb, p, 'רווח והפסד');
+    const tx = allTx().map(t=>({'תאריך':`${t.y}-${String(t.m).padStart(2,'0')}-${String(t.d).padStart(2,'0')}`,'מקור':srcName(t.src),'חשבון / סעיף':t.account,'תיאור':t.desc,'מחלקה':t.dept,'סכום':t.amount,'שורה בדוח':LINE[t.line].name,'נכלל בדוח':t.inPnl?'כן':'לא'}));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tx), 'תנועות מאוחדות');
+    wb.Workbook = {Views:[{RTL:true}]};
+    XLSX.writeFile(wb, `דוח-מאוחד-${state.ui.year}.xlsx`);
+    toast('קובץ האקסל נוצר');
+  }catch(e){ toast('הייצוא נחסם בתצוגה הזו. אפשר להשתמש ב"העתקת הדוח" ולהדביק באקסל.'); }
+}
+async function copyReport(){
+  if(!allTx().length){ toast('אין נתונים להעתקה'); return; }
+  const tsv = reportAoa().map(r=>r.join('\t')).join('\n');
+  try{ await navigator.clipboard.writeText(tsv); toast('הדוח הועתק. אפשר להדביק באקסל'); }
+  catch(e){ toast('ההעתקה נחסמה בדפדפן הזה'); }
+}
+function downloadTemplate(){
+  try{
+    const y = state.ui.year;
+    const aoa = [['סעיף', ...MONTHS.map((_,i)=>`${String(i+1).padStart(2,'0')}/${y}`)], ...LINES.filter(l=>l.budget).map(l=>[l.name, ...Array(12).fill('')])];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'תקציב');
+    wb.Workbook = {Views:[{RTL:true}]};
+    XLSX.writeFile(wb, `תבנית-תקציב-${y}.xlsx`);
+  }catch(e){ toast('ההורדה נחסמה בתצוגה הזו'); }
+}
+
+/* ============================================================ נתוני דוגמה */
+function demoData(){
+  let seed = 7; const rnd = () => { seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; };
+  const jit = (v,p=0.04) => Math.round(v*(1+(rnd()*2-1)*p));
+  const d = (m,day) => `${String(day).padStart(2,'0')}/${String(m).padStart(2,'0')}/2026`;
+  const clients = [
+    ['משרדים','מגדל משרדים – רמת החייל',42500,1],['משרדים','קריית המשרדים – פתח תקווה',47000,1],['משרדים','בניין הנהלה – הרצליה פיתוח',32500,1],['משרדים','מתחם היי-טק – נתניה',27000,4],
+    ['מוסדות חינוך','רשת בתי ספר – מחוז מרכז',51500,1],['מוסדות חינוך','קמפוס מכללה אזורית',57000,1],['מוסדות חינוך','גני ילדים עירוניים',43500,1],
+    ['תעשייה','מפעל מזון – אזור תעשייה צפוני',61500,1],['תעשייה','מרלו"ג לוגיסטי – מודיעין',53500,1],
+  ];
+  const summer = (dept,m) => dept!=='מוסדות חינוך' ? 1 : m===7 ? 0.4 : m===8 ? 0.25 : 1;
+  const erp = [['תאריך','אסמכתא','כרטיס חשבון','פרטים','מחלקה','חובה','זכות']];
+  let ref = 10400;
+  for(let m=1;m<=8;m++){
+    const deptRev = {};
+    for(const [dept,name,amt,start] of clients){ if(m<start) continue; const v=jit(amt*summer(dept,m),0.03); deptRev[dept]=(deptRev[dept]||0)+v; erp.push([d(m,28),ref++,'הכנסות משירותי ניקיון',name,dept,'',v]); }
+    for(const [dept,v] of Object.entries(deptRev)) erp.push([d(m,12),ref++,'חומרי ניקוי',`ספק חומרים – ${dept}`,dept,jit(v*0.055,0.12),'']);
+    if(m%2===0) erp.push([d(m,18),ref++,'קבלני משנה','ניקוי חלונות בגובה – קבלן משנה','תעשייה',jit(9800,0.2),'']);
+    if(m===6) erp.push([d(m,15),ref++,'קבלני משנה','ניקוי יסודי חירום – מפעל מזון','תעשייה',16400,'']);
+    erp.push([d(m,1),ref++,'שכירות משרד ומחסן','שכ"ד משרדי הקואופרטיב','מטה',18500,'']);
+    erp.push([d(m,5),ref++,'ביטוח עסק','ביטוח צד ג׳ וחבות מעבידים','מטה',4200,'']);
+    erp.push([d(m,7),ref++,'תוכנה ומנויים','מערכת שיבוץ משמרות + הנהלת חשבונות','מטה',jit(2900,0.05),'']);
+    erp.push([d(m,9),ref++,'טלפון וסלולר','קווים לצוותי שטח','מטה',jit(2400,0.06),'']);
+    erp.push([d(m,20),ref++,'ציוד משרדי','ציוד משרדי וכיבוד','מטה',jit(1500,0.3),'']);
+    if(m%3===0) erp.push([d(m,25),ref++,'שירותי רואה חשבון','ריטיינר רבעוני','מטה',6500,'']);
+    erp.push([d(m,28),ref++,'עמלות בנק','עמלות ניהול חשבון','מטה',jit(520,0.15),'']);
+    erp.push([d(m,15),ref++,'מע"מ לתשלום','דיווח מע"מ דו-חודשי','מטה',m%2===0?jit(52000,0.1):'','']);
+    if(m===5) erp.push([d(m,14),ref++,'תיקון רכב','מוסך – תיקון רכב צוות 7','מוסדות חינוך',3840,'']);
+  }
+  const pay = [['חודש שכר','מחלקה','מספר עובדים','ברוטו','עלות מעביד']];
+  const pbase = {'משרדים':[70000,15],'מוסדות חינוך':[94000,21],'תעשייה':[64000,13],'מטה':[36000,5]};
+  for(let m=1;m<=8;m++) for(const [dept,[cost,n]] of Object.entries(pbase)){
+    let c = cost; if(dept==='משרדים' && m>=4) c+=17500; if(dept==='מוסדות חינוך') c *= m===7?0.66:m===8?0.55:1;
+    if(m===3) c*=1.06; // הבראה
+    const v = jit(c,0.02); pay.push([`${String(m).padStart(2,'0')}/2026`,dept, dept==='משרדים'&&m>=4?n+4:n, Math.round(v/1.24), v]);
+  }
+  const car = [['תאריך','רכב','סוג הוצאה','ספק','סכום','מחלקה']];
+  const cars = [['משרדים',4],['מוסדות חינוך',5],['תעשייה',4],['מטה',1]];
+  for(let m=1;m<=8;m++){
+    for(const [dept,n] of cars){
+      car.push([d(m,3),`${n} רכבים`,'ליסינג','חברת הליסינג',n*2650,dept]);
+      const fuel = n*780*(m>=6?1.22:1)*(dept==='מוסדות חינוך'&&m>=7?0.6:1);
+      car.push([d(m,26),`${n} רכבים`,'דלק','כרטיסי דלק',jit(fuel,0.06),dept]);
+    }
+    if(m===5) car.push([d(m,15),'רכב צוות 7','תיקון רכב','מוסך',3840,'מוסדות חינוך']);
+    if(m===8) car.push([d(m,11),'רכב צוות 2','תיקון רכב','מוסך',6200,'משרדים']);
+  }
+  const bank = [['תאריך','תיאור פעולה','אסמכתא','חובה','זכות','יתרה']];
+  let bal = 412000;
+  for(let m=1;m<=8;m++){
+    const inn = jit(380000*(m>=7?0.8:1),0.05); bal+=inn; bank.push([d(m,10),'תקבולים מלקוחות',9000+m,'',inn,bal]);
+    const sal = jit(255000,0.03); bal-=sal; bank.push([d(m,9),'העברת משכורות',9100+m,sal,'',bal]);
+    const sup = jit(95000,0.08); bal-=sup; bank.push([d(m,16),'תשלום לספקים',9200+m,sup,'',bal]);
+    bal-=520; bank.push([d(m,28),'עמלות',9300+m,520,'',bal]);
+  }
+  const mk = (name,fileName,type,aoa,inPnl,amountMode) => { const map = autoMap(aoa[0].map(String)); return {id:uid(), name, fileName, type, aoa, headerRow:0, map, inPnl, amountMode}; };
+  state.sources = [
+    mk('הנהלת חשבונות (ERP)','כרטסת-2026.xlsx','erp',erp,true,'dc'),
+    mk('מערכת שכר','עלות-שכר-2026.xlsx','payroll',pay,true,'expense'),
+    mk('גיליון רכבים ודלק','רכבים-ודלק.xlsx','other',car,true,'expense'),
+    mk('חשבון בנק עסקי','תנועות-בנק.csv','bank',bank,false,'dc'),
+  ];
+  // בגיליון השכר העמודה "עלות מעביד" היא הסכום
+  state.sources[1].map.amount = 4;
+  state.budget = {'2026': {
+    rev: [400000,400000,400000,420000,420000,420000,360000,340000,420000,420000,420000,420000],
+    cos: Array(12).fill(26000),
+    pay: [262000,262000,278000,280000,280000,280000,250000,238000,280000,280000,280000,280000],
+    ops: Array(12).fill(66000),
+    adm: Array(12).fill(13000),
+    fin: Array(12).fill(600),
+    oth: Array(12).fill(0),
+  }};
+  state.lineMap = {}; state.demo = true; state.ui = {tab:'dash', year:2026, from:1, to:8, dept:''};
+  dirty();
+}
+function emptyState(){
+  return `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין אין נתונים בדוח</h2><p>יש להעלות קבצי ייצוא בלשונית "מקורות נתונים", או לטעון נתוני דוגמה כדי לראות איך זה עובד.</p>
+    <div class="actions" style="justify-content:center"><button class="btn primary" type="button" data-goto="sources">העלאת קבצים</button><button class="btn" type="button" id="btn-demo">טעינת נתוני דוגמה</button></div></div>`;
+}
+
+/* ============================================================ אירועים */
+document.addEventListener('click', e=>{
+  const t = e.target.closest('button'); if(!t) return;
+  if(t.dataset.tab){ state.ui.tab=t.dataset.tab; save(); render(); return; }
+  if(t.dataset.goto){ state.ui.tab=t.dataset.goto; save(); render(); return; }
+  if(t.id==='btn-demo'){ demoData(); render(); toast('נטענו נתוני דוגמה'); return; }
+  if(t.id==='btn-clear-demo' || t.id==='btn-wipe'){
+    if(t.id==='btn-wipe' && !t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לחיצה נוספת תמחק את כל המקורות, המיפוי והתקציב'; return; }
+    state.sources=[]; state.lineMap={}; state.budget={}; state.demo=false; state.ui.year=null; editor=null; dirty(); render(); toast('הנתונים נמחקו'); return;
+  }
+  if(t.id==='btn-export') return exportXlsx();
+  if(t.id==='btn-copy') return copyReport();
+  if(t.id==='b-template') return downloadTemplate();
+  if(t.dataset.edit){ const s = state.sources.find(x=>x.id===t.dataset.edit); editor = Object.assign(JSON.parse(JSON.stringify(s)), {isNew:false}); refreshEditor(); $('#editor-slot').scrollIntoView({behavior:'smooth'}); return; }
+  if(t.dataset.del){
+    if(!t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לאשר הסרה'; return; }
+    const id=t.dataset.del; state.sources = state.sources.filter(s=>s.id!==id);
+    for(const k of Object.keys(state.lineMap)) if(k.startsWith(id+'::')) delete state.lineMap[k];
+    if(!state.sources.length) state.demo=false;
+    dirty(); render(); return;
+  }
+  if(t.id==='ed-save'){
+    const {isNew, sheets, sheet, ...src} = editor;
+    const i = state.sources.findIndex(s=>s.id===src.id);
+    if(i>=0) state.sources[i]=src; else state.sources.push(src);
+    if(state.demo && isNew){ state.demo=false; }
+    editor=null; dirty(); state.ui.year=null;
+    const next = pendingFiles.shift(); if(next) openEditor(...next);
+    render(); toast(`המקור "${src.name}" נשמר`); return;
+  }
+  if(t.id==='ed-cancel'){ editor=null; const next=pendingFiles.shift(); if(next) openEditor(...next); render(); return; }
+  if(t.dataset.fill){
+    const y=String(state.ui.year), id=t.dataset.fill; const b = state.budget[y] ||= {}; const arr = b[id] ||= Array(12).fill(0);
+    b[id] = Array(12).fill(arr[0]||0); dirty(); render(); return;
+  }
+});
+document.addEventListener('change', async e=>{
+  const t = e.target;
+  if(t.id==='f-year'){ state.ui.year=+t.value; const lm=lastDataMonth(state.ui.year); state.ui.from=1; state.ui.to=lm||12; save(); render(); }
+  else if(t.id==='f-from'){ state.ui.from=+t.value; if(state.ui.to<state.ui.from) state.ui.to=state.ui.from; save(); render(); }
+  else if(t.id==='f-to'){ state.ui.to=+t.value; if(state.ui.from>state.ui.to) state.ui.from=state.ui.to; save(); render(); }
+  else if(t.id==='f-dept'){ state.ui.dept=t.value; save(); render(); }
+  else if(t.id==='file-in'){ const f=[...t.files]; t.value=''; await handleFiles(f); }
+  else if(t.dataset.inpnl){ const s=state.sources.find(x=>x.id===t.dataset.inpnl); s.inPnl=t.checked; dirty(); render(); }
+  else if(t.dataset.line){ state.lineMap[t.dataset.line]=t.value; dirty(); render(); }
+  else if(t.id==='map-unk'){ mapFilter.unk=t.checked; render(); }
+  else if(t.id==='b-year'){ state.ui.year=+t.value; save(); render(); }
+  else if(t.id==='b-file' && t.files[0]){ const f=t.files[0]; t.value=''; try{ await importBudget(f); }catch(err){ toast('לא הצלחנו לקרוא את קובץ התקציב'); } }
+  else if(t.dataset.b){
+    const y=String(state.ui.year); const b = state.budget[y] ||= {}; const arr = b[t.dataset.b] ||= Array(12).fill(0);
+    arr[+t.dataset.i] = Math.abs(parseNum(t.value)||0); t.value = arr[+t.dataset.i]?nf0.format(arr[+t.dataset.i]):'';
+    document.querySelector(`[data-tot="${t.dataset.b}"]`).textContent = money(arr.reduce((a,x)=>a+(+x||0),0)); dirty();
+  }
+  else if(editor && t.closest('.editor')){
+    if(t.id==='ed-sheet'){ editor.sheet=t.value; editor.aoa=editor.sheets[t.value]; editor.headerRow=detectHeader(editor.aoa); editor.map=autoMap(editor.aoa[editor.headerRow].map(String)); }
+    else if(t.id==='ed-header'){ editor.headerRow=Math.max(0,Math.min(editor.aoa.length-1,(+t.value||1)-1)); editor.map=autoMap(editor.aoa[editor.headerRow].map(String)); }
+    else if(t.id==='ed-mode') editor.amountMode=t.value;
+    else if(t.id==='ed-type') editor.type=t.value;
+    else if(t.id==='ed-inpnl') editor.inPnl=t.checked;
+    else if(t.id==='ed-name') editor.name=t.value.trim()||editor.name;
+    else if(t.dataset.map) editor.map[t.dataset.map] = t.value===''?undefined:+t.value;
+    refreshEditor();
+  }
+});
+document.addEventListener('input', e=>{
+  if(e.target.id==='map-q'){ mapFilter.q=e.target.value; const pos=e.target.selectionStart; render(); const q=$('#map-q'); q.focus(); q.setSelectionRange(pos,pos); }
+});
+document.addEventListener('dragover', e=>{ const d=e.target.closest?.('#drop'); if(d){ e.preventDefault(); d.classList.add('over'); } });
+document.addEventListener('dragleave', e=>{ const d=e.target.closest?.('#drop'); if(d) d.classList.remove('over'); });
+document.addEventListener('drop', e=>{ const d=e.target.closest?.('#drop'); if(d){ e.preventDefault(); d.classList.remove('over'); handleFiles([...e.dataTransfer.files]); } });
+// ציור מחדש של הגרפים כשערכת הצבעים משתנה
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', ()=>render());
+new MutationObserver(()=>render()).observe(document.documentElement,{attributes:true, attributeFilter:['data-theme']});
+
+/* ============================================================ הפעלה */
+if(!window.XLSX || !window.Chart) document.getElementById('view').innerHTML = '<div class="panel empty">לא הצלחנו לטעון את רכיבי הקריאה והגרפים. יש לבדוק את החיבור לאינטרנט ולרענן.</div>';
+if(!load() || !state.sources.length) demoData();
+render();
+</script>
