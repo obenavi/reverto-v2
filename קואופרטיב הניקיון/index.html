@@ -188,6 +188,7 @@ let mapping = {groups:[], overheadSites:[]};
 let months = {};                 // ym -> doc
 let plans = {};                  // settings/plan: תכנית עסקית לכל סניף (branch -> plan, מגיליון רווח והפסד)
 let manual = {};                 // settings/manual: עלויות ידניות בפועל (branch -> ym -> line -> ₪), תשלומים ישירים לספקים
+let priv = {};                   // אזור פרטי של הצופה (data/users/<id>): wages = שכר שעתי לפי עובד, staff-YYYY-MM = שעות ועלות לפי עובד ואתר
 const loadPlans = d => !d ? {} : d.plans ? d.plans : d.months ? {[d.branch||'']: d} : {};
 const loadManual = d => !d ? {} : d.byBranch ? d.byBranch : {};
 let ui = {tab:'overview', ym:null, pmode:'month', branch:'', q:'', sort:['gp','asc'], open:null, client:null, target:15, planBranch:null};
@@ -226,19 +227,29 @@ function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; cle
 /* ============================================================ אחסון
    בעמוד שפורסם: מאגר משותף (db). בפתיחה מקומית של הקובץ: אחסון הדפדפן. */
 const store = {
-  db:null, mode:'local',
+  db:null, mode:'local', uid:null,
   async init(){
     if(window.claude?.use){ try{ this.db = await window.claude.use('db'); }catch(e){ this.db=null; } }
     this.mode = this.db ? 'db' : 'local';
     if(this.db){
+      // נתוני עובדים (שמות ושכר) נשמרים רק באזור הפרטי של הצופה, שאף אחד אחר לא רואה
+      try{ const u = await window.claude.use('user'); this.uid = (await u?.id()) || null; }catch(e){ this.uid = null; }
+      if(this.uid) this.db.collection('data/users/'+this.uid).onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=d.data()); priv=m; render(); }, e=>this.fail(e));
       this.db.doc('settings/mapping').onSnapshot(s=>{ if(s.exists){ mapping = normalizeMapping(s.data()); render(); } }, e=>this.fail(e));
       this.db.collection('months').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=d.data()); months=m; render(); }, e=>this.fail(e));
       this.db.doc('settings/plan').onSnapshot(s=>{ plans = loadPlans(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/manual').onSnapshot(s=>{ manual = loadManual(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
     } else {
       try{ mapping = normalizeMapping(JSON.parse(localStorage.getItem('coop-mapping')||'null')||{}); months = JSON.parse(localStorage.getItem('coop-months')||'{}');
-           plans = loadPlans(JSON.parse(localStorage.getItem('coop-plan')||'null')); manual = loadManual(JSON.parse(localStorage.getItem('coop-manual')||'null')); }catch(e){}
+           plans = loadPlans(JSON.parse(localStorage.getItem('coop-plan')||'null')); manual = loadManual(JSON.parse(localStorage.getItem('coop-manual')||'null'));
+           priv = JSON.parse(localStorage.getItem('coop-private')||'{}'); }catch(e){}
     }
+  },
+  get hasPrivate(){ return this.mode==='local' || !!this.uid; },
+  async savePrivate(id, doc){
+    priv = {...priv, [id]:doc};
+    if(this.db){ if(!this.uid) throw new Error('אין אזור פרטי בתצוגה הזו'); await this.db.doc(`data/users/${this.uid}/${id}`).set(JSON.parse(JSON.stringify(doc))); }
+    else try{ localStorage.setItem('coop-private', JSON.stringify(priv)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
   fail(e){ if(e?.code!=='revoked') toast('החיבור לנתונים המשותפים נכשל. יש לרענן את הדף.'); },
   async saveMapping(){
@@ -303,6 +314,7 @@ function detectType(wb){
     const rateCell = c => normName(c)==='' || num(c)!=null || /פיקס|קבוע/.test(normName(c));
     if(rows.length>=3 && rows.filter(r=>/\(\d+\)\s*$/.test(normName(r[0]))).length>=rows.length*0.8 && rows.every(r=>r.slice(1).every(rateCell))) return 'rates';
     if(flat.some(c=>c.includes('לפני מע"מ')) && flat.includes('לקוח')) return 'revenue';
+    if(flat.includes('מספר עובד') && flat.includes('תעריף שעה')) return 'wages';
     if(flat.some(c=>c==='עלות מעביד'||c==='עלות עובד')) return 'payroll';
     if(flat.includes('סה"כ שעות') && flat.includes('משימה')) return 'hours';
   }
@@ -415,13 +427,14 @@ function parseHours(wb, fileName){
   const hi = findHeader(aoa, r=>r.includes('משימה') && r.includes('סה"כ שעות'));
   const H = aoa[hi].map(normName); const col = n => H.indexOf(n);
   const iDate=col('תאריך'), iEmp=col("מס' עובד"), iBr=col('סניף'), iCl=col('לקוח'), iTask=col('משימה'), iOut=col('שעת יציאה'), iH=col('סה"כ שעות'), iPrice=col('סה"כ מחיר');
-  const sites = {}; let total=0, footer=null, shifts=0; const flags={zero:0, long:0, noexit:0}; const yms=[];
+  const sites = {}, staff = {}; let total=0, footer=null, shifts=0; const flags={zero:0, long:0, noexit:0}; const yms=[];
   for(const r of aoa.slice(hi+1)){
     if(normName(r[iDate])==='סה"כ'){ footer = num(r[iH]); continue; }
     const h = num(r[iH]); if(h==null || !r[iTask]) continue;
     const k = siteKey(r[iTask]);
     const s = sites[k] ||= {name:siteLabel(r[iTask]), branch:normName(r[iBr])||NO_BRANCH, client:normName(r[iCl]), h:0, shifts:0, emps:{}, branches:{}, price:0, pricedH:0};
     const pr = iPrice>=0 ? num(r[iPrice]) : null; if(pr>0){ s.price += pr; s.pricedH += h; }   // תעריף ללקוח שמולא בדוח השעות
+    const e = num(r[iEmp]); if(e!=null){ const st = staff[k] ||= {}; st[e] = (st[e]||0) + h; }
     s.h += h; s.shifts++; s.emps[r[iEmp]]=1; s.branches[normName(r[iBr])||NO_BRANCH]=(s.branches[normName(r[iBr])||NO_BRANCH]||0)+h;
     total += h; shifts++; yms.push(dateYm(r[iDate]));
     if(h<=0) flags.zero++; if(h>12) flags.long++; if(!String(r[iOut]??'').trim()) flags.noexit++;
@@ -433,7 +446,8 @@ function parseHours(wb, fileName){
   }
   const tm = title.match(/לחודש\s+(\d{2})\/(\d{4})/);
   const ym = (tm && ymOf(tm[2],tm[1])) || majority(yms);
-  return {ym, data:{file:fileName, uploadedAt:new Date().toISOString(), sites:out, total:round2(total), footer, shifts, flags, hasPrice:iPrice>=0}};
+  for(const st of Object.values(staff)) for(const e in st) st[e] = round2(st[e]);
+  return {ym, data:{file:fileName, uploadedAt:new Date().toISOString(), sites:out, total:round2(total), footer, shifts, flags, hasPrice:iPrice>=0}, staff};
 }
 
 /* --- דוח שכר ---
@@ -480,7 +494,8 @@ function parsePayroll(wb, fileName){
   // רכיבי השכר שלו (למשל: 50% מעלות המעביד באתר = 50% מהנסיעות שלו לאתר). מספרי עובד ואחוזים בלבד.
   const empShares = {};
   for(const [e,m] of Object.entries(empSites)){ const t = Object.values(m).reduce((a,b)=>a+b,0); if(t>0) empShares[e] = Object.fromEntries(Object.entries(m).map(([k,v])=>[k, Math.round(v/t*1e6)/1e6])); }
-  return {ym: majority(yms), data:{file:fileName, uploadedAt:new Date().toISOString(), sites:out, total:round2(total), gross:round2(Object.values(sites).reduce((a,x)=>a+x.gross,0)), employees:Object.keys(emps).length, employerTotal, employerCount, checkSource, empShares}};
+  const staff = {}; for(const [e,m] of Object.entries(empSites)) for(const [k,v] of Object.entries(m)) (staff[k] ||= {})[e] = round2(v);   // לאזור הפרטי בלבד
+  return {ym: majority(yms), data:{file:fileName, uploadedAt:new Date().toISOString(), sites:out, total:round2(total), gross:round2(Object.values(sites).reduce((a,x)=>a+x.gross,0)), employees:Object.keys(emps).length, employerTotal, employerCount, checkSource, empShares}, staff};
 }
 
 /* --- דוח רכיבי שכר (ברוטו לפי סמל) ---
@@ -1033,7 +1048,7 @@ function renderClients(v){
       <tbody>${list.map(g=>`<tr class="clickable" data-open="${g.id}" aria-expanded="${ui.open===g.id}">
           <td class="first">${esc(g.name)}</td><td>${esc(g.branchList.join(' / '))}</td><td class="n">${money(g.rev)}</td><td class="n">${hrs(g.h)}</td><td class="n">${money(g.cost)}</td><td class="n">${money(g.gp)}</td>
           <td class="n">${marginPill(g.margin, g.rev)}</td><td class="n">${perH(g.revH)}</td><td class="n">${perH(g.costH)}</td><td><span class="pills">${g.flags.map(f=>`<span class="pill ${f[0]}">${f[1]}</span>`).join('')}</span></td></tr>
-          ${ui.open===g.id?detailRow(g):''}`).join('')}
+          ${ui.open===g.id?detailRow(g, per.months):''}`).join('')}
         <tr class="total"><td class="first">סה״כ</td><td></td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td><td class="n">${money(T.rev-T.cost)}</td><td class="n">${pct(T.rev?(T.rev-T.cost)/T.rev:NaN)}</td><td class="n">${perH(T.rev/T.h)}</td><td class="n">${perH(T.cost/T.h)}</td><td></td></tr>
       </tbody></table></div>
   </section>`;
@@ -1050,7 +1065,7 @@ function billNote(g){
   const est = g.estimateSites?.length ? ` <span class="muted">(הערכה: ל${g.estimateSites.map(esc).join(', ')} אין תעריף בטבלה, ונלקח התעריף הממוצע)</span>` : '';
   return `<p class="hint">בדיקת חיוב: ${g.fee?`תעריף × שעות ${money(g.expected-g.fee)} + חיוב קבוע ${money(g.fee)} = ${money(g.expected)}`:`תעריף × שעות = ${money(g.expected)}`}, בחשבונית ${money(rev)}. ${Math.abs(p)<0.01?'<span class="pill good">תואם</span>':`<span class="pill ${Math.abs(p)>0.03?'warn':'info'}">פער ${money(gap)} (${pct(p)})</span>`}${est}</p>`;
 }
-function detailRow(g){
+function detailRow(g, yms){
   const sites = Object.values(g.sites).sort((a,b)=>b.h-a.h);
   return `<tr class="detail"><td colspan="10">
     <div class="stack" style="gap:10px">
@@ -1059,7 +1074,49 @@ function detailRow(g){
       ${sites.length?`<div class="tbl-wrap"><table><thead><tr><th>קוד</th><th>אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">עלות לשעה</th></tr></thead><tbody>
         ${sites.map(s=>`<tr><td class="num">${s.isFee?'—':esc(s.code)}</td><td>${esc(s.name)}</td><td>${esc(s.branch)}</td><td class="n">${nf1.format(s.h)}</td><td class="n">${money(s.cost)}</td><td class="n">${money(s.revShare||0)}${s.fixed?' <span class="muted small">פיקס</span>':s.rate!=null&&g.split==='rate'?` <span class="muted small">${ltr('₪'+s.rate)}</span>`:''}</td><td class="n">${money((s.revShare||0)-s.cost)}</td><td class="n">${marginPill(s.revShare?((s.revShare-s.cost)/s.revShare):NaN, s.revShare)}</td><td class="n">${perH(s.h?s.cost/s.h:NaN)}</td></tr>`).join('')}
       </tbody></table></div>${sites.length>1?splitNote(g):''}${billNote(g)}`:'<p class="muted">אין אתרים משויכים.</p>'}
+      ${g.group?.sites?.length?staffPanel(g.group.sites, yms):''}
     </div></td></tr>`;
+}
+
+/* ---------- עובדים אצל הלקוח (מהאזור הפרטי) ----------
+   שעות לפי עובד מדוח השעות, עלות מעביד לפי עובד מפיצול השכר, ותעריף השעה מקובץ השכר השעתי. */
+function staffAgg(codes, yms){
+  const set = new Set(codes), H = {}, C = {}, missing = [];
+  for(const ym of yms){
+    const S = priv['staff-'+ym];
+    if(!S?.hours){ if(months[ym]?.hours) missing.push(ym); continue; }
+    for(const k of set){ for(const [e,h] of Object.entries(S.hours[k]||{})) H[e]=(H[e]||0)+h; for(const [e,c] of Object.entries(S.cost?.[k]||{})) C[e]=(C[e]||0)+c; }
+  }
+  return {H, C, missing};
+}
+const wageOf = e => { const w = priv.wages?.emps?.[e]; return w && w.r>0 ? w.r : null; };
+const avgRate = H => { let h=0, x=0; for(const [e,v] of Object.entries(H)){ const r = wageOf(e); if(r){ h+=v; x+=v*r; } } return h ? x/h : NaN; };   // משוקלל בשעות
+const orgRate = yms => { const H = {}; yms.forEach(ym=>Object.values(priv['staff-'+ym]?.hours||{}).forEach(m=>Object.entries(m).forEach(([e,h])=>H[e]=(H[e]||0)+h))); return avgRate(H); };
+function seniority(start, ym){
+  if(!start) return '—';
+  const n = (+ym.slice(0,4)-+start.slice(0,4))*12 + (+ym.slice(5)-+start.slice(5));
+  return n<0 ? "—" : n<1 ? "חודש ראשון" : n<12 ? `${ltr(n)} חודשים` : `${ltr(nf1.format(n/12))} שנים`;
+}
+function staffPanel(codes, yms){
+  const head = t => `<div class="panel-head"><h2 style="font-size:15px">עובדים אצל הלקוח</h2><span class="small muted">${t}</span></div>`;
+  if(!store.hasPrivate) return `<div>${head('')}<p class="hint">רשימת העובדים נשמרת באזור פרטי, וזמינה רק למי שמחוברת לחשבון.</p></div>`;
+  const {H, C, missing} = staffAgg(codes, yms);
+  const ids = Object.keys(H).sort((a,b)=>H[b]-H[a]);
+  const miss = missing.length ? `<p class="hint" style="color:var(--warn)">אין פירוט עובדים ל${missing.map(monthName).join(', ')}. כדי להציג אותו יש להעלות מחדש את דוח השעות ואת דוח השכר של ${missing.length>1?'החודשים האלה':'החודש הזה'}.</p>` : '';
+  const noW = !priv.wages ? '<p class="hint">עדיין לא הועלה קובץ שכר שעתי לפי עובד, ולכן אין תעריף שעה. אפשר להעלות אותו בלשונית "קליטת נתונים".</p>' : '';
+  if(!ids.length) return `<div>${head('')}${miss||'<p class="hint">אין שעות עובדים לאתרים של הלקוח בתקופה.</p>'}</div>`;
+  const tH = ids.reduce((a,e)=>a+H[e],0), last = yms[yms.length-1];
+  const cR = avgRate(H), oR = orgRate(yms), tC = ids.reduce((a,e)=>a+(C[e]||0),0);
+  const noRate = ids.filter(e=>!wageOf(e));
+  return `<div>${head(`${ids.length} עובדים · שכר שעתי ממוצע ${perH(cR)} (בארגון ${perH(oR)}), משוקלל בשעות`)}
+    <div class="tbl-wrap" style="max-height:420px;overflow:auto"><table><thead><tr><th>עובד</th><th class="n">מס' עובד</th><th class="n">שעות אצל הלקוח</th><th class="n">חלק משעות הלקוח</th><th class="n">שכר שעתי ברוטו</th><th class="n">מול ממוצע הארגון</th><th>ותק</th><th class="n">עלות מעביד אצל הלקוח</th><th class="n">עלות מעביד לשעה</th></tr></thead><tbody>
+    ${ids.map(e=>{ const w = priv.wages?.emps?.[e], r = wageOf(e), c = C[e];
+      return `<tr><td>${w?esc(w.n):'<span class="muted">לא בקובץ השכר</span>'}</td><td class="n num">${esc(e)}</td><td class="n">${nf1.format(H[e])}</td><td class="n">${pct(H[e]/tH)}</td>
+      <td class="n">${r?perH(r):`<span class="muted small">${w?'בלי תעריף שעה':'—'}</span>`}</td><td class="n">${r&&isFinite(oR)?pct(r/oR-1):'—'}</td><td>${seniority(w?.s, last)}</td>
+      <td class="n">${c!=null?money(c):'—'}</td><td class="n">${c!=null&&H[e]?perH(c/H[e]):'—'}</td></tr>`; }).join('')}
+    <tr class="total"><td>סה״כ</td><td></td><td class="n">${nf1.format(tH)}</td><td class="n">${pct(1)}</td><td class="n">${perH(cR)}</td><td class="n">${isFinite(cR)&&isFinite(oR)?pct(cR/oR-1):'—'}</td><td></td><td class="n">${money(tC)}</td><td class="n">${perH(tH?tC/tH:NaN)}</td></tr>
+    </tbody></table></div>
+    <p class="hint">השעות מדוח השעות והעלות מפיצול השכר, לפי אתרי הלקוח. עלות מעביד לשעה גבוהה מהשכר השעתי בגלל הפרשות, נסיעות ותוספות, וגם כשהשעות בשכר ובנוכחות לא תואמות.${noRate.length?` ל-${noRate.length} עובדים אין תעריף שעה בקובץ (בדרך כלל עובדים בשכר חודשי, או עובדים שלא מופיעים בקובץ), והם לא נכללים בממוצע.`:''} הנתונים נשמרים באזור הפרטי שלך בלבד.</p>${miss}${noW}</div>`;
 }
 
 /* ---------- עלות שעה והתייעלות ---------- */
@@ -1222,6 +1279,7 @@ function renderClient(v){
       <div class="tbl-wrap"><table><thead><tr><th class="first">אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">עלות לשעה</th></tr></thead><tbody>
       ${sites.map(st=>`<tr><td class="first">${esc(st.name)}${st.isFee?'':` <span class="muted small">(${esc(st.code)})</span>`}</td><td>${esc(st.branch)}</td><td class="n">${nf1.format(st.h)}</td><td class="n">${money(st.cost)}</td><td class="n">${money(st.revShare||0)}</td><td class="n">${money((st.revShare||0)-st.cost)}</td><td class="n">${marginPill(st.revShare?((st.revShare-st.cost)/st.revShare):NaN, st.revShare)}</td><td class="n">${perH(st.h?st.cost/st.h:NaN)}</td></tr>`).join('')}
       </tbody></table></div><div style="margin-top:8px">${splitNote(T)}${billNote(T)}</div></section>`:''}
+    ${G.sites.length?`<section class="panel">${staffPanel(G.sites, fullMonths.length ? fullMonths : inYear)}</section>`:''}
   </div>`;
   const labels = rows.map(r=>MONTHS[+r.m.slice(5)-1]);
   const val = k => rows.map(r=>r.absent||r.partial?null:r[k]);
@@ -1295,11 +1353,19 @@ function renderData(v){
   v.innerHTML = `<div class="stack">
     <label class="drop" id="drop" for="file-in">
       <strong>גררו לכאן את שלושת הדוחות החודשיים</strong>
-      <span class="muted small">דוח הכנסות מהנהלת החשבונות · דוח משימות מ-TimeWatch · דוח שכר עם פיצול לפי אתר · אופציונלי: רכיבי שכר, טבלת תעריפים ללקוח, תכנית עסקית. סוג הדוח והחודש מזוהים אוטומטית. נשמרים רק סיכומים לפי לקוח ואתר, בלי פרטי עובדים.</span>
+      <span class="muted small">דוח הכנסות מהנהלת החשבונות · דוח משימות מ-TimeWatch · דוח שכר עם פיצול לפי אתר · אופציונלי: רכיבי שכר, טבלת תעריפים ללקוח, תכנית עסקית, שכר שעתי לפי עובד. סוג הדוח והחודש מזוהים אוטומטית. במאגר המשותף נשמרים רק סיכומים לפי לקוח ואתר; שמות עובדים ושכר נשמרים באזור הפרטי שלך בלבד.</span>
       <input type="file" id="file-in" accept=".xlsx,.xls,.html,.htm" multiple hidden>
     </label>
+    ${wagesStatus()}
     ${ms.length?`<div class="months">${ms.map(monthCard).join('')}</div>`:'<div class="panel empty">עדיין לא נקלטו חודשים.</div>'}
   </div>`;
+}
+function wagesStatus(){
+  if(!store.hasPrivate) return '<div class="panel small muted">שכר שעתי לפי עובד: אין אזור פרטי בתצוגה הזו, ולכן אי אפשר להעלות אותו כאן.</div>';
+  const w = priv.wages, staffMs = monthList().filter(m=>priv['staff-'+m]?.hours);
+  const noStaff = monthList().filter(m=>months[m]?.hours && !priv['staff-'+m]?.hours);
+  return `<div class="panel small"><b>שכר שעתי לפי עובד (אזור פרטי, רק את רואה):</b> ${w?`${esc(w.file)} · ${new Date(w.uploadedAt).toLocaleDateString('he-IL')} · ${Object.keys(w.emps).length} עובדים, ${Object.values(w.emps).filter(x=>x.r>0).length} עם תעריף שעה`:'<span class="muted">עדיין לא הועלה. עמודות נדרשות: מספר עובד, תעריף שעה; אופציונלי: שם פרטי, שם משפחה, תחילת עבודה, מחלקה.</span>'}
+    <div class="muted" style="margin-top:4px">פירוט עובדים לפי לקוח: ${staffMs.length?staffMs.map(monthName).join(', '):'אין עדיין'}${noStaff.length?` · חסר ל${noStaff.map(monthName).join(', ')} (יש להעלות מחדש את דוח השעות ודוח השכר)`:''}</div></div>`;
 }
 function monthCard(ym){
   const M = months[ym];
@@ -1328,7 +1394,7 @@ function monthCard(ym){
       return c; })}
   </article>`;
 }
-const TYPE_LABEL = {plan:'התכנית העסקית', revenue:'דוח ההכנסות', hours:'דוח השעות', payroll:'דוח השכר', components:'דוח רכיבי השכר'};
+const TYPE_LABEL = {wages:'קובץ השכר השעתי', plan:'התכנית העסקית', revenue:'דוח ההכנסות', hours:'דוח השעות', payroll:'דוח השכר', components:'דוח רכיבי השכר'};
 // טבלת תעריפים: אתר (עם הקוד בסוגריים) ותעריף לשעה, בעמודה אחת או יותר. כותרת עמודה עם תאריך
 // (למשל 01/04/2026) = החודש שממנו התעריף בתוקף. "פיקס" = סכום קבוע. תא ריק = אין תעריף.
 function parseRates(wb, fileName){
@@ -1346,6 +1412,21 @@ function parseRates(wb, fileName){
     return {id:'rt'+Date.now().toString(36)+k, from: ym || def, fromFile: !!ym, file:fileName, uploadedAt:new Date().toISOString(), rates, fixed, missing};
   });
 }
+/* --- שכר שעתי ברוטו לפי עובד ---
+   נשמרים רק מספר עובד, שם, תעריף שעה, חודש תחילת עבודה ומחלקה, ורק באזור הפרטי. תעודת זהות ותאריך לידה לא נקראים. */
+function parseWages(wb, fileName){
+  const aoa = Object.values(wb.sheets).find(a=>findHeader(a, r=>r.includes('מספר עובד') && r.includes('תעריף שעה'))>=0);
+  const hi = findHeader(aoa, r=>r.includes('מספר עובד') && r.includes('תעריף שעה'));
+  const H = aoa[hi].map(normName), col = n => H.indexOf(n);
+  const iEmp=col('מספר עובד'), iRate=col('תעריף שעה'), iLast=col('שם משפחה'), iFirst=col('שם פרטי'), iStart=col('תחילת עבודה'), iDept=col('מחלקה');
+  const emps = {};
+  for(const r of aoa.slice(hi+1)){
+    const e = num(r[iEmp]); if(e==null) continue;
+    emps[e] = {n: normName([iFirst>=0?r[iFirst]:'', iLast>=0?r[iLast]:''].join(' ')), r: num(r[iRate])||0, s: iStart>=0 ? dateYm(r[iStart]) : null, d: iDept>=0 ? normName(r[iDept]) : ''};
+  }
+  if(!Object.keys(emps).length) throw new Error('לא נמצאו עובדים בקובץ');
+  return {file:fileName, uploadedAt:new Date().toISOString(), emps};
+}
 async function handleFiles(files){
   // קוראים את כל הקבצים ומעבדים לפי סדר: רכיבי השכר תלויים בדוח השכר של אותו חודש
   const items = [];
@@ -1354,10 +1435,15 @@ async function handleFiles(files){
       if(!type){ toast(`לא זוהה סוג הדוח בקובץ ${f.name}`); continue; } items.push({f, wb, type}); }
     catch(err){ toast(`לא הצלחנו לקרוא את ${f.name}`); }
   }
-  const order = {plan:-2, rates:-1, revenue:0, hours:1, payroll:2, components:3};
+  const order = {wages:-3, plan:-2, rates:-1, revenue:0, hours:1, payroll:2, components:3};
   items.sort((a,b)=>order[a.type]-order[b.type]);
   for(const {f, wb, type} of items){
     try{
+      if(type==='wages'){
+        if(!store.hasPrivate){ toast('אין אזור פרטי בתצוגה הזו, ולכן קובץ השכר לא נשמר'); continue; }
+        const w = parseWages(wb, f.name); await store.savePrivate('wages', w);
+        const n = Object.values(w.emps); toast(`נקלט שכר שעתי ל-${n.length} עובדים (${n.filter(x=>x.r>0).length} עם תעריף). נשמר באזור הפרטי שלך בלבד`); continue;
+      }
       if(type==='plan'){
         const p = parsePlan(wb, f.name);
         p.branch = guessPlanBranch(wb) || branchNames().find(b=>!plans[b]) || branchNames()[0] || '';
@@ -1373,10 +1459,12 @@ async function handleFiles(files){
         ui.tab='match'; continue;
       }
       const res = ({revenue:parseRevenue, hours:parseHours, payroll:parsePayroll, components:parseComponents})[type](wb, f.name);
-      for(const {ym, data} of [].concat(res)){
+      for(const {ym, data, staff} of [].concat(res)){
         if(!ym){ toast(`לא זוהה החודש בקובץ ${f.name}`); continue; }
         const doc = Object.assign({ym}, months[ym]||{}, {[type]:data});
         await store.saveMonth(ym, doc);
+        // שעות ועלות לפי עובד ואתר: רק לאזור הפרטי, לא למאגר המשותף
+        if(staff && store.hasPrivate){ const id = 'staff-'+ym; try{ await store.savePrivate(id, {...(priv[id]||{}), ym, [type==='hours'?'hours':'cost']:staff, [type+'File']:f.name}); }catch(e){ console.error(e); } }
         ui.ym = ym;
         toast(`${TYPE_LABEL[type]} ל${monthName(ym)} נקלט`);
       }
