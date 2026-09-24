@@ -342,7 +342,8 @@ function detectType(wb){
     const rows = aoa.filter(r=>normName(r[0]));
     // קובץ תעריפים: בעמודה הראשונה אתר עם קוד בסוגריים, ובשאר העמודות רק מספרים, "פיקס" או ריק
     const rateCell = c => normName(c)==='' || num(c)!=null || /פיקס|קבוע/.test(normName(c));
-    if(rows.length>=3 && rows.filter(r=>/\(\d+\)\s*$/.test(normName(r[0]))).length>=rows.length*0.8 && rows.every(r=>r.slice(1).every(rateCell))) return 'rates';
+    const coded = rows.filter(r=>/\(\d+\)\s*$/.test(normName(r[0])));   // שורת הכותרת (למשל "לקוח" ותאריך התחולה) לא נבדקת
+    if(rows.length>=3 && coded.length>=rows.length*0.8 && coded.every(r=>r.slice(1).every(rateCell))) return 'rates';
     if(flat.some(c=>c.includes('לפני מע"מ')) && flat.includes('לקוח')) return 'revenue';
     if(flat.includes('מספר עובד') && flat.includes('תעריף שעה')) return 'wages';
     if(flat.some(c=>c==='עלות מעביד'||c==='עלות עובד')) return 'payroll';
@@ -608,6 +609,19 @@ function rateTableFor(ym){
   const t = ts.filter(x=>x.from<=ym).pop();
   return t ? {...t, applies:true} : {...ts[0], applies:false};
 }
+// התעריף שמחייבים את הלקוח בחודש: ממוצע תעריפי האתרים שלו מהטבלה שבתוקף, משוקלל בשעות באותו חודש.
+// פיקס = סכום קבוע. expected = תעריף × שעות, לבדיקת החיוב מול החשבונית.
+function billedRate(G, ym){
+  const RT = rateTableFor(ym); if(!RT?.applies) return null;
+  const hs = months[ym]?.hours?.sites || {};
+  const sites = G.sites.map(c=>({c, h:hs[c]?.h||0, r:RT.rates[c], fixed:RT.fixed.includes(c)}));
+  const rated = sites.filter(x=>x.r!=null), w = rated.filter(x=>x.h>0), H = w.reduce((a,x)=>a+x.h,0);
+  if(!rated.length) return sites.some(x=>x.fixed) ? {fixed:true, from:RT.from} : null;
+  return {rate: H ? w.reduce((a,x)=>a+x.r*x.h,0)/H : rated.reduce((a,x)=>a+x.r,0)/rated.length,
+    expected: w.reduce((a,x)=>a+x.r*x.h,0), ratedH:H, hasFixed:sites.some(x=>x.fixed && x.h>0),
+    unrated:sites.filter(x=>x.h>0 && x.r==null && !x.fixed).length, fee:+G.fixedFee||0, from:RT.from, rates:[...new Set(rated.map(x=>x.r))]};
+}
+const rateTxt = b => !b ? '—' : b.fixed ? 'פיקס' : perH(b.rate);
 function compute(ym){
   const M = months[ym] || {};
   const rev = M.revenue?.clients || {}, hs = M.hours?.sites || {}, pay = M.payroll?.sites || {}, comp = M.components?.sites || null;
@@ -1400,7 +1414,7 @@ function detailRow(g, yms){
       <div><button class="btn sm primary" type="button" data-client="${g.id}">כרטיס לקוח: התפלגות מתחילת השנה</button></div>
       <div><b>שמות בהנהלת החשבונות:</b> ${Object.entries(g.clients).map(([c,a])=>`${esc(c)} (${money(a)})`).join(' · ') || '<span class="muted">אין הכנסה החודש</span>'}</div>
       ${sites.length?`<div class="tbl-wrap"><table><thead><tr><th>קוד</th><th>אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">עלות לשעה</th></tr></thead><tbody>
-        ${sites.map(s=>`<tr><td class="num">${s.isFee?'—':esc(s.code)}</td><td>${esc(s.name)}</td><td>${esc(s.branch)}</td><td class="n">${nf1.format(s.h)}</td><td class="n">${money(s.cost)}</td><td class="n">${money(s.revShare||0)}${s.fixed?' <span class="muted small">פיקס</span>':s.rate!=null&&g.split==='rate'?` <span class="muted small">${ltr('₪'+s.rate)}</span>`:''}</td><td class="n">${money((s.revShare||0)-s.cost)}</td><td class="n">${marginPill(s.revShare?((s.revShare-s.cost)/s.revShare):NaN, s.revShare)}</td><td class="n">${perH(s.h?s.cost/s.h:NaN)}</td></tr>`).join('')}
+        ${sites.map(s=>`<tr><td class="num">${s.isFee?'—':esc(s.code)}</td><td>${esc(s.name)}</td><td>${esc(s.branch)}</td><td class="n">${nf1.format(s.h)}</td><td class="n">${money(s.cost)}</td><td class="n">${money(s.revShare||0)}${s.fixed?' <span class="muted small">פיקס</span>':s.rate!=null?` <span class="muted small">תעריף ${ltr('₪'+s.rate)}</span>`:''}</td><td class="n">${money((s.revShare||0)-s.cost)}</td><td class="n">${marginPill(s.revShare?((s.revShare-s.cost)/s.revShare):NaN, s.revShare)}</td><td class="n">${perH(s.h?s.cost/s.h:NaN)}</td></tr>`).join('')}
       </tbody></table></div>${sites.length>1?splitNote(g):''}${billNote(g)}`:'<p class="muted">אין אתרים משויכים.</p>'}
       ${g.group?.sites?.length?staffPanel(g.group.sites, yms):''}
     </div></td></tr>`;
@@ -1551,13 +1565,21 @@ function renderClient(v){
     const partial = fullMonths.length && !complete(m);
     const g = compute(m).groups.find(x=>x.id===G.id);
     const pf = partial ? [['warn',`חלקי: חסר ${missingReports(m).join(' ו')}. לא נכלל בסה״כ`]] : null;
-    return g ? {m, rev:g.rev, h:g.h, cost:g.cost, gp:g.gp, margin:g.margin, revH:g.revH, costH:g.costH, flags:pf||g.flags, partial} : {m, rev:0, h:0, cost:0, gp:0, margin:NaN, revH:NaN, costH:NaN, flags:pf||[], partial};
+    const br = billedRate(G, m);
+    return g ? {m, br, rev:g.rev, h:g.h, cost:g.cost, gp:g.gp, margin:g.margin, revH:g.revH, costH:g.costH, flags:pf||g.flags, partial} : {m, br, rev:0, h:0, cost:0, gp:0, margin:NaN, revH:NaN, costH:NaN, flags:pf||[], partial};
   });
   const T = YTD.groups.find(x=>x.id===G.id) || {rev:0,h:0,cost:0,gp:0,margin:NaN,revH:NaN,costH:NaN,sites:{},branchList:[]};
   const absent = rows.filter(r=>r.absent||r.partial).map(r=>MONTHS[+r.m.slice(5)-1]+(r.partial?' (חלקי)':''));
   const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
   const dash = '<span class="muted">—</span>';
   const sites = Object.values(T.sites||{}).sort((a,b)=>b.h-a.h);
+  // תעריף לשעה: מטבלת התעריפים שבתוקף. בסה״כ: ממוצע משוקלל בשעות בחודשים שנכללים בסה״כ
+  const inTot = rows.filter(r=>!r.absent && !r.partial && r.br && !r.br.fixed && r.br.ratedH);
+  const ytdRate = inTot.length ? perH(inTot.reduce((a,r)=>a+r.br.expected,0)/inTot.reduce((a,r)=>a+r.br.ratedH,0)) : (rows.some(r=>r.br?.fixed) ? 'פיקס' : '—');
+  const lastR = rows.filter(r=>!r.absent).pop(), LB = lastR?.br, RTl = lastR ? rateTableFor(lastR.m) : null;
+  const billCheck = (()=>{ if(!LB || LB.fixed || !LB.ratedH || LB.hasFixed || !lastR.rev) return LB?.fixed ? `<p class="hint" style="margin-top:8px">הלקוח בתעריף פיקס (סכום קבוע) לפי טבלת התעריפים מ${monthName(LB.from)}.</p>` : '';
+    const exp = LB.expected + LB.fee, gap = lastR.rev - exp, q = exp ? gap/exp : 0;
+    return `<p class="hint" style="margin-top:8px">בדיקת חיוב ל${monthName(lastR.m)}: תעריף × שעות ${money(LB.expected)}${LB.fee?` + חיוב קבוע ${money(LB.fee)}`:''} = ${money(exp)}, בחשבונית ${money(lastR.rev)}. ${Math.abs(q)<0.01?'<span class="pill good">תואם</span>':`<span class="pill ${Math.abs(q)>0.03?'warn':'info'}">${gap>0?'חויב יותר':'חויב פחות'} ב-${money(Math.abs(gap))} (${pct(q)})</span>`}${LB.unrated?` <span class="muted">(ל-${LB.unrated} אתרים עם שעות אין תעריף בטבלה)</span>`:''}</p>`; })();
   v.innerHTML = `<div class="stack">
     <div class="filters" style="margin-block:16px 0">
       <label>לקוח <select id="f-client">${groups.map(g=>`<option value="${g.id}" ${g.id===G.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label>
@@ -1570,6 +1592,7 @@ function renderClient(v){
       ${kpi('שעות', hrs(T.h), `ממוצע לחודש ${hrs(T.h/Math.max(1,(fullMonths.length||inYear.length)))}`)}
       ${kpi('רווח גולמי', moneyC(T.gp), `שיעור ${pct(T.margin)}`)}
       ${kpi('הכנסה מול עלות לשעה', perH(T.revH), `עלות מעביד ${perH(T.costH)} לשעה`)}
+      ${kpi(`תעריף לשעה${lastR?` · ${MONTHS[+lastR.m.slice(5)-1]}`:''}`, rateTxt(LB), LB ? (LB.fixed ? 'סכום קבוע לחודש' : `${LB.rates.length>1?`${LB.rates.length} תעריפים לפי אתר, ממוצע משוקלל · `:''}בתוקף מ${monthName(LB.from)}`) : 'אין תעריף בטבלת התעריפים')}
     </div>
     <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
       <section class="panel">
@@ -1586,12 +1609,13 @@ function renderClient(v){
     <section class="panel">
       <div class="panel-head"><h2>פירוט חודשי: ${esc(G.name)}</h2></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th class="first">חודש</th><th class="n">שעות</th><th class="n">הכנסות</th><th class="n">עלות מעביד</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th><th>סטטוס</th></tr></thead>
-        <tbody>${rows.map(r=> r.absent ? `<tr><td class="first">${monthName(r.m)}</td><td colspan="8" class="muted">לא נקלט</td></tr>` :
-          `<tr><td class="first">${monthName(r.m)}</td><td class="n">${nf1.format(r.h)}</td><td class="n">${money(r.rev)}</td><td class="n">${money(r.cost)}</td><td class="n">${money(r.gp)}</td><td class="n">${marginPill(r.margin, r.rev)}</td><td class="n">${r.h?perH(r.revH):dash}</td><td class="n">${r.h?perH(r.costH):dash}</td>
+        <thead><tr><th class="first">חודש</th><th class="n">שעות</th><th class="n">הכנסות</th><th class="n">עלות מעביד</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">תעריף לשעה</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th><th>סטטוס</th></tr></thead>
+        <tbody>${rows.map(r=> r.absent ? `<tr><td class="first">${monthName(r.m)}</td><td colspan="9" class="muted">לא נקלט</td></tr>` :
+          `<tr><td class="first">${monthName(r.m)}</td><td class="n">${nf1.format(r.h)}</td><td class="n">${money(r.rev)}</td><td class="n">${money(r.cost)}</td><td class="n">${money(r.gp)}</td><td class="n">${marginPill(r.margin, r.rev)}</td><td class="n">${rateTxt(r.br)}</td><td class="n">${r.h?perH(r.revH):dash}</td><td class="n">${r.h?perH(r.costH):dash}</td>
            <td><span class="pills">${(r.flags.length?r.flags:[['info','אין פעילות']]).map(f=>`<span class="pill ${f[0]}">${f[1]}</span>`).join('')}</span></td></tr>`).join('')}
-        <tr class="total"><td class="first">סה״כ מתחילת השנה</td><td class="n">${nf1.format(T.h)}</td><td class="n">${money(T.rev)}</td><td class="n">${money(T.cost)}</td><td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td><td></td></tr>
+        <tr class="total"><td class="first">סה״כ מתחילת השנה</td><td class="n">${nf1.format(T.h)}</td><td class="n">${money(T.rev)}</td><td class="n">${money(T.cost)}</td><td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${ytdRate}</td><td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td><td></td></tr>
         </tbody></table></div>
+        ${billCheck}
     </section>
     ${(()=>{ const cmM = rows.filter(r=>!r.absent && !r.partial && months[r.m].components);
       if(!cmM.length) return '';
@@ -1607,8 +1631,8 @@ function renderClient(v){
         </tbody></table></div></section>`; })()}
     ${sites.length>1?`<section class="panel">
       <div class="panel-head"><h2>לפי אתר, מתחילת השנה</h2></div>
-      <div class="tbl-wrap"><table><thead><tr><th class="first">אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">עלות לשעה</th></tr></thead><tbody>
-      ${sites.map(st=>`<tr><td class="first">${esc(st.name)}${st.isFee?'':` <span class="muted small">(${esc(st.code)})</span>`}</td><td>${esc(st.branch)}</td><td class="n">${nf1.format(st.h)}</td><td class="n">${money(st.cost)}</td><td class="n">${money(st.revShare||0)}</td><td class="n">${money((st.revShare||0)-st.cost)}</td><td class="n">${marginPill(st.revShare?((st.revShare-st.cost)/st.revShare):NaN, st.revShare)}</td><td class="n">${perH(st.h?st.cost/st.h:NaN)}</td></tr>`).join('')}
+      <div class="tbl-wrap"><table><thead><tr><th class="first">אתר</th><th>סניף</th><th class="n">תעריף לשעה</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">עלות לשעה</th></tr></thead><tbody>
+      ${sites.map(st=>`<tr><td class="first">${esc(st.name)}${st.isFee?'':` <span class="muted small">(${esc(st.code)})</span>`}</td><td>${esc(st.branch)}</td><td class="n">${st.isFee||!RTl?.applies?'—':RTl.rates[st.code]!=null?perH(RTl.rates[st.code]):RTl.fixed.includes(st.code)?'פיקס':'—'}</td><td class="n">${nf1.format(st.h)}</td><td class="n">${money(st.cost)}</td><td class="n">${money(st.revShare||0)}</td><td class="n">${money((st.revShare||0)-st.cost)}</td><td class="n">${marginPill(st.revShare?((st.revShare-st.cost)/st.revShare):NaN, st.revShare)}</td><td class="n">${perH(st.h?st.cost/st.h:NaN)}</td></tr>`).join('')}
       </tbody></table></div><div style="margin-top:8px">${splitNote(T)}${billNote(T)}</div></section>`:''}
     ${G.sites.length?`<section class="panel">${staffPanel(G.sites, [inYear[inYear.length-1]], monthName(inYear[inYear.length-1]))}</section>`:''}
   </div>`;
@@ -1730,7 +1754,8 @@ const TYPE_LABEL = {wages:'קובץ השכר השעתי', plan:'התכנית ה�
 // (למשל 01/04/2026) = החודש שממנו התעריף בתוקף. "פיקס" = סכום קבוע. תא ריק = אין תעריף.
 function parseRates(wb, fileName){
   const aoa = Object.values(wb.sheets)[0];
-  const head = aoa.find(r=>!normName(r[0]) && r.slice(1).some(c=>dateYm(c)));
+  // שורת הכותרת: בלי קוד אתר בעמודה הראשונה (ריקה או למשל "לקוח"), ותאריך תחולה באחת העמודות האחרות
+  const head = aoa.find(r=>!/\(\d+\)\s*$/.test(normName(r[0])) && r.slice(1).some(c=>dateYm(c)));
   const cols = head ? head.map((c,i)=>[i, dateYm(c)]).filter(([i,ym])=>i>0 && ym) : [[1, null]];
   const ms = monthList(), def = ms[0] || ymOf(new Date().getFullYear(), new Date().getMonth()+1);
   return cols.map(([ci, ym], k)=>{
