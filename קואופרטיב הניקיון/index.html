@@ -1062,6 +1062,7 @@ function insights(R, P, per){
 
 /* ---------- דשבורדים חודשיים: מנהלת סניף ומנכ"לית ----------
    כל דשבורד הוא כמה עמודי A4 שמיוצאים ל-PDF. מוצגים רק סיכומים; אין בהם שמות עובדים ושכר אישי. */
+const RANK_MIN_REV = 5000;   // סף הכנסה חודשית לדירוג לקוחות לפי שיעור רווח
 const LEVEL_RANK = {bad:0, warn:1, good:2, info:3};
 const LEVEL_LABEL = {good:'▲ חיובי', bad:'▼ דורש טיפול', warn:'● לבדיקה', info:'● מידע'};
 const RC = {s1:'#2a78d6', s2:'#eb6834', s3:'#1baf7a', grid:'#E6ECEA', ink2:'#485753', muted:'#6F7C78', line:'#DCE4E1'};
@@ -1273,15 +1274,17 @@ function ceoReport(ctx){
   pages.push(rPage('תובנות מרכזיות לפי סניף', who, ym, `
     <div class="brblock"><h3>כל הארגון</h3>${insightHtml(orgIns)}</div>
     ${brs.map(b=>`<div class="brblock"><h3><span class="legend" style="margin:0;display:inline"><i style="background:${brColor(b)}"></i></span>${esc(b)}</h3>${insightHtml(topInsights(branchInsights(ctx, b), 3))}</div>`).join('')}`));
-  const Y = computePeriod(ytd), all = R.groups.filter(g=>g.rev>0);
+  // לפי שיעור הרווח הגולמי; לקוחות קטנים (הכנסה חודשית מתחת לסף) לא נכללים, כי אצלם שיעור קיצוני הוא רעש
+  const Y = computePeriod(ytd), all = R.groups.filter(g=>g.rev>=RANK_MIN_REV && g.h>0 && isFinite(g.margin));
   const yg = Object.fromEntries(Y.groups.map(g=>[g.id,g])), pg = prev ? Object.fromEntries(P.groups.map(g=>[g.id,g])) : {};
   const wrap = g => ({g, p:pg[g.id], y:yg[g.id]});
-  const best = all.slice().sort((a,b)=>b.gp-a.gp).slice(0,8).map(wrap), worst = all.slice().sort((a,b)=>a.gp-b.gp).slice(0,8).map(wrap);
+  const best = all.slice().sort((a,b)=>b.margin-a.margin).slice(0,8).map(wrap), worst = all.slice().sort((a,b)=>a.margin-b.margin).slice(0,8).map(wrap);
   const planBrs = brs.filter(hasPlan);
   pages.push(rPage('תכנון מול ביצוע ולקוחות בולטים', who, ym, `
     ${planBrs.map(b=>`<div><h3>${esc(b)}</h3>${planTable(ctx, [b])}</div>`).join('')}
-    <div><h3>הלקוחות עם הרווח הגולמי הגבוה בחודש</h3>${clientTable(best, true)}</div>
-    <div><h3>הלקוחות עם הרווח הגולמי הנמוך בחודש</h3>${clientTable(worst, true)}</div>`));
+    <div><h3>הלקוחות עם שיעור הרווח הגולמי הגבוה בחודש</h3>${clientTable(best, true)}</div>
+    <div><h3>הלקוחות עם שיעור הרווח הגולמי הנמוך בחודש</h3>${clientTable(worst, true)}</div>
+    <p class="note">מדורג לפי שיעור הרווח הגולמי בחודש, מתוך ${ltr(all.length)} לקוחות עם הכנסה חודשית של ${money(RANK_MIN_REV)} לפחות.</p>`));
   return pages;
 }
 const brColor = b => [RC.s1, RC.s2, RC.s3][branchNames().filter(x=>x!==NO_BRANCH).indexOf(b)] || RC.muted;
