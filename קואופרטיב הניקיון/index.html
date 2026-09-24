@@ -1408,38 +1408,41 @@ function detailRow(g, yms){
 function staffAgg(codes, yms){
   const set = new Set(codes), H = {}, C = {}, missing = [];
   for(const ym of yms){
-    const S = priv['staff-'+ym];
-    if(!S?.hours){ if(months[ym]?.hours) missing.push(ym); continue; }
-    for(const k of set){ for(const [e,h] of Object.entries(S.hours[k]||{})) H[e]=(H[e]||0)+h; for(const [e,c] of Object.entries(S.cost?.[k]||{})) C[e]=(C[e]||0)+c; }
+    const S = priv['staff-'+ym] || {};
+    const what = [!S.hours&&months[ym]?.hours&&'דוח השעות', !S.cost&&months[ym]?.payroll&&'דוח השכר'].filter(Boolean);
+    if(what.length) missing.push({ym, what});
+    for(const k of set){ for(const [e,h] of Object.entries(S.hours?.[k]||{})) H[e]=(H[e]||0)+h; for(const [e,c] of Object.entries(S.cost?.[k]||{})) C[e]=(C[e]||0)+c; }
   }
-  return {H, C, missing};
+  return {H, C, missing, noHours:missing.some(x=>x.what.includes('דוח השעות'))};
 }
 const wageOf = e => { const w = priv.wages?.emps?.[e]; return w && w.r>0 ? w.r : null; };
 const avgRate = H => { let h=0, x=0; for(const [e,v] of Object.entries(H)){ const r = wageOf(e); if(r){ h+=v; x+=v*r; } } return h ? x/h : NaN; };   // משוקלל בשעות
-const orgRate = yms => { const H = {}; yms.forEach(ym=>Object.values(priv['staff-'+ym]?.hours||{}).forEach(m=>Object.entries(m).forEach(([e,h])=>H[e]=(H[e]||0)+h))); return avgRate(H); };
+// ממוצע הארגון: משוקלל בשעות; בחודש בלי פירוט שעות, משוקלל בעלות המעביד
+const orgRate = (yms, key='hours') => { const H = {}; yms.forEach(ym=>Object.values(priv['staff-'+ym]?.[key]||{}).forEach(m=>Object.entries(m).forEach(([e,h])=>H[e]=(H[e]||0)+h))); return avgRate(H); };
 function seniority(start, ym){
   if(!start) return '—';
   const n = (+ym.slice(0,4)-+start.slice(0,4))*12 + (+ym.slice(5)-+start.slice(5));
   return n<0 ? "—" : n<1 ? "חודש ראשון" : n<12 ? `${ltr(n)} חודשים` : `${ltr(nf1.format(n/12))} שנים`;
 }
-function staffPanel(codes, yms){
-  const head = t => `<div class="panel-head"><h2 style="font-size:15px">עובדים אצל הלקוח</h2><span class="small muted">${t}</span></div>`;
+function staffPanel(codes, yms, title){
+  const head = t => `<div class="panel-head"><h2 style="font-size:15px">עובדים אצל הלקוח${title?` · ${title}`:''}</h2><span class="small muted">${t}</span></div>`;
   if(!store.hasPrivate) return `<div>${head('')}<p class="hint">רשימת העובדים נשמרת באזור פרטי, וזמינה רק למי שמחוברת לחשבון.</p></div>`;
-  const {H, C, missing} = staffAgg(codes, yms);
-  const ids = Object.keys(H).sort((a,b)=>H[b]-H[a]);
-  const miss = missing.length ? `<p class="hint" style="color:var(--warn)">אין פירוט עובדים ל${missing.map(monthName).join(', ')}. כדי להציג אותו יש להעלות מחדש את דוח השעות ואת דוח השכר של ${missing.length>1?'החודשים האלה':'החודש הזה'}.</p>` : '';
+  const {H, C, missing, noHours} = staffAgg(codes, yms);
+  const ids = [...new Set([...Object.keys(H), ...Object.keys(C)])].sort((a,b)=>((H[b]||0)-(H[a]||0)) || ((C[b]||0)-(C[a]||0)));
+  const miss = missing.length ? `<p class="hint" style="color:var(--warn)">${missing.map(x=>`ל${monthName(x.ym)} חסר פירוט לפי עובד מ${x.what.join(' ומ')}${x.what.includes('דוח השעות')?' (שעות, חלק משעות הלקוח ועלות לשעה)':''}. כדי להשלים יש להעלות מחדש את ${x.what.join(' ואת ')} של החודש בלשונית "קליטת נתונים".`).join(' ')}</p>` : '';
   const noW = !priv.wages ? '<p class="hint">עדיין לא הועלה קובץ שכר שעתי לפי עובד, ולכן אין תעריף שעה. אפשר להעלות אותו בלשונית "קליטת נתונים".</p>' : '';
   if(!ids.length) return `<div>${head('')}${miss||'<p class="hint">אין שעות עובדים לאתרים של הלקוח בתקופה.</p>'}</div>`;
-  const tH = ids.reduce((a,e)=>a+H[e],0), last = yms[yms.length-1];
-  const cR = avgRate(H), oR = orgRate(yms), tC = ids.reduce((a,e)=>a+(C[e]||0),0);
+  const tH = ids.reduce((a,e)=>a+(H[e]||0),0), last = yms[yms.length-1], byCost = noHours || !tH;
+  const cR = avgRate(byCost ? C : H), oR = orgRate(yms, byCost ? 'cost' : 'hours'), tC = ids.reduce((a,e)=>a+(C[e]||0),0);
   const noRate = ids.filter(e=>!wageOf(e));
-  return `<div>${head(`${ids.length} עובדים · שכר שעתי ממוצע ${perH(cR)} (בארגון ${perH(oR)}), משוקלל בשעות`)}
+  const hc = v => v==null||byCost ? '—' : v;
+  return `<div>${head(`${ids.length} עובדים · שכר שעתי ממוצע ${perH(cR)} (בארגון ${perH(oR)}), משוקלל ${byCost?'בעלות המעביד':'בשעות'}`)}
     <div class="tbl-wrap" style="max-height:420px;overflow:auto"><table><thead><tr><th>עובד</th><th class="n">מס' עובד</th><th class="n">שעות אצל הלקוח</th><th class="n">חלק משעות הלקוח</th><th class="n">שכר שעתי ברוטו</th><th class="n">מול ממוצע הארגון</th><th>ותק</th><th class="n">עלות מעביד אצל הלקוח</th><th class="n">עלות מעביד לשעה</th></tr></thead><tbody>
     ${ids.map(e=>{ const w = priv.wages?.emps?.[e], r = wageOf(e), c = C[e];
-      return `<tr><td>${w?esc(w.n):'<span class="muted">לא בקובץ השכר</span>'}</td><td class="n num">${esc(e)}</td><td class="n">${nf1.format(H[e])}</td><td class="n">${pct(H[e]/tH)}</td>
+      return `<tr><td>${w?esc(w.n):'<span class="muted">לא בקובץ השכר</span>'}</td><td class="n num">${esc(e)}</td><td class="n">${hc(H[e]!=null?nf1.format(H[e]):null)}</td><td class="n">${hc(H[e]!=null?pct(H[e]/tH):null)}</td>
       <td class="n">${r?perH(r):`<span class="muted small">${w?'בלי תעריף שעה':'—'}</span>`}</td><td class="n">${r&&isFinite(oR)?pct(r/oR-1):'—'}</td><td>${seniority(w?.s, last)}</td>
-      <td class="n">${c!=null?money(c):'—'}</td><td class="n">${c!=null&&H[e]?perH(c/H[e]):'—'}</td></tr>`; }).join('')}
-    <tr class="total"><td>סה״כ</td><td></td><td class="n">${nf1.format(tH)}</td><td class="n">${pct(1)}</td><td class="n">${perH(cR)}</td><td class="n">${isFinite(cR)&&isFinite(oR)?pct(cR/oR-1):'—'}</td><td></td><td class="n">${money(tC)}</td><td class="n">${perH(tH?tC/tH:NaN)}</td></tr>
+      <td class="n">${c!=null?money(c):'—'}</td><td class="n">${c!=null&&H[e]&&!byCost?perH(c/H[e]):'—'}</td></tr>`; }).join('')}
+    <tr class="total"><td>סה״כ</td><td></td><td class="n">${hc(nf1.format(tH))}</td><td class="n">${hc(pct(1))}</td><td class="n">${perH(cR)}</td><td class="n">${isFinite(cR)&&isFinite(oR)?pct(cR/oR-1):'—'}</td><td></td><td class="n">${money(tC)}</td><td class="n">${byCost?'—':perH(tH?tC/tH:NaN)}</td></tr>
     </tbody></table></div>
     <p class="hint">השעות מדוח השעות והעלות מפיצול השכר, לפי אתרי הלקוח. עלות מעביד לשעה גבוהה מהשכר השעתי בגלל הפרשות, נסיעות ותוספות, וגם כשהשעות בשכר ובנוכחות לא תואמות.${noRate.length?` ל-${noRate.length} עובדים אין תעריף שעה בקובץ (בדרך כלל עובדים בשכר חודשי, או עובדים שלא מופיעים בקובץ), והם לא נכללים בממוצע.`:''} הנתונים נשמרים באזור הפרטי שלך בלבד.</p>${miss}${noW}</div>`;
 }
@@ -1604,7 +1607,7 @@ function renderClient(v){
       <div class="tbl-wrap"><table><thead><tr><th class="first">אתר</th><th>סניף</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">הכנסה משויכת</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">עלות לשעה</th></tr></thead><tbody>
       ${sites.map(st=>`<tr><td class="first">${esc(st.name)}${st.isFee?'':` <span class="muted small">(${esc(st.code)})</span>`}</td><td>${esc(st.branch)}</td><td class="n">${nf1.format(st.h)}</td><td class="n">${money(st.cost)}</td><td class="n">${money(st.revShare||0)}</td><td class="n">${money((st.revShare||0)-st.cost)}</td><td class="n">${marginPill(st.revShare?((st.revShare-st.cost)/st.revShare):NaN, st.revShare)}</td><td class="n">${perH(st.h?st.cost/st.h:NaN)}</td></tr>`).join('')}
       </tbody></table></div><div style="margin-top:8px">${splitNote(T)}${billNote(T)}</div></section>`:''}
-    ${G.sites.length?`<section class="panel">${staffPanel(G.sites, fullMonths.length ? fullMonths : inYear)}</section>`:''}
+    ${G.sites.length?`<section class="panel">${staffPanel(G.sites, [inYear[inYear.length-1]], monthName(inYear[inYear.length-1]))}</section>`:''}
   </div>`;
   const labels = rows.map(r=>MONTHS[+r.m.slice(5)-1]);
   const val = k => rows.map(r=>r.absent||r.partial?null:r[k]);
