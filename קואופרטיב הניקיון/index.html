@@ -186,11 +186,13 @@ const monthName = ym => `${MONTHS[+ym.slice(5)-1]} ${ym.slice(0,4)}`;
 
 let mapping = {groups:[], overheadSites:[]};
 let months = {};                 // ym -> doc
-let plan = null;                 // settings/plan: תכנית עסקית של סניף (מגיליון רווח והפסד)
-let manual = {};                 // settings/manual: עלויות ידניות בפועל לפי חודש (תשלומים ישירים לספקים)
-let ui = {tab:'overview', ym:null, pmode:'month', branch:'', q:'', sort:['gp','asc'], open:null, client:null, target:15};
+let plans = {};                  // settings/plan: תכנית עסקית לכל סניף (branch -> plan, מגיליון רווח והפסד)
+let manual = {};                 // settings/manual: עלויות ידניות בפועל (branch -> ym -> line -> ₪), תשלומים ישירים לספקים
+const loadPlans = d => !d ? {} : d.plans ? d.plans : d.months ? {[d.branch||'']: d} : {};
+const loadManual = d => !d ? {} : d.byBranch ? d.byBranch : {};
+let ui = {tab:'overview', ym:null, pmode:'month', branch:'', q:'', sort:['gp','asc'], open:null, client:null, target:15, planBranch:null};
 try{ Object.assign(ui, JSON.parse(localStorage.getItem('coop-ui')||'{}')); }catch(e){}
-const saveUi = () => { try{ localStorage.setItem('coop-ui', JSON.stringify({tab:ui.tab, ym:ui.ym, pmode:ui.pmode, branch:ui.branch, sort:ui.sort, client:ui.client, target:ui.target})); }catch(e){} };
+const saveUi = () => { try{ localStorage.setItem('coop-ui', JSON.stringify({tab:ui.tab, ym:ui.ym, pmode:ui.pmode, branch:ui.branch, sort:ui.sort, client:ui.client, target:ui.target, planBranch:ui.planBranch})); }catch(e){} };
 const charts = {};
 
 /* ============================================================ utils */
@@ -231,11 +233,11 @@ const store = {
     if(this.db){
       this.db.doc('settings/mapping').onSnapshot(s=>{ if(s.exists){ mapping = normalizeMapping(s.data()); render(); } }, e=>this.fail(e));
       this.db.collection('months').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=d.data()); months=m; render(); }, e=>this.fail(e));
-      this.db.doc('settings/plan').onSnapshot(s=>{ plan = s.exists ? s.data() : null; render(); }, e=>this.fail(e));
-      this.db.doc('settings/manual').onSnapshot(s=>{ manual = s.exists ? (s.data().months||{}) : {}; render(); }, e=>this.fail(e));
+      this.db.doc('settings/plan').onSnapshot(s=>{ plans = loadPlans(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
+      this.db.doc('settings/manual').onSnapshot(s=>{ manual = loadManual(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
     } else {
       try{ mapping = normalizeMapping(JSON.parse(localStorage.getItem('coop-mapping')||'null')||{}); months = JSON.parse(localStorage.getItem('coop-months')||'{}');
-           plan = JSON.parse(localStorage.getItem('coop-plan')||'null'); manual = JSON.parse(localStorage.getItem('coop-manual')||'{}'); }catch(e){}
+           plans = loadPlans(JSON.parse(localStorage.getItem('coop-plan')||'null')); manual = loadManual(JSON.parse(localStorage.getItem('coop-manual')||'null')); }catch(e){}
     }
   },
   fail(e){ if(e?.code!=='revoked') toast('החיבור לנתונים המשותפים נכשל. יש לרענן את הדף.'); },
@@ -245,12 +247,14 @@ const store = {
     else try{ localStorage.setItem('coop-mapping', JSON.stringify(mapping)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
   async savePlan(){
-    if(this.db){ if(plan) await this.db.doc('settings/plan').set(JSON.parse(JSON.stringify(plan))); else await this.db.doc('settings/plan').delete(); }
-    else try{ localStorage.setItem('coop-plan', JSON.stringify(plan)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
+    const doc = {plans:JSON.parse(JSON.stringify(plans)), updatedAt:new Date().toISOString()};
+    if(this.db) await this.db.doc('settings/plan').set(doc);
+    else try{ localStorage.setItem('coop-plan', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
   async saveManual(){
-    if(this.db) await this.db.doc('settings/manual').set({months:JSON.parse(JSON.stringify(manual)), updatedAt:new Date().toISOString()});
-    else try{ localStorage.setItem('coop-manual', JSON.stringify(manual)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
+    const doc = {byBranch:JSON.parse(JSON.stringify(manual)), updatedAt:new Date().toISOString()};
+    if(this.db) await this.db.doc('settings/manual').set(doc);
+    else try{ localStorage.setItem('coop-manual', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
   async saveMonth(ym, doc){
     months[ym] = doc;
@@ -325,6 +329,19 @@ function findPlanSheet(wb){
   let best = null;
   for(const [name, aoa] of Object.entries(wb.sheets)){ const info = planSheetInfo(aoa); if(info && (!best || info.year>best.info.year)) best = {name, aoa, info}; }
   return best;
+}
+// זיהוי הסניף של תכנית: לפי שמות הלקוחות בגיליונות התכנית מול שמות הלקוחות והאתרים בהתאמה
+function guessPlanBranch(wb){
+  const words = s => normName(s).replace(/[()"'\-\d]/g,' ').split(' ').filter(w=>w.length>2);
+  const names = new Set(); Object.values(wb.sheets).forEach(a=>a.forEach(r=>{ const v=normName(r[0]); if(v && v.length<40 && !num(r[0])) names.add(v); }));
+  const votes = {};
+  for(const g of mapping.groups){
+    const gw = new Set([g.name, ...g.clients].flatMap(words));
+    if(![...names].some(n=>{ const w=words(n); return w.length && w.every(x=>gw.has(x)); })) continue;
+    const br = g.sites.map(c=>knownBranch(c, monthList().slice(-1)[0]||'9999-12')).find(b=>b!==NO_BRANCH);
+    if(br) votes[br] = (votes[br]||0)+1;
+  }
+  return Object.entries(votes).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
 }
 function parsePlan(wb, fileName){
   const {name, aoa, info} = findPlanSheet(wb); const {hi, col, year} = info;
@@ -748,57 +765,73 @@ function periodGaps(per){
 
 /* ============================================================ תכנון מול ביצוע */
 // ביצוע של סניף בחודש: שעות, הכנסות ועלות שכר מהדוחות; עובדות = מספר העובדים ששולם להם שכר על עבודה באתרי הסניף;
-// עלות מכר = עלות מעביד + עלויות ידניות שהוזנו (תשלומים ישירים לספקים).
+// עלות מכר = עלות מעביד + עלויות ידניות שהוזנו לסניף (תשלומים ישירים לספקים).
 function branchActual(ym, branch){
   if(!months[ym]) return null;
-  const R = compute(ym), b = R.branches[branch] || {rev:0,h:0,cost:0};
-  const M = months[ym], sh = M.payroll?.empShares;
+  const P = plans[branch], R = compute(ym), b = R.branches[branch] || {rev:0,h:0,cost:0};
+  const sh = months[ym].payroll?.empShares;
   let workers = null;
   if(sh){
-    const R2 = R; const siteBranch = {};
-    for(const g of R2.groups) for(const s of Object.values(g.sites)) siteBranch[s.code] = s.branch;
-    for(const s of Object.values(R2.unSites)) siteBranch[s.code] = s.branch;
+    const siteBranch = {};
+    for(const g of R.groups) for(const s of Object.values(g.sites)) siteBranch[s.code] = s.branch;
+    for(const s of Object.values(R.unSites)) siteBranch[s.code] = s.branch;
     workers = Object.values(sh).filter(e=>Object.keys(e).some(c=>siteBranch[c]===branch)).length;
   }
-  const man = manual[ym] || {}, manLines = manualLinesOf(plan);
+  const man = manual[branch]?.[ym] || {}, manLines = manualLinesOf(P);
   const manTotal = manLines.reduce((a,l)=>a+(+man[l]||0),0), manEntered = manLines.some(l=>man[l]!=null && man[l]!=='');
   const tc = b.cost + manTotal;
-  return {ym, h:b.h, revenue:b.rev, payroll:b.cost, manual:man, manTotal, manEntered, tc, gm:b.rev-tc, workers, complete:complete(ym)};
+  return {ym, h:b.h, revenue:b.rev, payroll:b.cost, manual:man, manTotal, manEntered, tc, gm:b.rev-tc, workers};
 }
-function planFor(yms){
-  const P = {hours:0, revenue:0, tc:0, gm:0, workers:0, costs:{}, n:0};
-  for(const m of yms){ const x = plan?.months?.[m]; if(!x) continue; P.n++;
-    for(const k of ['hours','revenue','tc','gm']) P[k] += +x[k]||0; P.workers += +x.workers||0;
-    for(const [l,v] of Object.entries(x.costs||{})) P.costs[l] = (P.costs[l]||0) + (+v||0); }
-  P.workers = P.n ? P.workers/P.n : 0;   // עובדות: ממוצע חודשי ולא סכום
+function planFor(branches, yms){
+  const P = {hours:0, revenue:0, tc:0, gm:0, workers:0, costs:{}};
+  for(const br of branches){ let w=0, n=0;
+    for(const m of yms){ const x = plans[br]?.months?.[m]; if(!x) continue; n++;
+      for(const k of ['hours','revenue','tc','gm']) P[k] += +x[k]||0; w += +x.workers||0;
+      for(const [l,v] of Object.entries(x.costs||{})) P.costs[l] = (P.costs[l]||0) + (+v||0); }
+    P.workers += n ? w/n : 0; }                                 // עובדות: ממוצע חודשי לכל סניף, מחובר בין הסניפים
   return P;
 }
-function actualFor(yms){
-  const rows = yms.map(m=>branchActual(m, plan.branch)).filter(Boolean);
-  const A = {h:0, revenue:0, payroll:0, manTotal:0, tc:0, gm:0, workers:null, rows, manual:{}};
-  for(const r of rows){ A.h+=r.h; A.revenue+=r.revenue; A.payroll+=r.payroll; A.manTotal+=r.manTotal; A.tc+=r.tc; A.gm+=r.gm;
-    for(const [l,v] of Object.entries(r.manual)) A.manual[l]=(A.manual[l]||0)+(+v||0); }
-  const w = rows.filter(r=>r.workers!=null); A.workers = w.length ? w.reduce((a,r)=>a+r.workers,0)/w.length : null;
+function actualFor(branches, yms){
+  const A = {h:0, revenue:0, payroll:0, manTotal:0, tc:0, gm:0, workers:null, manual:{}};
+  let wSum = 0, wAny = false;
+  for(const br of branches){
+    const rows = yms.map(m=>branchActual(m, br)).filter(Boolean);
+    for(const r of rows){ A.h+=r.h; A.revenue+=r.revenue; A.payroll+=r.payroll; A.manTotal+=r.manTotal; A.tc+=r.tc; A.gm+=r.gm;
+      for(const [l,v] of Object.entries(r.manual)) A.manual[l]=(A.manual[l]||0)+(+v||0); }
+    const w = rows.filter(r=>r.workers!=null); if(w.length){ wAny = true; wSum += w.reduce((a,r)=>a+r.workers,0)/w.length; }
+  }
+  A.workers = wAny ? wSum : null;
   return A;
 }
 function renderPlan(v){
-  if(!plan){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין לא נקלטה תכנית עסקית</h2><p>יש להעלות את קובץ התכנית בלשונית "קליטת נתונים". נקרא גיליון רווח והפסד עם שורת חודשים 1–12 ושורות שעות, עובדות, הכנסות, עלויות ו-GM.</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
-  const per = period(), all = per.all.filter(m=>plan.months[m]);
-  const act = all.filter(m=>months[m]);                         // חודשים שיש להם ביצוע
-  const P = planFor(act), PA = planFor(all), A = actualFor(act);
-  const manLines = manualLinesOf(plan), payLines = payrollLinesOf(plan), noneLines = plan.costLines.filter(l=>plan.lineSource?.[l]==='none');
-  const srcSel = l => `<select data-linesrc="${esc(l)}" aria-label="מקור הביצוע של ${esc(l)}" style="font-size:12px;padding:2px 4px">${[['payroll','מדוח השכר'],['manual','הזנה ידנית'],['none','לא נמדד']].map(([k,n])=>`<option value="${k}" ${(plan.lineSource?.[l]||'manual')===k?'selected':''}>${n}</option>`).join('')}</select>`;
-  const missingManual = act.filter(m=>!branchActual(m, plan.branch).manEntered);
+  const brs = Object.keys(plans).filter(b=>plans[b]?.months).sort();
+  if(!brs.length){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין לא נקלטה תכנית עסקית</h2><p>יש להעלות את קובץ התכנית בלשונית "קליטת נתונים". נקרא גיליון רווח והפסד עם שורת חודשים 1–12 ושורות שעות, עובדות, הכנסות, עלויות ו-GM.</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
+  if(ui.planBranch!=='__all' && !brs.includes(ui.planBranch)) ui.planBranch = brs[0];
+  const sel = ui.planBranch==='__all' ? brs : [ui.planBranch], single = sel.length===1 ? plans[sel[0]] : null;
+  const per = period(), all = per.all.filter(m=>sel.some(b=>plans[b].months[m]));
+  const act = all.filter(m=>months[m]);
+  const P = planFor(sel, act), PA = planFor(sel, all), A = actualFor(sel, act);
+  const missingManual = act.filter(m=>sel.some(b=>!branchActual(m, b).manEntered));
   const gap = (a,p,kind) => { if(a==null || !p) return '—'; const d=a-p, q=d/Math.abs(p); const cls = kind==='neutral' ? 'info' : (d>=0?'good':'bad');
     return `<span class="pill ${Math.abs(q)<0.02?'info':cls}">${d>=0?'▲':'▼'} ${pct(Math.abs(q))}</span>`; };
   const card = (label, a, p, fmt, kind, sub) => `<div class="kpi"><span class="label">${label}</span><span class="value num">${a==null?'—':fmt(a)}</span>
     <span class="sub">תכנון ${fmt(p)} ${gap(a,p,kind)}${sub?` · ${sub}`:''}</span></div>`;
   const gmP = P.revenue? P.gm/P.revenue : NaN, gmA = A.revenue? A.gm/A.revenue : NaN;
   const cell = (a,p,fmt,kind) => `<td class="n">${p==null?'—':fmt(p)}</td><td class="n">${a==null?'—':fmt(a)}</td><td class="n">${a==null||p==null?'—':gap(a,p,kind)}</td>`;
-  const yr = String(plan.year);
+  const monthRow = m => { const pp = planFor(sel,[m]), aa = months[m] ? actualFor(sel,[m]) : null, noMan = aa && sel.some(b=>!branchActual(m,b).manEntered);
+    return `<tr><td class="first">${monthName(m)}${noMan?' <span class="pill warn">ללא עלויות ידניות</span>':''}</td>${cell(aa?.h,pp.hours,hrs,'up')}${cell(aa?.revenue,pp.revenue,money,'up')}${cell(aa?.workers,pp.workers,x=>ltr(nf0.format(x)),'neutral')}${cell(aa?.gm,pp.gm,money,'up')}
+      <td class="n">${pct(pp.revenue?pp.gm/pp.revenue:NaN)}</td><td class="n">${aa?marginPill(aa.revenue?aa.gm/aa.revenue:NaN, aa.revenue):'—'}</td></tr>`; };
+  // עלות המכר: שורות שכר (לפי כל תכנית) מול עלות המעביד, ושורות ידניות
+  const payLinesAll = [...new Set(sel.flatMap(b=>payrollLinesOf(plans[b])))], manLinesAll = [...new Set(sel.flatMap(b=>manualLinesOf(plans[b])))];
+  const noneAll = [...new Set(sel.flatMap(b=>plans[b].costLines.filter(l=>plans[b].lineSource?.[l]==='none')))];
+  const planPay = sel.reduce((a,b)=>a+payrollLinesOf(plans[b]).reduce((x,l)=>x+act.reduce((y,m)=>y+(+plans[b].months[m]?.costs?.[l]||0),0),0),0);
+  const inPlanCost = l => sel.some(b=>plans[b].costLines.includes(l));
   v.innerHTML = `<div class="stack">
-    <div class="panel" style="background:var(--accent-soft);border-color:transparent"><b>תכנית ${plan.year} · ${esc(plan.branch||'')}</b> <span class="small muted">מהגיליון "${esc(plan.sheet)}" בקובץ ${esc(plan.file)}.</span>
-      <label class="small" style="margin-inline-start:12px">סניף <select id="plan-branch">${branchNames().map(b=>`<option ${b===plan.branch?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+    <div class="panel" style="background:var(--accent-soft);border-color:transparent">
+      <div class="actions"><label class="small"><b>תכנית</b> <select id="plan-view">${brs.map(b=>`<option value="${esc(b)}" ${sel.length===1&&sel[0]===b?'selected':''}>${esc(b)}</option>`).join('')}${brs.length>1?`<option value="__all" ${ui.planBranch==='__all'?'selected':''}>כל הסניפים עם תכנית (${brs.length})</option>`:''}</select></label>
+      ${single?`<span class="small muted">תכנית ${single.year} מהגיליון "${esc(single.sheet)}" בקובץ ${esc(single.file)}.</span>
+        <label class="small">שיוך לסניף <select id="plan-branch">${branchNames().map(b=>`<option ${b===sel[0]?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+        <button class="btn danger sm" type="button" data-delplan="${esc(sel[0])}">מחיקת התכנית</button>`:''}</div>
       ${!act.length?`<div class="small" style="margin-top:6px">אין עדיין ביצוע ל${per.label}. מוצג תכנון בלבד.</div>`:''}
       ${missingManual.length?`<div class="small" style="margin-top:6px;color:var(--warn)">לא הוזנו עלויות ידניות ל: ${missingManual.map(m=>MONTHS[+m.slice(5)-1]).join(', ')}. הרווח הגולמי בפועל בחודשים אלה לא כולל אותן.</div>`:''}
     </div>
@@ -810,37 +843,40 @@ function renderPlan(v){
     </div>
     ${all.length>act.length?`<p class="hint">הכרטיסים מציגים את החודשים שיש להם ביצוע (${act.map(m=>MONTHS[+m.slice(5)-1]).join(', ')||'אין'}). תכנון מלא ל${per.label}: שעות ${hrs(PA.hours)}, הכנסות ${money(PA.revenue)}, רווח גולמי ${money(PA.gm)}.</p>`:''}
     <section class="panel">
-      <div class="panel-head"><h2>תכנון מול ביצוע לפי חודש</h2><span class="small muted">${per.label}</span></div>
+      <div class="panel-head"><h2>תכנון מול ביצוע לפי חודש</h2><span class="small muted">${per.label} · ${esc(sel.join(' + '))}</span></div>
       <div class="tbl-wrap"><table>
         <thead><tr><th class="first" rowspan="2">חודש</th><th colspan="3" style="text-align:center">שעות</th><th colspan="3" style="text-align:center">הכנסות</th><th colspan="3" style="text-align:center">עובדות</th><th colspan="3" style="text-align:center">רווח גולמי</th><th colspan="2" style="text-align:center">שיעור רווח</th></tr>
           <tr>${'<th class="n">תכנון</th><th class="n">ביצוע</th><th class="n">פער</th>'.repeat(4)}<th class="n">תכנון</th><th class="n">ביצוע</th></tr></thead>
-        <tbody>${all.map(m=>{ const p=plan.months[m], a=months[m]?branchActual(m, plan.branch):null;
-            return `<tr><td class="first">${monthName(m)}${a&&!a.manEntered&&manLines.length?' <span class="pill warn">ללא עלויות ידניות</span>':''}</td>${cell(a?.h,p.hours,hrs,'up')}${cell(a?.revenue,p.revenue,money,'up')}${cell(a?.workers,p.workers,x=>ltr(nf0.format(x)),'neutral')}${cell(a?.gm,p.gm,money,'up')}
-              <td class="n">${pct(p.revenue?p.gm/p.revenue:NaN)}</td><td class="n">${a?marginPill(a.revenue?a.gm/a.revenue:NaN, a.revenue):'—'}</td></tr>`; }).join('')}
+        <tbody>${all.map(monthRow).join('')}
           ${all.length>1&&act.length?`<tr class="total"><td class="first">סה״כ חודשים עם ביצוע</td>${cell(A.h,P.hours,hrs,'up')}${cell(A.revenue,P.revenue,money,'up')}${cell(A.workers,P.workers,x=>ltr(nf1.format(x)),'neutral')}${cell(A.gm,P.gm,money,'up')}<td class="n">${pct(gmP)}</td><td class="n">${pct(gmA)}</td></tr>`:''}
         </tbody></table></div>
-      <p class="hint" style="margin-top:8px">ביצוע = אתרים ולקוחות של ${esc(plan.branch||'')}. עובדות = עובדים ששולם להם שכר על עבודה באתרי הסניף באותו חודש. בסה״כ, עובדות הן ממוצע חודשי.</p>
+      <p class="hint" style="margin-top:8px">ביצוע = אתרים ולקוחות של ${esc(sel.join(' ו'))}. עובדות = עובדים ששולם להם שכר על עבודה באתרי הסניף באותו חודש. בסה״כ, עובדות הן ממוצע חודשי.</p>
     </section>
     <section class="panel">
       <div class="panel-head"><h2>עלות המכר: תכנון מול ביצוע</h2><span class="small muted">חודשים עם ביצוע ב${per.label}</span></div>
       ${act.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">שורה</th><th class="n">תכנון</th><th class="n">ביצוע</th><th class="n">פער</th><th>מקור הביצוע</th></tr></thead><tbody>
-        <tr><td class="first">עלות מעביד: ${esc(payLines.join(', '))}</td><td class="n">${money(payLines.reduce((a,l)=>a+(P.costs[l]||0),0))}</td><td class="n">${money(A.payroll)}</td><td class="n">${money(A.payroll-payLines.reduce((a,l)=>a+(P.costs[l]||0),0))}</td><td class="small muted">דוח השכר</td></tr>
-        ${manLines.map(l=>`<tr><td class="first">${esc(l)}${plan.costLines.includes(l)?'':' <span class="muted small">(לא בעלות המכר של התכנית)</span>'}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">${money(A.manual[l]||0)}</td><td class="n">${money((A.manual[l]||0)-(P.costs[l]||0))}</td><td class="small muted">הזנה ידנית</td></tr>`).join('')}
-        ${noneLines.map(l=>`<tr><td class="first">${esc(l)}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">—</td><td class="n">—</td><td class="small muted">לא נמדד בביצוע</td></tr>`).join('')}
+        <tr><td class="first">עלות מעביד: ${esc(payLinesAll.join(', '))}</td><td class="n">${money(planPay)}</td><td class="n">${money(A.payroll)}</td><td class="n">${money(A.payroll-planPay)}</td><td class="small muted">דוח השכר</td></tr>
+        ${manLinesAll.map(l=>`<tr><td class="first">${esc(l)}${inPlanCost(l)?'':' <span class="muted small">(לא בעלות המכר של התכנית)</span>'}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">${money(A.manual[l]||0)}</td><td class="n">${money((A.manual[l]||0)-(P.costs[l]||0))}</td><td class="small muted">הזנה ידנית</td></tr>`).join('')}
+        ${noneAll.map(l=>`<tr><td class="first">${esc(l)}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">—</td><td class="n">—</td><td class="small muted">לא נמדד בביצוע</td></tr>`).join('')}
         <tr class="total"><td class="first">סה״כ עלות המכר</td><td class="n">${money(P.tc)}</td><td class="n">${money(A.tc)}</td><td class="n">${money(A.tc-P.tc)}</td><td></td></tr>
       </tbody></table></div>`:'<p class="muted">אין עדיין ביצוע לתקופה.</p>'}
     </section>
-    <section class="panel">
-      <div class="panel-head"><h2>עלויות ידניות בפועל ${yr}</h2><span class="small muted">תשלומים ישירים לספקים שלא מופיעים בדוח השכר. נשמר אוטומטית</span></div>
-      <div class="filters" style="margin:0 0 10px">${plan.costLines.map(l=>`<label class="small">${esc(l)}: ${srcSel(l)}</label>`).join('')}
+    ${single ? manualPanel(sel[0]) : '<section class="panel"><p class="muted">הזנת עלויות ידניות נעשית לכל סניף בנפרד: יש לבחור סניף בראש הלשונית.</p></section>'}
+  </div>`;
+}
+function manualPanel(br){
+  const pl = plans[br], manLines = manualLinesOf(pl), yr = String(pl.year);
+  const srcSel = l => `<select data-linesrc="${esc(l)}" aria-label="מקור הביצוע של ${esc(l)}" style="font-size:12px;padding:2px 4px">${[['payroll','מדוח השכר'],['manual','הזנה ידנית'],['none','לא נמדד']].map(([k,n])=>`<option value="${k}" ${(pl.lineSource?.[l]||'manual')===k?'selected':''}>${n}</option>`).join('')}</select>`;
+  return `<section class="panel">
+      <div class="panel-head"><h2>עלויות ידניות בפועל ${yr} · ${esc(br)}</h2><span class="small muted">תשלומים ישירים לספקים שלא מופיעים בדוח השכר. נשמר אוטומטית</span></div>
+      <div class="filters" style="margin:0 0 10px">${pl.costLines.map(l=>`<label class="small">${esc(l)}: ${srcSel(l)}</label>`).join('')}
         <label class="small">שורה ידנית נוספת <input type="text" id="plan-addline" placeholder="למשל: הובלות" style="width:120px"></label></div>
       ${manLines.length?`<div class="tbl-wrap budget-table"><table><thead><tr><th class="first">שורה</th>${MONTHS.map(n=>`<th class="n">${n.slice(0,3)}</th>`).join('')}<th class="n">סה״כ</th></tr></thead><tbody>
-        ${manLines.map(l=>`<tr><td class="first">${esc(l)}</td>${MONTHS.map((_,i)=>{ const m=ymOf(plan.year,i+1), v=manual[m]?.[l];
-          return `<td class="n"><input type="text" inputmode="decimal" id="man-${i}-${esc(l)}" data-man="${m}|${esc(l)}" value="${v!=null&&v!==''?nf0.format(v):''}" placeholder="${plan.months[m]?.costs?.[l]?nf0.format(plan.months[m].costs[l]):''}" aria-label="${esc(l)} ${MONTHS[i]}" style="width:78px;text-align:left;padding:3px 5px;direction:ltr"></td>`; }).join('')}
-          <td class="n">${money(MONTHS.reduce((a,_,i)=>a+(+manual[ymOf(plan.year,i+1)]?.[l]||0),0))}</td></tr>`).join('')}
+        ${manLines.map(l=>`<tr><td class="first">${esc(l)}</td>${MONTHS.map((_,i)=>{ const m=ymOf(pl.year,i+1), v=manual[br]?.[m]?.[l];
+          return `<td class="n"><input type="text" inputmode="decimal" id="man-${i}-${esc(l)}" data-man="${m}|${esc(l)}" value="${v!=null&&v!==''?nf0.format(v):''}" placeholder="${pl.months[m]?.costs?.[l]?nf0.format(pl.months[m].costs[l]):''}" aria-label="${esc(l)} ${MONTHS[i]}" style="width:78px;text-align:left;padding:3px 5px;direction:ltr"></td>`; }).join('')}
+          <td class="n">${money(MONTHS.reduce((a,_,i)=>a+(+manual[br]?.[ymOf(pl.year,i+1)]?.[l]||0),0))}</td></tr>`).join('')}
       </tbody></table></div><p class="hint" style="margin-top:8px">הערך האפור בתא הוא סכום התכנית. תא ריק = לא הוזן. אם שורה מסוימת כבר כלולה בדוח השכר, יש להזין 0.</p>`:'<p class="muted">כל שורות העלות בתכנית מגיעות מדוח השכר.</p>'}
-    </section>
-  </div>`;
+    </section>`;
 }
 
 /* ============================================================ רינדור */
@@ -1324,9 +1360,10 @@ async function handleFiles(files){
     try{
       if(type==='plan'){
         const p = parsePlan(wb, f.name);
-        p.branch = plan?.branch || branchNames().find(b=>/ג'?אסר|גאסר|גיסר/.test(b)) || branchNames()[0] || null;
-        plan = p; await store.savePlan(); ui.tab='plan';
-        toast(`התכנית העסקית ${p.year} נקלטה מהגיליון "${p.sheet}"`); continue;
+        p.branch = guessPlanBranch(wb) || branchNames().find(b=>!plans[b]) || branchNames()[0] || '';
+        const prev = plans[p.branch]; if(prev){ p.lineSource = {...p.lineSource, ...prev.lineSource}; p.extraManual = prev.extraManual || p.extraManual; }  // עדכון תכנית: שומרים את ההגדרות
+        plans = {...plans, [p.branch]:p}; await store.savePlan(); ui.tab='plan'; ui.planBranch = p.branch;
+        toast(`התכנית העסקית ${p.year} של ${p.branch} נקלטה מהגיליון "${p.sheet}". אם הסניף שגוי, אפשר לשנות בלשונית תכנון מול ביצוע`); continue;
       }
       if(type==='rates'){
         const ts = parseRates(wb, f.name);
@@ -1420,6 +1457,10 @@ document.addEventListener('click', async e=>{
   if(t.id==='map-export'){ const wb=XLSX.utils.book_new(); wb.Workbook={Views:[{RTL:true}]}; XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mappingAoa()), 'טבלת התאמה'); return saveXlsx(wb, 'טבלת-התאמת-לקוחות.xlsx'); }
   if(d.unsite){ const [gid,c]=d.unsite.split('|'); const g=mapping.groups.find(x=>x.id===gid); g.sites=g.sites.filter(x=>x!==c); await store.saveMapping(); render(); return; }
   if(d.unclient){ const i=d.unclient.indexOf('|'); const g=mapping.groups.find(x=>x.id===d.unclient.slice(0,i)); const c=d.unclient.slice(i+1); g.clients=g.clients.filter(x=>x!==c); await store.saveMapping(); render(); return; }
+  if(d.delplan){
+    if(!t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לאשר מחיקה'; return; }
+    const np={...plans}; delete np[d.delplan]; plans=np; await store.savePlan(); ui.planBranch=null; render(); toast('התכנית נמחקה'); return;
+  }
   if(d.delrates){
     if(!t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לאשר מחיקה'; return; }
     mapping.rateTables = (mapping.rateTables||[]).filter(x=>x.id!==d.delrates); await store.saveMapping(); render(); toast('טבלת התעריפים נמחקה'); return;
@@ -1442,13 +1483,17 @@ document.addEventListener('change', async e=>{
   else if(t.id==='map-file' && t.files[0]){ const f=t.files[0]; t.value=''; try{ await importMapping(f); }catch(err){ toast('לא הצלחנו לקרוא את קובץ ההתאמה'); } }
   else if(d.assignSite) await assign('site', d.assignSite, t.value);
   else if(d.assignClient) await assign('client', d.assignClient, t.value);
-  else if(d.linesrc){ plan.lineSource = {...(plan.lineSource||{}), [d.linesrc]:t.value}; await store.savePlan(); render(); }
-  else if(t.id==='plan-addline'){ const n=normName(t.value); if(n && !manualLinesOf(plan).includes(n)){ plan.extraManual=[...(plan.extraManual||[]), n]; await store.savePlan(); render(); toast(`נוספה שורה ידנית: ${n}`); } }
-  else if(t.id==='plan-branch'){ plan.branch=t.value; await store.savePlan(); render(); }
-  else if(d.man){ const i=d.man.indexOf('|'), m=d.man.slice(0,i), l=d.man.slice(i+1); const raw=String(t.value).replace(/[,₪\s]/g,'');
-    const cur = manual[m] ? {...manual[m]} : {};
+  else if(t.id==='plan-view'){ ui.planBranch=t.value; saveUi(); render(); }
+  else if(d.linesrc){ const pl=plans[ui.planBranch]; pl.lineSource = {...(pl.lineSource||{}), [d.linesrc]:t.value}; await store.savePlan(); render(); }
+  else if(t.id==='plan-addline'){ const pl=plans[ui.planBranch], n=normName(t.value); if(n && !manualLinesOf(pl).includes(n)){ pl.extraManual=[...(pl.extraManual||[]), n]; await store.savePlan(); render(); toast(`נוספה שורה ידנית: ${n}`); } }
+  else if(t.id==='plan-branch'){ const from=ui.planBranch, to=t.value; if(from!==to){ if(plans[to]){ toast(`כבר יש תכנית ל${to}`); render(); return; }
+      const pl={...plans[from], branch:to}; const np={...plans}; delete np[from]; np[to]=pl; plans=np;
+      if(manual[from]){ manual={...manual, [to]:manual[from]}; delete manual[from]; await store.saveManual(); }
+      ui.planBranch=to; await store.savePlan(); render(); toast(`התכנית שויכה ל${to}`); } }
+  else if(d.man){ const br=ui.planBranch, i=d.man.indexOf('|'), m=d.man.slice(0,i), l=d.man.slice(i+1); const raw=String(t.value).replace(/[,₪\s]/g,'');
+    const cur = {...(manual[br]?.[m]||{})};
     if(raw===''){ delete cur[l]; } else { const n=parseFloat(raw); if(!isFinite(n)){ toast('יש להזין מספר'); return; } cur[l]=n; }
-    manual = {...manual, [m]:cur}; await store.saveManual(); render(); }
+    manual = {...manual, [br]:{...(manual[br]||{}), [m]:cur}}; await store.saveManual(); render(); }
   else if(d.gbranch){ const g=mapping.groups.find(x=>x.id===d.gbranch); if(g){ if(t.value) g.branch=t.value; else delete g.branch; await store.saveMapping(); render(); toast(t.value?`${g.name} שויך לסניף ${t.value}`:'הסניף הוסר'); } }
   else if(d.fee && t.tagName==='INPUT'){ const g=mapping.groups.find(x=>x.id===d.fee); const n=parseFloat(String(t.value).replace(/[,₪\s]/g,''))||0; if(g){ if(n>0) g.fixedFee=n; else delete g.fixedFee; await store.saveMapping(); render(); toast(n>0?`חיוב קבוע של ${moneyRaw(n)} בחודש נשמר`:'החיוב הקבוע הוסר'); } }
   else if(d.ratefrom){ const r=(mapping.rateTables||[]).find(x=>x.id===d.ratefrom); if(r){ r.from=t.value; await store.saveMapping(); render(); toast(`התעריפים בתוקף מ${monthName(t.value)}`); } }
