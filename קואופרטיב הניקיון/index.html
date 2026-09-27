@@ -1028,6 +1028,8 @@ function renderOverview(v){
         <div class="insights">${insights(R, P, per).map(i=>`<div class="insight"><span class="pill ${i.level}">${{good:'▲ חיובי',bad:'▼ דורש טיפול',warn:'● לבדיקה',info:'● מידע'}[i.level]}</span><h3>${i.title}</h3><p>${i.text}</p></div>`).join('')}</div>
       </section>
     </div>
+    ${br ? '' : branchInsightsPanel(R, P, per, allBr, color)}
+    ${P?driversPanel(R, P, per, !br):''}
     ${R.parts?monthTable(R):''}
   </div>`;
   if(chartMonths.length>1){
@@ -1039,6 +1041,43 @@ function renderOverview(v){
       {label:'הכנסות', data:brs.map(b=>b.rev), backgroundColor:cv('--s1'), borderRadius:4, maxBarThickness:36},
       {label:'עלות מעביד', data:brs.map(b=>b.cost), backgroundColor:cv('--s2'), borderRadius:4, maxBarThickness:36}]}}, v=>'₪'+nfc.format(v), c=>` ${c.dataset.label}: ${moneyRaw(c.parsed.y)}`);
   }
+}
+/* ---------- תובנות לכל סניף (בתצוגת כל הארגון) ---------- */
+function branchInsightsPanel(R, P, per, brs, color){
+  const list = brs.filter(b=>b!==NO_BRANCH && (R.branches[b]?.rev || R.branches[b]?.cost));
+  if(list.length<2) return '';
+  return `<section class="panel">
+    <div class="panel-head"><h2>תובנות לפי סניף</h2><span class="small muted">${per.label} · לחיצה על שם הסניף מציגה את כל הלשונית עבורו</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:18px">
+    ${list.map(b=>{ const ins = topInsights(insights(scopeR(R,b), scopeR(P,b), per).filter(i=>!/ממתינים להתאמה/.test(i.title)), 4);
+      return `<div style="border:1px solid var(--line);border-radius:10px;padding:10px 14px">
+        <h3><button class="btn sm" type="button" data-ov-branch="${esc(b)}" style="font-weight:600"><span class="legend" style="margin:0;display:inline"><i style="background:var(${color(b)})"></i></span>${esc(b)}</button></h3>
+        <div class="insights">${ins.map(i=>`<div class="insight"><span class="pill ${i.level}">${LEVEL_LABEL[i.level]}</span><h3>${i.title}</h3><p>${i.text.replace(/ הפירוט בטבלה "מה הסביר את השינוי"\./,'')}</p></div>`).join('')}</div></div>`; }).join('')}
+    </div></section>`;
+}
+/* ---------- מה הסביר את השינוי מול התקופה הקודמת ----------
+   לכל לקוח: שינוי בשעות, בהכנסות וברווח. השינוי בהכנסות מפורק לחלק שנובע מהשעות (שינוי השעות × ההכנסה לשעה הקודמת)
+   ולחלק שנובע ממחיר/חיוב (השאר: שינוי בהכנסה לשעה, חיוב נוסף או חסר). */
+function changeDrivers(R, P){
+  const prev = Object.fromEntries(P.groups.map(g=>[g.id, g])), cur = Object.fromEntries(R.groups.map(g=>[g.id, g]));
+  return [...new Set([...Object.keys(prev), ...Object.keys(cur)])].map(id=>{
+    const a = cur[id] || {rev:0, h:0, gp:0}, b = prev[id] || {rev:0, h:0, gp:0}, x = cur[id] || prev[id];
+    const dRev = a.rev-b.rev, vol = b.h>0 ? (a.h-b.h)*(b.rev/b.h) : (a.h>0 ? dRev : 0);
+    return {id, name:x.name, branch:x.branch, h0:b.h, h1:a.h, rev0:b.rev, rev1:a.rev, dRev, dH:a.h-b.h, dGp:a.gp-b.gp, vol, price:dRev-vol, isNew:!prev[id]||(!b.h&&!b.rev), isGone:!cur[id]||(!a.h&&!a.rev)};
+  }).filter(x=>Math.abs(x.dRev)>=500 || Math.abs(x.dH)>=20).sort((p,q)=>Math.abs(q.dRev)-Math.abs(p.dRev));
+}
+function driversPanel(R, P, per, withBranch){
+  const D = changeDrivers(R, P), up = D.filter(x=>x.dRev>0).slice(0,8), down = D.filter(x=>x.dRev<0).slice(0,8);
+  const dT = R.tot.rev-P.tot.rev, dH = R.tot.h-P.tot.h;
+  const sgn = (v, f) => `${v>0?'+':''}${f(v)}`;
+  const tbl = (rows, title) => `<div><h3 style="margin-bottom:8px">${title}</h3>${rows.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">לקוח</th>${withBranch?'<th>סניף</th>':''}<th class="n">שעות</th><th class="n">שינוי בשעות</th><th class="n">שינוי בהכנסות</th><th class="n">מזה: שעות</th><th class="n">מזה: מחיר/חיוב</th><th class="n">שינוי ברווח</th></tr></thead><tbody>
+      ${rows.map(x=>`<tr class="clickable" data-client="${x.id}"><td class="first">${esc(x.name)}${x.isNew?' <span class="pill info">חדש</span>':x.isGone?' <span class="pill warn">ללא פעילות</span>':''}</td>${withBranch?`<td>${esc(x.branch)}</td>`:''}<td class="n">${hrs(x.h0)} ← ${hrs(x.h1)}</td><td class="n">${x.h0?`<span class="delta ${x.dH>=0?'good':'bad'}">${pct(x.dH/x.h0,0)}</span>`:'—'}</td><td class="n">${sgn(x.dRev, money)}</td><td class="n">${sgn(x.vol, money)}</td><td class="n">${Math.abs(x.price)<100?'—':sgn(x.price, money)}</td><td class="n"><span class="delta ${x.dGp>=0?'good':'bad'}">${sgn(x.dGp, money)}</span></td></tr>`).join('')}
+    </tbody></table></div><p class="hint" style="margin-top:6px">${rows.length} הלקוחות האלה: ${sgn(rows.reduce((a,x)=>a+x.dRev,0), money)} בהכנסות, ${sgn(rows.reduce((a,x)=>a+x.dH,0), hrs)} שעות.</p>`:'<p class="muted small">אין שינויים משמעותיים.</p>'}</div>`;
+  return `<section class="panel">
+    <div class="panel-head"><h2>מה הסביר את השינוי מול ${per.prev.short}</h2><span class="small muted">הכנסות ${sgn(dT, money)} (${pct(P.tot.rev?dT/P.tot.rev:NaN)}) · שעות ${sgn(dH, hrs)} (${pct(P.tot.h?dH/P.tot.h:NaN)})</span></div>
+    <div class="stack">${tbl(down, 'ירידות עיקריות')}${tbl(up, 'עליות עיקריות')}</div>
+    <p class="hint" style="margin-top:8px">"מזה: שעות" = השינוי בשעות כפול ההכנסה לשעה בתקופה הקודמת. "מזה: מחיר/חיוב" = השאר: שינוי בתעריף, חיוב נוסף או חיוב חסר (למשל חשבונית שנרשמה בחודש אחר). לחיצה על לקוח פותחת את כרטיס הלקוח.</p>
+  </section>`;
 }
 function monthTable(R){
   return `<section class="panel">
@@ -1075,8 +1114,9 @@ function insights(R, P, per){
     text: suspect.map(g=>`${esc(g.name)} (${perH(g.revH)})`).join(' · ') + `. בדרך כלל ההכנסה לשעה בין ${ltr('₪'+REV_H[0])} ל-${ltr('₪'+REV_H[1])}. ייתכן שחסר אתר או לקוח בקבוצה.`});
   if(P){
     const ch = (T.rev-P.tot.rev)/P.tot.rev;
+    const D = changeDrivers(R, P), main = D.filter(x=>Math.sign(x.dRev)===Math.sign(T.rev-P.tot.rev)).slice(0,3);
     out.push({level: ch>=0?'good':'warn', title:`ההכנסות ${ch>=0?'עלו':'ירדו'} ב-${pct(Math.abs(ch))} מול ${per.prev.short}`,
-      text:`${money(T.rev)} לעומת ${money(P.tot.rev)}. השעות ${T.h>=P.tot.h?'עלו':'ירדו'} ב-${pct(Math.abs((T.h-P.tot.h)/P.tot.h))}.`});
+      text:`${money(T.rev)} לעומת ${money(P.tot.rev)}. השעות ${T.h>=P.tot.h?'עלו':'ירדו'} ב-${pct(Math.abs((T.h-P.tot.h)/P.tot.h))}.${main.length?` עיקר השינוי: ${main.map(x=>`<b>${esc(x.name)}</b> (${x.dRev>0?'+':''}${money(x.dRev)})`).join(', ')}. הפירוט בטבלה "מה הסביר את השינוי".`:''}`});
   }
   const billed = R.groups.filter(g=>g.expected!=null).map(g=>({g, gap:(g.billRev??g.rev)-g.expected})).map(x=>({...x, p:x.gap/x.g.expected}))
     .filter(x=>Math.abs(x.p)>0.03 && Math.abs(x.gap)>300).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap));
@@ -1913,6 +1953,7 @@ document.addEventListener('click', async e=>{
   if(d.client){ ui.client=d.client; ui.tab='client'; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(t.id==='btn-export') return exportReport();
   if(t.id==='ov-all'){ ui.branch=''; saveUi(); render(); return; }
+  if(d.ovBranch){ ui.branch=d.ovBranch; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(t.id==='dash-pdf' || t.id==='dash-pdf-all'){
     const btns = [...document.querySelectorAll('#dash-pdf,#dash-pdf-all')]; btns.forEach(b=>b.disabled=true); toast('מכינים את ה-PDF…');
     try{
