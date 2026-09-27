@@ -965,10 +965,22 @@ function render(){
 }
 
 /* ---------- סקירה ---------- */
+// תוצאה מצומצמת לסניף אחד: הסכומים מהסניף (כולל החלק שלו בלקוחות שעובדים בכמה סניפים), הלקוחות שרוב הפעילות שלהם בסניף,
+// ושכר ההנהלה בחלק יחסי לפי ההכנסות
+function scopeR(R, br){
+  if(!R || !br) return R;
+  const b = R.branches[br] || {name:br, rev:0, h:0, cost:0};
+  const share = R.tot.rev ? b.rev/R.tot.rev : 0, overhead = R.tot.overhead*share;
+  const tot = {rev:b.rev, h:b.h, cost:b.cost, gp:b.rev-b.cost, overhead, overheadShare:share};
+  tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
+  tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
+  return {...R, groups:R.groups.filter(g=>g.branch===br), branches:{[br]:{...b, gp:tot.gp, margin:tot.margin, revH:tot.revH, costH:tot.costH}},
+    unSites:Object.fromEntries(Object.entries(R.unSites).filter(([,x])=>x.branch===br)), unClients:{}, tot, parts:R.parts?.map(x=>scopeR(x, br)), scope:br};
+}
 function renderOverview(v){
-  const per = period(), R = computePeriod(per.months), T = R.tot;
+  const per = period(), br = ui.branch || null, R = scopeR(computePeriod(per.months), br), T = R.tot;
   // השוואה רק בין תקופות שלמות; השוואה לחודש חלקי מראה ירידות שלא קרו
-  const P = per.prev && per.months.every(complete) && per.prev.months.every(complete) ? computePeriod(per.prev.months) : null;
+  const P = scopeR(per.prev && per.months.every(complete) && per.prev.months.every(complete) ? computePeriod(per.prev.months) : null, br);
   const d = (cur, prev, better='up', isPct=false) => {
     if(prev==null || !isFinite(prev) || !isFinite(cur) || (!isPct && !prev)) return '';
     const diff = isPct ? cur-prev : (cur-prev)/Math.abs(prev); const good = better==='up' ? diff>=0 : diff<=0;
@@ -976,32 +988,34 @@ function renderOverview(v){
   };
   const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
   const brs = Object.values(R.branches).filter(b=>b.rev||b.cost).sort((a,b)=>b.rev-a.rev);
-  const brNames = branchNames();
-  const color = b => ['--s1','--s2','--s3'][brNames.indexOf(b)] || '--muted';
+  const allBr = branchNames(), brNames = br ? [br] : allBr;
+  const color = b => ['--s1','--s2','--s3'][allBr.indexOf(b)] || '--muted';
   const gaps = periodGaps(per);
+  const ohLabel = br ? 'שכר הנהלה (חלק יחסי)' : 'שכר הנהלה';
   const chartMonths = per.months.length>1 ? per.months : monthList();
   v.innerHTML = `<div class="stack">
     ${gaps.length?`<div class="panel" style="background:var(--warn-soft);border-color:transparent"><b>החישוב ל${per.label} חלקי.</b> ${gaps.join(' · ')}.</div>`:''}
+    ${br?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(br)} בלבד.</b> הכנסות, שעות ועלות מעביד של אתרי הסניף; לקוח שעובד בכמה סניפים נספר לפי החלק שלו בכל סניף. שכר ההנהלה מוקצה לסניף לפי חלקו בהכנסות (${pct(T.overheadShare)}). <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
     <div class="kpis">
       ${kpi('הכנסות (לפני מע״מ)', moneyC(T.rev), d(T.rev, P?.tot.rev))}
       ${kpi('עלות מעביד באתרים', moneyC(T.cost), `${hrs(T.h)} שעות · ${perH(T.costH)} לשעה`)}
       ${kpi('רווח גולמי', moneyC(T.gp), `שיעור ${pct(T.margin)} ${d(T.margin, P?.tot.margin, 'up', true)}`)}
-      ${kpi('אחרי שכר הנהלה', moneyC(T.net), `שכר הנהלה ${moneyC(T.overhead)} · שיעור ${pct(T.netMargin)}`)}
+      ${kpi('אחרי שכר הנהלה', moneyC(T.net), `${ohLabel} ${moneyC(T.overhead)} · שיעור ${pct(T.netMargin)}`)}
     </div>
     <div class="grid2">
       <div class="stack">
         <section class="panel">
-          <div class="panel-head"><h2>רווחיות לפי סניף</h2><span class="small muted">${per.label}</span></div>
+          <div class="panel-head"><h2>${br?`רווחיות ${esc(br)}`:'רווחיות לפי סניף'}</h2><span class="small muted">${per.label}</span></div>
           <div class="tbl-wrap"><table>
             <thead><tr><th class="first">סניף</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th>${P?'<th class="n">שינוי בשיעור</th>':''}</tr></thead>
             <tbody>${brs.map(b=>{ const pb = P?.branches[b.name];
               return `<tr class="clickable" data-branch-go="${esc(b.name)}"><td class="first">${chartMonths.length>1?`<span class="legend" style="margin:0;display:inline"><i style="background:var(${color(b.name)})"></i></span>`:''}${esc(b.name)}</td><td class="n">${money(b.rev)}</td><td class="n">${hrs(b.h)}</td><td class="n">${money(b.cost)}</td><td class="n">${money(b.gp)}</td><td class="n">${marginPill(b.margin, b.rev)}</td><td class="n">${perH(b.revH)}</td><td class="n">${perH(b.costH)}</td>
               ${P?`<td class="n">${pb&&isFinite(pb.margin)&&isFinite(b.margin)?`<span class="delta ${b.margin>=pb.margin?'good':'bad'}">${ltr((b.margin>=pb.margin?'+':'−')+Math.abs((b.margin-pb.margin)*100).toFixed(1)+' נק׳')}</span>`:'—'}</td>`:''}</tr>`;}).join('')}
             <tr class="total"><td class="first">סה״כ אתרים</td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td><td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td>${P?'<td></td>':''}</tr>
-            <tr><td class="first">שכר הנהלה</td><td></td><td></td><td class="n">${money(T.overhead)}</td><td class="n">${money(-T.overhead)}</td><td></td><td></td><td></td>${P?'<td></td>':''}</tr>
+            <tr><td class="first">${ohLabel}</td><td></td><td></td><td class="n">${money(T.overhead)}</td><td class="n">${money(-T.overhead)}</td><td></td><td></td><td></td>${P?'<td></td>':''}</tr>
             <tr class="total"><td class="first">רווח אחרי שכר הנהלה</td><td class="n">${money(T.rev)}</td><td></td><td class="n">${money(T.cost+T.overhead)}</td><td class="n">${money(T.net)}</td><td class="n">${pct(T.netMargin)}</td><td></td><td></td>${P?'<td></td>':''}</tr>
             </tbody></table></div>
-          <p class="hint" style="margin-top:8px">לחיצה על סניף פותחת את רשימת הלקוחות שלו.</p>
+          <p class="hint" style="margin-top:8px">לחיצה על ${br?'הסניף':'סניף'} פותחת את רשימת הלקוחות שלו.</p>
         </section>
         <section class="panel">
           <div class="panel-head"><h2>${chartMonths.length>1?'שיעור רווח גולמי לפי חודש':'הכנסות מול עלות מעביד לפי סניף'}</h2></div>
@@ -1898,6 +1912,7 @@ document.addEventListener('click', async e=>{
   if(d.open){ ui.open = ui.open===d.open ? null : d.open; render(); return; }
   if(d.client){ ui.client=d.client; ui.tab='client'; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(t.id==='btn-export') return exportReport();
+  if(t.id==='ov-all'){ ui.branch=''; saveUi(); render(); return; }
   if(t.id==='dash-pdf' || t.id==='dash-pdf-all'){
     const btns = [...document.querySelectorAll('#dash-pdf,#dash-pdf-all')]; btns.forEach(b=>b.disabled=true); toast('מכינים את ה-PDF…');
     try{
