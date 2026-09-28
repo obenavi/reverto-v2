@@ -307,7 +307,8 @@ const store = {
   },
   async savePlan(){
     const doc = {plans:JSON.parse(JSON.stringify(plans)), updatedAt:new Date().toISOString()};
-    if(this.db) await this.db.doc('settings/plan').set(doc);
+    if(this.db){ try{ await this.db.doc('settings/plan').set(doc); }
+      catch(e){ console.error(e); toast(`שמירת התכנית נכשלה (${e?.code||e?.message||'שגיאה'}). יש לרענן את הדף ולנסות שוב`); return false; } }
     else try{ localStorage.setItem('coop-plan', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
   async saveManual(){
@@ -2142,7 +2143,7 @@ document.addEventListener('click', async e=>{
   if(d.unclient){ const i=d.unclient.indexOf('|'); const g=mapping.groups.find(x=>x.id===d.unclient.slice(0,i)); const c=d.unclient.slice(i+1); g.clients=g.clients.filter(x=>x!==c); await store.saveMapping(); render(); return; }
   if(d.rmline){   // הסרת שורה ידנית נוספת בלחיצה אחת. הסכומים שהוזנו נשארים שמורים וחוזרים אם מוסיפים את השורה שוב
     const pl = plans[ui.planBranch], l = d.rmline; if(!pl) return;
-    pl.extraManual = (pl.extraManual||[]).filter(x=>x!==l); await store.savePlan(); render();
+    pl.extraManual = (pl.extraManual||[]).filter(x=>x!==l); render(); if(await store.savePlan()===false) return;
     toast(`השורה "${l}" הוסרה מ${ui.planBranch}. הסכומים שהוזנו שמורים, ויחזרו אם תוסיפי את השורה שוב`); return;
   }
   if(d.delplan){
@@ -2174,7 +2175,7 @@ document.addEventListener('change', async e=>{
   else if(d.assignSite) await assign('site', d.assignSite, t.value);
   else if(d.assignClient) await assign('client', d.assignClient, t.value);
   else if(t.id==='plan-view'){ ui.planBranch=t.value; saveUi(); render(); }
-  else if(d.linesrc){ const pl=plans[ui.planBranch]; pl.lineSource = {...(pl.lineSource||{}), [d.linesrc]:t.value}; await store.savePlan(); render(); }
+  else if(d.linesrc){ const pl=plans[ui.planBranch]; pl.lineSource = {...(pl.lineSource||{}), [d.linesrc]:t.value}; render(); await store.savePlan(); }
   else if(t.id==='plan-addline'){ const pl=plans[ui.planBranch], n=normName(t.value); if(n && !manualLinesOf(pl).includes(n)){ pl.extraManual=[...(pl.extraManual||[]), n]; await store.savePlan(); render(); toast(`נוספה שורה ידנית: ${n}`); } }
   else if(t.id==='plan-branch'){ const from=ui.planBranch, to=t.value; if(from!==to){ if(plans[to]){ toast(`כבר יש תכנית ל${to}`); render(); return; }
       const pl={...plans[from], branch:to}; const np={...plans}; delete np[from]; np[to]=pl; plans=np;
