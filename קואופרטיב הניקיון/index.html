@@ -1855,44 +1855,31 @@ function renderData(v){
   </div>`;
 }
 /* ---------- חומרי ניקיון לפי לקוח ----------
-   לכל חודש: כל הלקוחות הפעילים, ולכל אחד שתי עמודות: חיוב ללקוח ועלות חשבונית. נשמר עם היציאה מהתא. */
+   טופס קצר: בכל חודש רק הלקוחות שקיבלו חומרים (2–3 בחודש). לכל אחד: חיוב ללקוח ועלות חשבונית.
+   חיוב ריק = מחושב: חיוב קבוע ללקוח (fixedBill, למשל סאמיט) או עלות + תקורה (markup). */
 function materialsPanel(){
   const ms = monthList(); if(!ms.length) return '';
   if(!ms.includes(ui.matYm)) ui.matYm = ms[ms.length-1];
-  const ym = ui.matYm, R = compute(ym), byId = Object.fromEntries(R.groups.map(g=>[g.id, g]));
-  const has = id => materials.byMonth[ym]?.[id]!=null || materials.billByMonth[ym]?.[id]!=null || (materials.fixedBill[id] && byId[id]?.rev);
-  let list = mapping.groups.filter(g=>byId[g.id]?.rev || byId[g.id]?.h || has(g.id)).map(g=>({g, r:byId[g.id]}));
-  if(ui.matBranch) list = list.filter(x=>(x.r?.branch||'')===ui.matBranch);
-  if(ui.matOnly) list = list.filter(x=>has(x.g.id));
-  list.sort((a,b)=>(has(b.g.id)-has(a.g.id)) || (a.r?.branch||'').localeCompare(b.r?.branch||'','he') || a.g.name.localeCompare(b.g.name,'he'));
-  const inp = (attr, v, label, ph='') => `<input type="text" inputmode="decimal" ${attr} value="${v!=null&&v!==''?nf0.format(v):''}" placeholder="${ph}" aria-label="${esc(label)}" style="width:92px;text-align:left;direction:ltr">`;
-  const billOf = id => byId[id]?.rev || materials.billByMonth[ym]?.[id]!=null ? matBilledFor(id, ym) : 0;
-  const T = list.reduce((a,x)=>({b:a.b+billOf(x.g.id), c:a.c+matFor(x.g.id,ym)}), {b:0,c:0});
-  const fixedIds = Object.keys(materials.fixedBill);
-  const brs = [...new Set(R.groups.map(g=>g.branch).filter(Boolean))].sort();
+  const ym = ui.matYm, gname = id => mapping.groups.find(g=>g.id===id)?.name || id;
+  const ids = [...new Set([...Object.keys(materials.byMonth[ym]||{}), ...Object.keys(materials.billByMonth[ym]||{})])].filter(id=>mapping.groups.some(g=>g.id===id))
+    .sort((x,y)=>gname(x).localeCompare(gname(y),'he'));
+  const inp = (attr, v, label, ph='') => `<input type="text" inputmode="decimal" ${attr} value="${v!=null&&v!==''?nf0.format(v):''}" placeholder="${ph}" aria-label="${esc(label)}" style="width:100px;text-align:left;direction:ltr">`;
+  const fixed = Object.entries(materials.fixedBill).filter(([,v])=>v).map(([id,v])=>`${esc(gname(id))} ${money(v)}`);
   return `<section class="panel">
-    <div class="panel-head"><h2>חומרי ניקיון לפי לקוח</h2><span class="small muted">מזינים את עלות החשבונית; החיוב ללקוח מחושב (עלות + ${pct(materials.markup,0)}) אלא אם הוזן אחרת</span></div>
-    <div class="actions" style="margin-bottom:10px">
-      <label class="small">חודש <select id="mat-ym">${ms.slice().reverse().map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthName(m)}</option>`).join('')}</select></label>
-      <label class="small">סניף <select id="mat-branch"><option value="">כל הסניפים</option>${brs.map(b=>`<option ${b===ui.matBranch?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
-      <label class="small"><input type="checkbox" id="mat-only" ${ui.matOnly?'checked':''}> רק לקוחות עם חומרים</label>
-      <label class="small">תקורה על חשבונית <input type="text" inputmode="decimal" id="mat-markup" value="${Math.round(materials.markup*1000)/10}" style="width:52px;text-align:left;direction:ltr">%</label>
-      <button class="btn sm" type="button" id="mat-template">תבנית אקסל לייבוא</button>
-    </div>
-    <div class="tbl-wrap" style="max-height:520px;overflow:auto"><table><thead><tr><th class="first">לקוח</th><th>סניף</th><th class="n">חיוב ללקוח</th><th class="n">עלות חשבונית</th><th class="n">הפרש</th><th class="n">הכנסות בחודש</th><th class="n">רווח גולמי בחודש</th></tr></thead><tbody>
-      ${list.map(({g, r})=>{ const bl = materials.billByMonth[ym]?.[g.id], c = materials.byMonth[ym]?.[g.id], auto = r?.rev ? matBillAuto(g.id, ym) : 0, fx = materials.fixedBill[g.id];
-        const billV = bl!=null ? +bl : auto, d = billV-(+c||0);
-        return `<tr><td class="first">${esc(g.name)}${fx?` <span class="pill info">חיוב קבוע ${money(fx)}</span>`:''}</td><td>${esc(r?.branch||'')}</td>
-          <td class="n">${inp(`data-matbill="${g.id}"`, bl, `חיוב ללקוח ${g.name} ${monthName(ym)}`, auto?nf0.format(auto):'')}</td>
-          <td class="n">${inp(`data-matcost="${g.id}"`, c, `עלות חשבונית ${g.name} ${monthName(ym)}`)}</td>
-          <td class="n">${billV||c!=null?`<span class="delta ${d>=0?'good':'bad'}">${money(d)}</span>`:''}</td>
-          <td class="n">${r?money(r.rev):'—'}</td><td class="n">${r?marginPill(r.margin, r.rev):'—'}</td></tr>`; }).join('')}
-      <tr class="total"><td class="first">סה״כ ${monthName(ym)}</td><td></td><td class="n">${money(T.b)}</td><td class="n">${money(T.c)}</td><td class="n">${money(T.b-T.c)}</td><td></td><td></td></tr>
+    <div class="panel-head"><h2>חומרי ניקיון</h2>
+      <label class="small">חודש <select id="mat-ym">${ms.slice().reverse().map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthName(m)}</option>`).join('')}</select></label></div>
+    <div class="tbl-wrap"><table><thead><tr><th class="first">לקוח</th><th class="n">חיוב ללקוח</th><th class="n">עלות חשבונית</th><th></th></tr></thead><tbody>
+      ${ids.map(id=>{ const bl = materials.billByMonth[ym]?.[id], c = materials.byMonth[ym]?.[id], auto = matBillAuto(id, ym);
+        return `<tr><td class="first">${esc(gname(id))}</td>
+          <td class="n">${inp(`data-matbill="${id}"`, bl, `חיוב ללקוח ${gname(id)}`, auto?nf0.format(auto):'')}</td>
+          <td class="n">${inp(`data-matcost="${id}"`, c, `עלות חשבונית ${gname(id)}`)}</td>
+          <td><button class="btn sm danger" type="button" data-matdel="${id}">מחיקה</button></td></tr>`; }).join('')}
+      <tr><td class="first"><select id="mat-new-client" aria-label="לקוח"><option value="">הוספת לקוח…</option>${mapping.groups.filter(g=>!ids.includes(g.id)).sort((x,y)=>x.name.localeCompare(y.name,'he')).map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></td>
+        <td class="n"><input type="text" inputmode="decimal" id="mat-new-bill" aria-label="חיוב ללקוח" style="width:100px;text-align:left;direction:ltr"></td>
+        <td class="n"><input type="text" inputmode="decimal" id="mat-new-cost" aria-label="עלות חשבונית" style="width:100px;text-align:left;direction:ltr"></td>
+        <td><button class="btn sm primary" type="button" id="mat-new-add">הוספה</button></td></tr>
     </tbody></table></div>
-    <div class="actions small" style="margin-top:10px"><b>לקוחות בחיוב חודשי קבוע על חומרים:</b>
-      ${fixedIds.map(id=>`<label>${esc(mapping.groups.find(g=>g.id===id)?.name||id)} ${inp(`data-matfixbill="${id}"`, materials.fixedBill[id], 'חיוב קבוע')} ₪</label>`).join('')}
-      <select id="mat-fixadd" aria-label="הוספת לקוח בחיוב קבוע"><option value="">הוספה…</option>${mapping.groups.filter(g=>!fixedIds.includes(g.id)).sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></div>
-    <p class="hint" style="margin-top:8px">מקלידים סכום ויוצאים מהתא (Tab או לחיצה במקום אחר), והוא נשמר. החיוב ללקוח שמוצג באפור מחושב אוטומטית: עלות החשבונית + ${pct(materials.markup,0)}, או החיוב הקבוע ללקוחות שמופיעים למטה. מקלידים בו רק כשהחיוב בפועל שונה. להסרת לקוח מחיוב קבוע מוחקים את הסכום. הקניות לפי צורך, ולכן את ההפרש בין החיוב לעלות כדאי לבחון מצטבר, בכרטיס הלקוח. אפשר גם לייבא קובץ עם העמודות לקוח, חודש, חיוב ללקוח, עלות חשבונית (יש תבנית להורדה), בגרירה ללשונית הזו.</p>
+    <p class="hint" style="margin-top:8px">חיוב ריק מחושב אוטומטית: עלות החשבונית + ${pct(materials.markup,0)}${fixed.length?`; חיוב קבוע בכל חודש: ${fixed.join(', ')}`:''}. עלות החשבונית יורדת מהרווח הגולמי של הלקוח.</p>
   </section>`;
 }
 async function setMaterial(kind, id, raw){
@@ -2126,6 +2113,17 @@ document.addEventListener('click', async e=>{
   if(t.id==='btn-export') return exportReport();
   if(t.id==='btn-pdf'){ t.disabled = true; toast('מכינים את ה-PDF…'); try{ await tabPdf(); } finally { t.disabled = false; } return; }
   if(t.id==='mat-template') return materialsTemplate();
+  if(t.id==='mat-new-add'){
+    const id = $('#mat-new-client').value, rb = String($('#mat-new-bill').value).replace(/[,₪\s]/g,''), rc = String($('#mat-new-cost').value).replace(/[,₪\s]/g,'');
+    if(!id){ toast('יש לבחור לקוח'); return; }
+    if(rb==='' && rc===''){ toast('יש להזין חיוב ללקוח או עלות חשבונית'); return; }
+    if((rb!=='' && !isFinite(+rb)) || (rc!=='' && !isFinite(+rc))){ toast('יש להזין מספרים'); return; }
+    const ym = ui.matYm;
+    if(rc!=='') (materials.byMonth[ym] ||= {})[id] = +rc;
+    if(rb!=='') (materials.billByMonth[ym] ||= {})[id] = +rb;
+    await store.saveMaterials(); render(); toast('נשמר'); return;
+  }
+  if(d.matdel){ const ym = ui.matYm; delete materials.byMonth[ym]?.[d.matdel]; delete materials.billByMonth[ym]?.[d.matdel]; await store.saveMaterials(); render(); return; }
   if(t.id==='ov-all'){ ui.branch=''; saveUi(); render(); return; }
   if(d.ovBranch){ ui.branch=d.ovBranch; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(t.id==='dash-pdf' || t.id==='dash-pdf-all'){
@@ -2185,13 +2183,9 @@ document.addEventListener('change', async e=>{
       if(manual[from]){ manual={...manual, [to]:manual[from]}; delete manual[from]; await store.saveManual(); }
       ui.planBranch=to; await store.savePlan(); render(); toast(`התכנית שויכה ל${to}`); } }
   else if(t.id==='mat-ym'){ ui.matYm=t.value; render(); }
-  else if(t.id==='mat-branch'){ ui.matBranch=t.value; render(); }
-  else if(t.id==='mat-only'){ ui.matOnly=t.checked; render(); }
   else if(d.matcost){ await setMaterial('cost', d.matcost, t.value); }
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
-  else if(t.id==='mat-markup'){ const n = parseFloat(String(t.value).replace(',','.')); if(n>=0 && n<100){ materials.markup = n/100; await store.saveMaterials(); } render(); }
-  else if(t.id==='mat-fixadd'){ if(t.value){ materials.fixedBill[t.value] = 0; ui.matFixAdd = t.value; render(); } }
-  else if(d.matfixbill){ const v = num(String(t.value).replace(/[,₪\s]/g,'')); if(v) materials.fixedBill[d.matfixbill] = v; else delete materials.fixedBill[d.matfixbill]; await store.saveMaterials(); render(); }
+
   else if(d.matm){ await setMaterial('month', d.matm, t.value); }
   else if(d.man){ const br=ui.planBranch, i=d.man.indexOf('|'), m=d.man.slice(0,i), l=d.man.slice(i+1); const raw=String(t.value).replace(/[,₪\s]/g,'');
     const cur = {...(manual[br]?.[m]||{})};
