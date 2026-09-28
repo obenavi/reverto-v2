@@ -917,7 +917,9 @@ function renderPlan(v){
     <div class="panel" style="background:var(--accent-soft);border-color:transparent">
       <div class="actions"><label class="small"><b>תכנית</b> <select id="plan-view">${brs.map(b=>`<option value="${esc(b)}" ${sel.length===1&&sel[0]===b?'selected':''}>${esc(b)}</option>`).join('')}${brs.length>1?`<option value="__all" ${ui.planBranch==='__all'?'selected':''}>כל הסניפים עם תכנית (${brs.length})</option>`:''}</select></label>
       ${single?`<span class="small muted">תכנית ${single.year} מהגיליון "${esc(single.sheet)}" בקובץ ${esc(single.file)}.</span>
-        <label class="small">שיוך לסניף <select id="plan-branch">${branchNames().map(b=>`<option ${b===sel[0]?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+        <details class="small"><summary>שינוי שיוך התכנית לסניף</summary>
+          <span class="actions" style="margin-top:6px">העברת התכנית של ${esc(sel[0])} ל: <select id="plan-branch">${branchNames().filter(b=>b!==sel[0] && b!==NO_BRANCH && !plans[b]).map(b=>`<option>${esc(b)}</option>`).join('')}</select>
+          <button class="btn sm" type="button" id="plan-branch-move">העברה</button></span></details>
         <button class="btn danger sm" type="button" data-delplan="${esc(sel[0])}">מחיקת התכנית</button>`:''}</div>
       ${!act.length?`<div class="small" style="margin-top:6px">אין עדיין ביצוע ל${per.label}. מוצג תכנון בלבד.</div>`:''}
       ${missingManual.length?`<div class="small" style="margin-top:6px;color:var(--warn)">לא הוזנו עלויות ידניות ל: ${missingManual.map(m=>MONTHS[+m.slice(5)-1]).join(', ')}. הרווח הגולמי בפועל בחודשים אלה לא כולל אותן.</div>`:''}
@@ -2125,6 +2127,12 @@ document.addEventListener('click', async e=>{
   }
   if(d.matdel){ const ym = ui.matYm; delete materials.byMonth[ym]?.[d.matdel]; delete materials.billByMonth[ym]?.[d.matdel]; await store.saveMaterials(); render(); return; }
   if(t.id==='ov-all'){ ui.branch=''; saveUi(); render(); return; }
+  if(t.id==='plan-branch-move'){   // העברת תכנית לסניף אחר: רק בלחיצה מפורשת, ורק לסניף שאין לו תכנית. העלויות הידניות עוברות איתה
+    const from = ui.planBranch, to = $('#plan-branch')?.value; if(!to || !plans[from] || plans[to]) return;
+    const np = {...plans, [to]:{...plans[from], branch:to}}; delete np[from]; plans = np;
+    if(manual[from]){ manual = {...manual, [to]:manual[from]}; delete manual[from]; await store.saveManual(); }
+    ui.planBranch = to; saveUi(); render(); await store.savePlan(); toast(`התכנית הועברה מ${from} ל${to}`); return;
+  }
   if(d.ovBranch){ ui.branch=d.ovBranch; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(t.id==='dash-pdf' || t.id==='dash-pdf-all'){
     const btns = [...document.querySelectorAll('#dash-pdf,#dash-pdf-all')]; btns.forEach(b=>b.disabled=true); toast('מכינים את ה-PDF…');
@@ -2176,10 +2184,6 @@ document.addEventListener('change', async e=>{
   else if(t.id==='plan-view'){ ui.planBranch=t.value; saveUi(); render(); }
   else if(d.linesrc){ const pl=plans[ui.planBranch]; pl.lineSource = {...(pl.lineSource||{}), [d.linesrc]:t.value}; render(); await store.savePlan(); }
   else if(t.id==='plan-addline'){ const pl=plans[ui.planBranch], n=normName(t.value); if(n && !manualLinesOf(pl).includes(n)){ pl.extraManual=[...(pl.extraManual||[]), n]; await store.savePlan(); render(); toast(`נוספה שורה ידנית: ${n}`); } }
-  else if(t.id==='plan-branch'){ const from=ui.planBranch, to=t.value; if(from!==to){ if(plans[to]){ toast(`כבר יש תכנית ל${to}`); render(); return; }
-      const pl={...plans[from], branch:to}; const np={...plans}; delete np[from]; np[to]=pl; plans=np;
-      if(manual[from]){ manual={...manual, [to]:manual[from]}; delete manual[from]; await store.saveManual(); }
-      ui.planBranch=to; await store.savePlan(); render(); toast(`התכנית שויכה ל${to}`); } }
   else if(t.id==='mat-ym'){ ui.matYm=t.value; render(); }
   else if(d.matcost){ await setMaterial('cost', d.matcost, t.value); }
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
