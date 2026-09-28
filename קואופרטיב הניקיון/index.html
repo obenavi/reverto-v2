@@ -228,10 +228,13 @@ let plans = {};                  // settings/plan: תכנית עסקית לכל 
 let manual = {};                 // settings/manual: עלויות ידניות בפועל (branch -> ym -> line -> ₪), תשלומים ישירים לספקים
 // settings/materials: חומרי ניקיון לפי לקוח וחודש. byMonth: ym -> קבוצה -> עלות חשבונית (ספק);
 // billByMonth: ym -> קבוצה -> חיוב ללקוח על חומרים (כלול בחשבונית ללקוח, ולכן כבר בהכנסות)
-let materials = {byMonth:{}, billByMonth:{}};
-const loadMaterials = d => ({byMonth:{...(d?.byMonth||{})}, billByMonth:{...(d?.billByMonth||{})}});
+// fixedBill: לקוחות בחיוב חודשי קבוע על חומרים (קבוצה -> ₪). markup: תקורה על חשבונית הספק בחיוב ללקוח (ברירת מחדל 15%)
+let materials = {byMonth:{}, billByMonth:{}, fixedBill:{}, markup:0.15};
+const loadMaterials = d => ({byMonth:{...(d?.byMonth||{})}, billByMonth:{...(d?.billByMonth||{})}, fixedBill:{...(d?.fixedBill||{})}, markup: d?.markup!=null ? +d.markup : 0.15});
 const matFor = (gid, ym) => +(materials.byMonth[ym]?.[gid] || 0);
-const matBilledFor = (gid, ym) => +(materials.billByMonth[ym]?.[gid] || 0);
+// החיוב ללקוח על חומרים בחודש: סכום שהוזן ידנית; אחרת חיוב קבוע ללקוח (למשל סאמיט); אחרת עלות החשבונית + תקורה
+const matBillAuto = (gid, ym) => materials.fixedBill[gid] ? +materials.fixedBill[gid] : matFor(gid, ym)*(1+materials.markup);
+function matBilledFor(gid, ym){ const v = materials.billByMonth[ym]?.[gid]; return v!=null && v!=='' ? +v : matBillAuto(gid, ym); }
 let priv = {};                   // אזור פרטי של הצופה (data/users/<id>): wages = שכר שעתי לפי עובד, staff-YYYY-MM = שעות ועלות לפי עובד ואתר
 const loadPlans = d => !d ? {} : d.plans ? d.plans : d.months ? {[d.branch||'']: d} : {};
 const loadManual = d => !d ? {} : d.byBranch ? d.byBranch : {};
@@ -313,7 +316,7 @@ const store = {
     else try{ localStorage.setItem('coop-manual', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
   async saveMaterials(){
-    const doc = {byMonth:JSON.parse(JSON.stringify(materials.byMonth)), billByMonth:JSON.parse(JSON.stringify(materials.billByMonth)), updatedAt:new Date().toISOString()};
+    const doc = {byMonth:JSON.parse(JSON.stringify(materials.byMonth)), billByMonth:JSON.parse(JSON.stringify(materials.billByMonth)), fixedBill:{...materials.fixedBill}, markup:materials.markup, updatedAt:new Date().toISOString()};
     if(this.db) await this.db.doc('settings/materials').set(doc);
     else try{ localStorage.setItem('coop-materials', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
@@ -667,7 +670,7 @@ function compute(ym){
   }
   // חומרי ניקיון: עלות ישירה של הלקוח, נכנסת לרווח הגולמי שלו
   for(const g of mapping.groups){ const m = matFor(g.id, ym); if(m && (G[g.id] || materials.byMonth[ym]?.[g.id]!=null)) get(g).mat = m;
-    if(G[g.id]) G[g.id].matBill = matBilledFor(g.id, ym); }   // חלק מהחשבונית שהוא חיוב על חומרים
+    if(G[g.id]?.rev) G[g.id].matBill = matBilledFor(g.id, ym); }   // חלק מהחשבונית שהוא חיוב על חומרים
   // הכנסה משויכת לסניף דרך האתרים, לפי חלק השעות של כל אתר בקבוצה
   const branches = {};
   const B = b => branches[b] ||= {name:b, rev:0, h:0, cost:0, mat:0, groups:0};
@@ -1706,7 +1709,7 @@ function renderClient(v){
   const dash = '<span class="muted">—</span>';
   const sites = Object.values(T.sites||{}).sort((a,b)=>b.h-a.h);
   const hasMat = rows.some(r=>r.mat);
-  const inT = rows.filter(r=>!r.absent && !r.partial), mCost = inT.reduce((a,r)=>a+(r.mat||0),0), mBill = inT.reduce((a,r)=>a+matBilledFor(G.id, r.m),0);
+  const inT = rows.filter(r=>!r.absent && !r.partial), mCost = inT.reduce((a,r)=>a+(r.mat||0),0), mBill = inT.reduce((a,r)=>a+(r.rev?matBilledFor(G.id, r.m):0),0);
   const matNote = mCost||mBill ? `<p class="hint" style="margin-top:4px">חומרי ניקיון מתחילת השנה: חויב ללקוח ${money(mBill)}, נקנה ${money(mCost)} · ${mBill-mCost>=0?`<span class="pill good">עודף ${money(mBill-mCost)}</span>`:`<span class="pill warn">חוסר ${money(mCost-mBill)}</span>`}. הקניות לפי צורך, ולכן ההשוואה נכונה על פני כמה חודשים ולא בחודש בודד.</p>` : '';
   // תעריף לשעה: מטבלת התעריפים שבתוקף. בסה״כ: ממוצע משוקלל בשעות בחודשים שנכללים בסה״כ
   const inTot = rows.filter(r=>!r.absent && !r.partial && r.br && !r.br.fixed && r.br.ratedH);
@@ -1857,32 +1860,39 @@ function materialsPanel(){
   const ms = monthList(); if(!ms.length) return '';
   if(!ms.includes(ui.matYm)) ui.matYm = ms[ms.length-1];
   const ym = ui.matYm, R = compute(ym), byId = Object.fromEntries(R.groups.map(g=>[g.id, g]));
-  const has = id => materials.byMonth[ym]?.[id]!=null || materials.billByMonth[ym]?.[id]!=null;
+  const has = id => materials.byMonth[ym]?.[id]!=null || materials.billByMonth[ym]?.[id]!=null || (materials.fixedBill[id] && byId[id]?.rev);
   let list = mapping.groups.filter(g=>byId[g.id]?.rev || byId[g.id]?.h || has(g.id)).map(g=>({g, r:byId[g.id]}));
   if(ui.matBranch) list = list.filter(x=>(x.r?.branch||'')===ui.matBranch);
   if(ui.matOnly) list = list.filter(x=>has(x.g.id));
   list.sort((a,b)=>(has(b.g.id)-has(a.g.id)) || (a.r?.branch||'').localeCompare(b.r?.branch||'','he') || a.g.name.localeCompare(b.g.name,'he'));
-  const inp = (attr, v, label) => `<input type="text" inputmode="decimal" ${attr} value="${v!=null&&v!==''?nf0.format(v):''}" aria-label="${esc(label)}" style="width:92px;text-align:left;direction:ltr">`;
-  const T = list.reduce((a,x)=>({b:a.b+matBilledFor(x.g.id,ym), c:a.c+matFor(x.g.id,ym)}), {b:0,c:0});
+  const inp = (attr, v, label, ph='') => `<input type="text" inputmode="decimal" ${attr} value="${v!=null&&v!==''?nf0.format(v):''}" placeholder="${ph}" aria-label="${esc(label)}" style="width:92px;text-align:left;direction:ltr">`;
+  const billOf = id => byId[id]?.rev || materials.billByMonth[ym]?.[id]!=null ? matBilledFor(id, ym) : 0;
+  const T = list.reduce((a,x)=>({b:a.b+billOf(x.g.id), c:a.c+matFor(x.g.id,ym)}), {b:0,c:0});
+  const fixedIds = Object.keys(materials.fixedBill);
   const brs = [...new Set(R.groups.map(g=>g.branch).filter(Boolean))].sort();
   return `<section class="panel">
-    <div class="panel-head"><h2>חומרי ניקיון לפי לקוח</h2><span class="small muted">עלות החשבונית יורדת מהרווח הגולמי. החיוב ללקוח כבר כלול בהכנסות, ומשמש להשוואה ולבדיקת החיוב</span></div>
+    <div class="panel-head"><h2>חומרי ניקיון לפי לקוח</h2><span class="small muted">מזינים את עלות החשבונית; החיוב ללקוח מחושב (עלות + ${pct(materials.markup,0)}) אלא אם הוזן אחרת</span></div>
     <div class="actions" style="margin-bottom:10px">
       <label class="small">חודש <select id="mat-ym">${ms.slice().reverse().map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthName(m)}</option>`).join('')}</select></label>
       <label class="small">סניף <select id="mat-branch"><option value="">כל הסניפים</option>${brs.map(b=>`<option ${b===ui.matBranch?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
       <label class="small"><input type="checkbox" id="mat-only" ${ui.matOnly?'checked':''}> רק לקוחות עם חומרים</label>
+      <label class="small">תקורה על חשבונית <input type="text" inputmode="decimal" id="mat-markup" value="${Math.round(materials.markup*1000)/10}" style="width:52px;text-align:left;direction:ltr">%</label>
       <button class="btn sm" type="button" id="mat-template">תבנית אקסל לייבוא</button>
     </div>
     <div class="tbl-wrap" style="max-height:520px;overflow:auto"><table><thead><tr><th class="first">לקוח</th><th>סניף</th><th class="n">חיוב ללקוח</th><th class="n">עלות חשבונית</th><th class="n">הפרש</th><th class="n">הכנסות בחודש</th><th class="n">רווח גולמי בחודש</th></tr></thead><tbody>
-      ${list.map(({g, r})=>{ const bl = materials.billByMonth[ym]?.[g.id], c = materials.byMonth[ym]?.[g.id], d = (+bl||0)-(+c||0);
-        return `<tr><td class="first">${esc(g.name)}</td><td>${esc(r?.branch||'')}</td>
-          <td class="n">${inp(`data-matbill="${g.id}"`, bl, `חיוב ללקוח ${g.name} ${monthName(ym)}`)}</td>
+      ${list.map(({g, r})=>{ const bl = materials.billByMonth[ym]?.[g.id], c = materials.byMonth[ym]?.[g.id], auto = r?.rev ? matBillAuto(g.id, ym) : 0, fx = materials.fixedBill[g.id];
+        const billV = bl!=null ? +bl : auto, d = billV-(+c||0);
+        return `<tr><td class="first">${esc(g.name)}${fx?` <span class="pill info">חיוב קבוע ${money(fx)}</span>`:''}</td><td>${esc(r?.branch||'')}</td>
+          <td class="n">${inp(`data-matbill="${g.id}"`, bl, `חיוב ללקוח ${g.name} ${monthName(ym)}`, auto?nf0.format(auto):'')}</td>
           <td class="n">${inp(`data-matcost="${g.id}"`, c, `עלות חשבונית ${g.name} ${monthName(ym)}`)}</td>
-          <td class="n">${bl!=null||c!=null?`<span class="delta ${d>=0?'good':'bad'}">${money(d)}</span>`:''}</td>
+          <td class="n">${billV||c!=null?`<span class="delta ${d>=0?'good':'bad'}">${money(d)}</span>`:''}</td>
           <td class="n">${r?money(r.rev):'—'}</td><td class="n">${r?marginPill(r.margin, r.rev):'—'}</td></tr>`; }).join('')}
       <tr class="total"><td class="first">סה״כ ${monthName(ym)}</td><td></td><td class="n">${money(T.b)}</td><td class="n">${money(T.c)}</td><td class="n">${money(T.b-T.c)}</td><td></td><td></td></tr>
     </tbody></table></div>
-    <p class="hint" style="margin-top:8px">מקלידים סכום ויוצאים מהתא (Tab או לחיצה במקום אחר), והוא נשמר. תא ריק = אין. הקניות לפי צורך, ולכן את ההפרש בין החיוב לעלות כדאי לבחון מצטבר, בכרטיס הלקוח. אפשר גם לייבא קובץ עם העמודות לקוח, חודש, חיוב ללקוח, עלות חשבונית (יש תבנית להורדה), בגרירה ללשונית הזו.</p>
+    <div class="actions small" style="margin-top:10px"><b>לקוחות בחיוב חודשי קבוע על חומרים:</b>
+      ${fixedIds.map(id=>`<label>${esc(mapping.groups.find(g=>g.id===id)?.name||id)} ${inp(`data-matfixbill="${id}"`, materials.fixedBill[id], 'חיוב קבוע')} ₪</label>`).join('')}
+      <select id="mat-fixadd" aria-label="הוספת לקוח בחיוב קבוע"><option value="">הוספה…</option>${mapping.groups.filter(g=>!fixedIds.includes(g.id)).sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></div>
+    <p class="hint" style="margin-top:8px">מקלידים סכום ויוצאים מהתא (Tab או לחיצה במקום אחר), והוא נשמר. החיוב ללקוח שמוצג באפור מחושב אוטומטית: עלות החשבונית + ${pct(materials.markup,0)}, או החיוב הקבוע ללקוחות שמופיעים למטה. מקלידים בו רק כשהחיוב בפועל שונה. להסרת לקוח מחיוב קבוע מוחקים את הסכום. הקניות לפי צורך, ולכן את ההפרש בין החיוב לעלות כדאי לבחון מצטבר, בכרטיס הלקוח. אפשר גם לייבא קובץ עם העמודות לקוח, חודש, חיוב ללקוח, עלות חשבונית (יש תבנית להורדה), בגרירה ללשונית הזו.</p>
   </section>`;
 }
 async function setMaterial(kind, id, raw){
@@ -2179,6 +2189,9 @@ document.addEventListener('change', async e=>{
   else if(t.id==='mat-only'){ ui.matOnly=t.checked; render(); }
   else if(d.matcost){ await setMaterial('cost', d.matcost, t.value); }
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
+  else if(t.id==='mat-markup'){ const n = parseFloat(String(t.value).replace(',','.')); if(n>=0 && n<100){ materials.markup = n/100; await store.saveMaterials(); } render(); }
+  else if(t.id==='mat-fixadd'){ if(t.value){ materials.fixedBill[t.value] = 0; ui.matFixAdd = t.value; render(); } }
+  else if(d.matfixbill){ const v = num(String(t.value).replace(/[,₪\s]/g,'')); if(v) materials.fixedBill[d.matfixbill] = v; else delete materials.fixedBill[d.matfixbill]; await store.saveMaterials(); render(); }
   else if(d.matm){ await setMaterial('month', d.matm, t.value); }
   else if(d.man){ const br=ui.planBranch, i=d.man.indexOf('|'), m=d.man.slice(0,i), l=d.man.slice(i+1); const raw=String(t.value).replace(/[,₪\s]/g,'');
     const cur = {...(manual[br]?.[m]||{})};
