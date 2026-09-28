@@ -226,15 +226,12 @@ let mapping = {groups:[], overheadSites:[]};
 let months = {};                 // ym -> doc
 let plans = {};                  // settings/plan: תכנית עסקית לכל סניף (branch -> plan, מגיליון רווח והפסד)
 let manual = {};                 // settings/manual: עלויות ידניות בפועל (branch -> ym -> line -> ₪), תשלומים ישירים לספקים
-let materials = {byMonth:{}, fixed:{}, billed:{}};   // settings/materials: עלות חומרי ניקיון ללקוח. byMonth: ym -> קבוצה -> ₪; fixed: קבוצה -> {amt, from}
-                                                  // billed: קבוצה -> {amt, from} = חיוב חודשי קבוע ללקוח על חומרים (כלול בחשבונית)
-const loadMaterials = d => ({byMonth:{...(d?.byMonth||{})}, fixed:{...(d?.fixed||{})}, billed:{...(d?.billed||{})}});
-const matBilledFor = (gid, ym) => { const f = materials.billed[gid]; return f && f.amt && (!f.from || f.from<=ym) ? +f.amt : 0; };
-// עלות החומרים של לקוח בחודש: סכום שהוזן לחודש, ואם לא הוזן, הסכום הקבוע (מהחודש שממנו הוא בתוקף)
-function matFor(gid, ym){
-  const v = materials.byMonth[ym]?.[gid]; if(v!=null && v!=='') return +v || 0;
-  const f = materials.fixed[gid]; return f && f.amt && (!f.from || f.from<=ym) ? +f.amt : 0;
-}
+// settings/materials: חומרי ניקיון לפי לקוח וחודש. byMonth: ym -> קבוצה -> עלות חשבונית (ספק);
+// billByMonth: ym -> קבוצה -> חיוב ללקוח על חומרים (כלול בחשבונית ללקוח, ולכן כבר בהכנסות)
+let materials = {byMonth:{}, billByMonth:{}};
+const loadMaterials = d => ({byMonth:{...(d?.byMonth||{})}, billByMonth:{...(d?.billByMonth||{})}});
+const matFor = (gid, ym) => +(materials.byMonth[ym]?.[gid] || 0);
+const matBilledFor = (gid, ym) => +(materials.billByMonth[ym]?.[gid] || 0);
 let priv = {};                   // אזור פרטי של הצופה (data/users/<id>): wages = שכר שעתי לפי עובד, staff-YYYY-MM = שעות ועלות לפי עובד ואתר
 const loadPlans = d => !d ? {} : d.plans ? d.plans : d.months ? {[d.branch||'']: d} : {};
 const loadManual = d => !d ? {} : d.byBranch ? d.byBranch : {};
@@ -316,7 +313,7 @@ const store = {
     else try{ localStorage.setItem('coop-manual', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
   async saveMaterials(){
-    const doc = {byMonth:JSON.parse(JSON.stringify(materials.byMonth)), fixed:JSON.parse(JSON.stringify(materials.fixed)), billed:JSON.parse(JSON.stringify(materials.billed)), updatedAt:new Date().toISOString()};
+    const doc = {byMonth:JSON.parse(JSON.stringify(materials.byMonth)), billByMonth:JSON.parse(JSON.stringify(materials.billByMonth)), updatedAt:new Date().toISOString()};
     if(this.db) await this.db.doc('settings/materials').set(doc);
     else try{ localStorage.setItem('coop-materials', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
@@ -369,7 +366,7 @@ function detectType(wb){
     if(rows.length>=3 && coded.length>=rows.length*0.8 && coded.every(r=>r.slice(1).every(rateCell))) return 'rates';
     if(flat.some(c=>c.includes('לפני מע"מ')) && flat.includes('לקוח')) return 'revenue';
     if(flat.includes('מספר עובד') && flat.includes('תעריף שעה')) return 'wages';
-    if(flat.includes('לקוח') && flat.includes('סכום') && (flat.includes('חודש') || flat.some(c=>c.startsWith('תאריך')))) return 'materials';
+    if(flat.includes('לקוח') && (flat.includes('עלות חשבונית') || flat.includes('חיוב ללקוח') || flat.includes('סכום')) && (flat.includes('חודש') || flat.some(c=>c.startsWith('תאריך')))) return 'materials';
     if(flat.some(c=>c==='עלות מעביד'||c==='עלות עובד')) return 'payroll';
     if(flat.includes('סה"כ שעות') && flat.includes('משימה')) return 'hours';
   }
@@ -670,7 +667,7 @@ function compute(ym){
   }
   // חומרי ניקיון: עלות ישירה של הלקוח, נכנסת לרווח הגולמי שלו
   for(const g of mapping.groups){ const m = matFor(g.id, ym); if(m && (G[g.id] || materials.byMonth[ym]?.[g.id]!=null)) get(g).mat = m;
-    if(G[g.id]?.rev) G[g.id].matBill = matBilledFor(g.id, ym); }   // חלק מהחשבונית שהוא חיוב על חומרים
+    if(G[g.id]) G[g.id].matBill = matBilledFor(g.id, ym); }   // חלק מהחשבונית שהוא חיוב על חומרים
   // הכנסה משויכת לסניף דרך האתרים, לפי חלק השעות של כל אתר בקבוצה
   const branches = {};
   const B = b => branches[b] ||= {name:b, rev:0, h:0, cost:0, mat:0, groups:0};
@@ -1709,7 +1706,7 @@ function renderClient(v){
   const dash = '<span class="muted">—</span>';
   const sites = Object.values(T.sites||{}).sort((a,b)=>b.h-a.h);
   const hasMat = rows.some(r=>r.mat);
-  const inT = rows.filter(r=>!r.absent && !r.partial), mCost = inT.reduce((a,r)=>a+(r.mat||0),0), mBill = inT.reduce((a,r)=>a+(r.rev?matBilledFor(G.id, r.m):0),0);
+  const inT = rows.filter(r=>!r.absent && !r.partial), mCost = inT.reduce((a,r)=>a+(r.mat||0),0), mBill = inT.reduce((a,r)=>a+matBilledFor(G.id, r.m),0);
   const matNote = mCost||mBill ? `<p class="hint" style="margin-top:4px">חומרי ניקיון מתחילת השנה: חויב ללקוח ${money(mBill)}, נקנה ${money(mCost)} · ${mBill-mCost>=0?`<span class="pill good">עודף ${money(mBill-mCost)}</span>`:`<span class="pill warn">חוסר ${money(mCost-mBill)}</span>`}. הקניות לפי צורך, ולכן ההשוואה נכונה על פני כמה חודשים ולא בחודש בודד.</p>` : '';
   // תעריף לשעה: מטבלת התעריפים שבתוקף. בסה״כ: ממוצע משוקלל בשעות בחודשים שנכללים בסה״כ
   const inTot = rows.filter(r=>!r.absent && !r.partial && r.br && !r.br.fixed && r.br.ratedH);
@@ -1855,73 +1852,75 @@ function renderData(v){
   </div>`;
 }
 /* ---------- חומרי ניקיון לפי לקוח ----------
-   לכל לקוח: סכום קבוע לחודש (מחודש מסוים והלאה) ו/או סכום לחודש מסוים, שגובר על הקבוע. אפשר גם לייבא מאקסל. */
+   לכל חודש: כל הלקוחות הפעילים, ולכל אחד שתי עמודות: חיוב ללקוח ועלות חשבונית. נשמר עם היציאה מהתא. */
 function materialsPanel(){
   const ms = monthList(); if(!ms.length) return '';
   if(!ms.includes(ui.matYm)) ui.matYm = ms[ms.length-1];
   const ym = ui.matYm, R = compute(ym), byId = Object.fromEntries(R.groups.map(g=>[g.id, g]));
-  const ids = [...new Set([...Object.keys(materials.fixed).filter(id=>materials.fixed[id]?.amt), ...Object.keys(materials.billed).filter(id=>materials.billed[id]?.amt), ...Object.keys(materials.byMonth[ym]||{}), ...(ui.matAdd||[])])]
-    .filter(id=>mapping.groups.some(g=>g.id===id));
-  const gname = id => mapping.groups.find(g=>g.id===id)?.name || id;
-  ids.sort((a,b)=>gname(a).localeCompare(gname(b),'he'));
-  const inp = (attr, v, ph, label) => `<input type="text" inputmode="decimal" ${attr} value="${v!=null&&v!==''?nf0.format(v):''}" placeholder="${ph}" aria-label="${esc(label)}" style="width:96px;text-align:left;direction:ltr">`;
-  const total = ids.reduce((a,id)=>a+matFor(id, ym),0), ytdMs = ms.filter(m=>m.slice(0,4)===ym.slice(0,4) && m<=ym);
-  const others = mapping.groups.filter(g=>!ids.includes(g.id)).sort((a,b)=>a.name.localeCompare(b.name,'he'));
+  const has = id => materials.byMonth[ym]?.[id]!=null || materials.billByMonth[ym]?.[id]!=null;
+  let list = mapping.groups.filter(g=>byId[g.id]?.rev || byId[g.id]?.h || has(g.id)).map(g=>({g, r:byId[g.id]}));
+  if(ui.matBranch) list = list.filter(x=>(x.r?.branch||'')===ui.matBranch);
+  if(ui.matOnly) list = list.filter(x=>has(x.g.id));
+  list.sort((a,b)=>(has(b.g.id)-has(a.g.id)) || (a.r?.branch||'').localeCompare(b.r?.branch||'','he') || a.g.name.localeCompare(b.g.name,'he'));
+  const inp = (attr, v, label) => `<input type="text" inputmode="decimal" ${attr} value="${v!=null&&v!==''?nf0.format(v):''}" aria-label="${esc(label)}" style="width:92px;text-align:left;direction:ltr">`;
+  const T = list.reduce((a,x)=>({b:a.b+matBilledFor(x.g.id,ym), c:a.c+matFor(x.g.id,ym)}), {b:0,c:0});
+  const brs = [...new Set(R.groups.map(g=>g.branch).filter(Boolean))].sort();
   return `<section class="panel">
-    <div class="panel-head"><h2>חומרי ניקיון לפי לקוח</h2><span class="small muted">נכנס לרווח הגולמי של הלקוח, הסניף והארגון, ולביצוע בתכנון מול ביצוע. נשמר אוטומטית</span></div>
+    <div class="panel-head"><h2>חומרי ניקיון לפי לקוח</h2><span class="small muted">עלות החשבונית יורדת מהרווח הגולמי. החיוב ללקוח כבר כלול בהכנסות, ומשמש להשוואה ולבדיקת החיוב</span></div>
     <div class="actions" style="margin-bottom:10px">
       <label class="small">חודש <select id="mat-ym">${ms.slice().reverse().map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthName(m)}</option>`).join('')}</select></label>
-      <label class="small">הוספת לקוח <select id="mat-add"><option value="">בחירה…</option>${others.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></label>
+      <label class="small">סניף <select id="mat-branch"><option value="">כל הסניפים</option>${brs.map(b=>`<option ${b===ui.matBranch?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+      <label class="small"><input type="checkbox" id="mat-only" ${ui.matOnly?'checked':''}> רק לקוחות עם חומרים</label>
       <button class="btn sm" type="button" id="mat-template">תבנית אקסל לייבוא</button>
     </div>
-    ${ids.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">לקוח</th><th>סניף</th><th class="n">חיוב חודשי ללקוח</th><th class="n">עלות קבועה לחודש</th><th class="n">עלות ב${monthName(ym)}</th><th class="n">% מההכנסה</th><th class="n">רווח גולמי בחודש</th><th class="n">מתחילת השנה: חויב / נקנה</th><th></th></tr></thead><tbody>
-      ${ids.map(id=>{ const f = materials.fixed[id], v = materials.byMonth[ym]?.[id], g = byId[id], m = matFor(id, ym);
-        const yb = ytdMs.reduce((a,m)=>a+(compute(m).groups.find(x=>x.id===id)?.rev?matBilledFor(id,m):0),0), yc = ytdMs.reduce((a,m)=>a+matFor(id,m),0), fb = materials.billed[id];
-        return `<tr><td class="first">${esc(gname(id))}</td><td>${esc(g?.branch||'')}</td>
-          <td class="n">${inp(`data-matbill="${id}"`, fb?.amt, '', `חיוב חודשי על חומרים ${gname(id)}`)}${fb?.amt&&fb.from?` <span class="muted small">מ${monthName(fb.from)}</span>`:''}</td>
-          <td class="n">${inp(`data-matfix="${id}"`, f?.amt, '', `סכום קבוע לחודש ${gname(id)}`)}${f?.amt&&f.from?` <span class="muted small">מ${monthName(f.from)}</span>`:''}</td>
-          <td class="n">${inp(`data-matm="${id}"`, v, f?.amt&&(!f.from||f.from<=ym)?nf0.format(f.amt):'', `חומרי ניקיון ${gname(id)} ${monthName(ym)}`)}</td>
-          <td class="n">${g?.rev&&m?pct(m/g.rev):'—'}</td><td class="n">${g?marginPill(g.margin, g.rev):'—'}</td>
-          <td class="n">${yb||yc?`${money(yb)} / ${money(yc)} <span class="delta ${yb>=yc?'good':'bad'}">${yb>=yc?'+':'−'}${money(Math.abs(yb-yc))}</span>`:'—'}</td>
-          <td><button class="btn sm danger" type="button" data-matrm="${id}">הסרה</button></td></tr>`; }).join('')}
-      <tr class="total"><td class="first">סה״כ ${monthName(ym)}</td><td></td><td></td><td></td><td class="n">${money(total)}</td><td></td><td></td><td></td><td></td></tr>
+    <div class="tbl-wrap" style="max-height:520px;overflow:auto"><table><thead><tr><th class="first">לקוח</th><th>סניף</th><th class="n">חיוב ללקוח</th><th class="n">עלות חשבונית</th><th class="n">הפרש</th><th class="n">הכנסות בחודש</th><th class="n">רווח גולמי בחודש</th></tr></thead><tbody>
+      ${list.map(({g, r})=>{ const bl = materials.billByMonth[ym]?.[g.id], c = materials.byMonth[ym]?.[g.id], d = (+bl||0)-(+c||0);
+        return `<tr><td class="first">${esc(g.name)}</td><td>${esc(r?.branch||'')}</td>
+          <td class="n">${inp(`data-matbill="${g.id}"`, bl, `חיוב ללקוח ${g.name} ${monthName(ym)}`)}</td>
+          <td class="n">${inp(`data-matcost="${g.id}"`, c, `עלות חשבונית ${g.name} ${monthName(ym)}`)}</td>
+          <td class="n">${bl!=null||c!=null?`<span class="delta ${d>=0?'good':'bad'}">${money(d)}</span>`:''}</td>
+          <td class="n">${r?money(r.rev):'—'}</td><td class="n">${r?marginPill(r.margin, r.rev):'—'}</td></tr>`; }).join('')}
+      <tr class="total"><td class="first">סה״כ ${monthName(ym)}</td><td></td><td class="n">${money(T.b)}</td><td class="n">${money(T.c)}</td><td class="n">${money(T.b-T.c)}</td><td></td><td></td></tr>
     </tbody></table></div>
-    <p class="hint" style="margin-top:8px">"חיוב חודשי ללקוח" = החלק בחשבונית שהוא חיוב על חומרים (למשל סכום קבוע לחודש). הוא כבר כלול בהכנסות, ולכן לא משנה את הרווח; הוא משמש להשוואה מול הקניות ובבדיקת החיוב מול התעריף. עלות קבועה וחיוב חלים מהחודש שבו הוגדרו ואילך, בכל חודש שלא הוזן לו סכום אחר. תא ריק בעמודת החודש = הסכום הקבוע (מוצג באפור). לייבוא: קובץ עם העמודות לקוח, חודש, סכום (אפשר להוריד תבנית), גוררים ללשונית הזו.</p>`
-    :'<p class="muted">עדיין לא הוזנו חומרי ניקיון. בוחרים לקוח ב"הוספת לקוח", או מייבאים קובץ עם העמודות לקוח, חודש, סכום.</p>'}
+    <p class="hint" style="margin-top:8px">מקלידים סכום ויוצאים מהתא (Tab או לחיצה במקום אחר), והוא נשמר. תא ריק = אין. הקניות לפי צורך, ולכן את ההפרש בין החיוב לעלות כדאי לבחון מצטבר, בכרטיס הלקוח. אפשר גם לייבא קובץ עם העמודות לקוח, חודש, חיוב ללקוח, עלות חשבונית (יש תבנית להורדה), בגרירה ללשונית הזו.</p>
   </section>`;
 }
 async function setMaterial(kind, id, raw){
   const v = String(raw).replace(/[,₪\s]/g,''), n = v==='' ? null : +v;
   if(v!=='' && !isFinite(n)){ toast('יש להזין מספר'); render(); return; }
-  if(kind==='fix'||kind==='bill'){ const o = kind==='fix' ? materials.fixed : materials.billed; if(n==null || !n) delete o[id]; else o[id] = {amt:n, from: o[id]?.from || ui.matYm}; }
-  else { const m = materials.byMonth[ui.matYm] ||= {}; if(n==null) delete m[id]; else m[id] = n; }
+  const o = kind==='bill' ? materials.billByMonth : materials.byMonth, m = o[ui.matYm] ||= {};
+  if(n==null) delete m[id]; else m[id] = n;
   await store.saveMaterials(); render();
 }
 function materialsTemplate(){
-  const ym = ui.matYm || monthList().pop(), ids = new Set([...Object.keys(materials.fixed), ...Object.keys(materials.byMonth[ym]||{})]);
-  const rows = mapping.groups.slice().sort((a,b)=>(ids.has(b.id)-ids.has(a.id)) || a.name.localeCompare(b.name,'he')).map(g=>[g.name, ym, ids.has(g.id)?matFor(g.id, ym):'']);
+  const ym = ui.matYm || monthList().pop(), R = compute(ym), act = new Set(R.groups.filter(g=>g.rev||g.h).map(g=>g.id));
+  const rows = mapping.groups.filter(g=>act.has(g.id)).sort((a,b)=>a.name.localeCompare(b.name,'he'))
+    .map(g=>[g.name, ym, materials.billByMonth[ym]?.[g.id] ?? '', materials.byMonth[ym]?.[g.id] ?? '']);
   const wb = XLSX.utils.book_new(); wb.Workbook = {Views:[{RTL:true}]};
-  const ws = XLSX.utils.aoa_to_sheet([['לקוח','חודש','סכום'], ...rows]); ws['!cols'] = [{wch:32},{wch:10},{wch:10}];
+  const ws = XLSX.utils.aoa_to_sheet([['לקוח','חודש','חיוב ללקוח','עלות חשבונית'], ...rows]); ws['!cols'] = [{wch:32},{wch:10},{wch:12},{wch:12}];
   XLSX.utils.book_append_sheet(wb, ws, 'חומרי ניקיון');
   saveXlsx(wb, `חומרי-ניקיון-${ym}.xlsx`);
 }
-// קובץ חומרי ניקיון: עמודות לקוח (שם הלקוח באפליקציה, שם בהנהלת החשבונות או אתר עם קוד בסוגריים), חודש, סכום
+// קובץ חומרי ניקיון: לקוח (שם באפליקציה, שם בהנהלת החשבונות או אתר עם קוד בסוגריים), חודש, חיוב ללקוח, עלות חשבונית
 function parseMaterials(wb){
-  const aoa = Object.values(wb.sheets).find(a=>findHeader(a, r=>r.includes('לקוח') && r.includes('סכום'))>=0);
-  const hi = findHeader(aoa, r=>r.includes('לקוח') && r.includes('סכום')), H = aoa[hi].map(normName);
-  const iC = H.indexOf('לקוח'), iA = H.indexOf('סכום'), iM = H.findIndex(h=>h==='חודש'||h.startsWith('תאריך'));
+  const isHead = r => r.includes('לקוח') && (r.includes('עלות חשבונית') || r.includes('חיוב ללקוח') || r.includes('סכום'));
+  const aoa = Object.values(wb.sheets).find(a=>findHeader(a, isHead)>=0);
+  const hi = findHeader(aoa, isHead), H = aoa[hi].map(normName);
+  const iC = H.indexOf('לקוח'), iCost = H.includes('עלות חשבונית') ? H.indexOf('עלות חשבונית') : H.indexOf('סכום'), iBill = H.indexOf('חיוב ללקוח'), iM = H.findIndex(h=>h==='חודש'||h.startsWith('תאריך'));
   const byName = Object.fromEntries(mapping.groups.map(g=>[normName(g.name), g])), byClient = clientIndex(), bySite = siteIndex();
-  const out = {}, missing = [];
+  const cost = {}, bill = {}, missing = [];
   for(const r of aoa.slice(hi+1)){
-    const name = normName(r[iC]), amt = num(r[iA]); if(!name || amt==null) continue;
+    const name = normName(r[iC]), c = iCost>=0 ? num(r[iCost]) : null, bl = iBill>=0 ? num(r[iBill]) : null;
+    if(!name || (c==null && bl==null)) continue;
     const code = name.match(/\((\d+)\)\s*$/)?.[1], g = byName[name] || byClient[name] || (code && bySite[code]);
-    const c = iM>=0 ? r[iM] : null, s2 = normName(c); let ym = dateYm(c), m;
+    const cell = iM>=0 ? r[iM] : null, s2 = normName(cell); let ym = dateYm(cell), m;
     if(!ym && (m=s2.match(/^(\d{4})-(\d{1,2})$/))) ym = ymOf(m[1],m[2]);
     if(!ym && (m=s2.match(/^(\d{1,2})[\/.](\d{4})$/))) ym = ymOf(m[2],m[1]);
     if(!g || !ym){ missing.push(name); continue; }
-    (out[ym] ||= {})[g.id] = ((out[ym]||{})[g.id]||0) + amt;
+    if(c!=null) (cost[ym] ||= {})[g.id] = ((cost[ym]||{})[g.id]||0) + c;
+    if(bl!=null) (bill[ym] ||= {})[g.id] = ((bill[ym]||{})[g.id]||0) + bl;
   }
-  return {out, missing};
+  return {cost, bill, missing};
 }
 function wagesStatus(){
   if(!store.hasPrivate) return '<div class="panel small muted">שכר שעתי לפי עובד: אין אזור פרטי בתצוגה הזו, ולכן אי אפשר להעלות אותו כאן.</div>';
@@ -2004,11 +2003,13 @@ async function handleFiles(files){
   for(const {f, wb, type} of items){
     try{
       if(type==='materials'){
-        const {out, missing} = parseMaterials(wb);
-        for(const [ym, m] of Object.entries(out)) materials.byMonth[ym] = {...(materials.byMonth[ym]||{}), ...m};
-        await store.saveMaterials(); const n = Object.values(out).reduce((a,m)=>a+Object.keys(m).length,0);
-        if(Object.keys(out).length) ui.matYm = Object.keys(out).sort().pop();
-        toast(`נקלטו חומרי ניקיון: ${n} שורות ל${Object.keys(out).sort().map(monthName).join(', ')}${missing.length?`. לא זוהו: ${missing.slice(0,4).join(', ')}${missing.length>4?'…':''}`:''}`); continue;
+        const {cost, bill, missing} = parseMaterials(wb);
+        for(const [ym, m] of Object.entries(cost)) materials.byMonth[ym] = {...(materials.byMonth[ym]||{}), ...m};
+        for(const [ym, m] of Object.entries(bill)) materials.billByMonth[ym] = {...(materials.billByMonth[ym]||{}), ...m};
+        await store.saveMaterials(); const yms = [...new Set([...Object.keys(cost), ...Object.keys(bill)])].sort();
+        const n = new Set(yms.flatMap(ym=>[...Object.keys(cost[ym]||{}), ...Object.keys(bill[ym]||{})].map(id=>ym+id))).size;
+        if(yms.length) ui.matYm = yms[yms.length-1];
+        toast(`נקלטו חומרי ניקיון: ${n} שורות ל${yms.map(monthName).join(', ')}${missing.length?`. לא זוהו: ${missing.slice(0,4).join(', ')}${missing.length>4?'…':''}`:''}`); continue;
       }
       if(type==='wages'){
         if(!store.hasPrivate){ toast('אין אזור פרטי בתצוגה הזו, ולכן קובץ השכר לא נשמר'); continue; }
@@ -2115,7 +2116,6 @@ document.addEventListener('click', async e=>{
   if(t.id==='btn-export') return exportReport();
   if(t.id==='btn-pdf'){ t.disabled = true; toast('מכינים את ה-PDF…'); try{ await tabPdf(); } finally { t.disabled = false; } return; }
   if(t.id==='mat-template') return materialsTemplate();
-  if(d.matrm){ const id = d.matrm; delete materials.fixed[id]; delete materials.billed[id]; if(materials.byMonth[ui.matYm]) delete materials.byMonth[ui.matYm][id]; ui.matAdd = (ui.matAdd||[]).filter(x=>x!==id); await store.saveMaterials(); render(); return; }
   if(t.id==='ov-all'){ ui.branch=''; saveUi(); render(); return; }
   if(d.ovBranch){ ui.branch=d.ovBranch; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(t.id==='dash-pdf' || t.id==='dash-pdf-all'){
@@ -2175,8 +2175,9 @@ document.addEventListener('change', async e=>{
       if(manual[from]){ manual={...manual, [to]:manual[from]}; delete manual[from]; await store.saveManual(); }
       ui.planBranch=to; await store.savePlan(); render(); toast(`התכנית שויכה ל${to}`); } }
   else if(t.id==='mat-ym'){ ui.matYm=t.value; render(); }
-  else if(t.id==='mat-add'){ if(t.value){ ui.matAdd = [...(ui.matAdd||[]), t.value]; render(); } }
-  else if(d.matfix){ await setMaterial('fix', d.matfix, t.value); }
+  else if(t.id==='mat-branch'){ ui.matBranch=t.value; render(); }
+  else if(t.id==='mat-only'){ ui.matOnly=t.checked; render(); }
+  else if(d.matcost){ await setMaterial('cost', d.matcost, t.value); }
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
   else if(d.matm){ await setMaterial('month', d.matm, t.value); }
   else if(d.man){ const br=ui.planBranch, i=d.man.indexOf('|'), m=d.man.slice(0,i), l=d.man.slice(i+1); const raw=String(t.value).replace(/[,₪\s]/g,'');
