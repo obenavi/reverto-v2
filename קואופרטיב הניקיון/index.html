@@ -409,7 +409,7 @@ function parsePlan(wb, fileName){
   // מקור הביצוע של כל שורת עלות: payroll = כלולה בעלות המעביד מדוח השכר, manual = הזנה ידנית, none = לא נמדדת
   const lineSource = Object.fromEntries(costLines.map(l=>[l, /שכר|נסיעות|שי לחג|פיקוח/.test(l) ? 'payroll' : 'manual']));
   return {file:fileName, sheet:name, year, branch:null, uploadedAt:new Date().toISOString(), costLines, months:pm, lineSource,
-          extraManual:['ליסינג','חומרי ניקיון','ביטוח']};   // עלויות ישירות לספקים שאינן בעלות המכר של התכנית (בתכנון: 0)
+          extraManual:['ליסינג','חומרי ניקיון']};   // עלויות ישירות לספקים שאינן בעלות המכר של התכנית (בתכנון: 0)
 }
 const payrollLinesOf = p => (p?.costLines||[]).filter(l=>(p.lineSource?.[l]||'manual')==='payroll');
 const manualLinesOf = p => [...(p?.costLines||[]).filter(l=>(p.lineSource?.[l]||'manual')==='manual'), ...(p?.extraManual||[])];
@@ -939,7 +939,7 @@ function manualPanel(br){
       <div class="filters" style="margin:0 0 10px">${pl.costLines.map(l=>`<label class="small">${esc(l)}: ${srcSel(l)}</label>`).join('')}
         <label class="small">שורה ידנית נוספת <input type="text" id="plan-addline" placeholder="למשל: הובלות" style="width:120px"></label></div>
       ${manLines.length?`<div class="tbl-wrap budget-table"><table><thead><tr><th class="first">שורה</th>${MONTHS.map(n=>`<th class="n">${n.slice(0,3)}</th>`).join('')}<th class="n">סה״כ</th></tr></thead><tbody>
-        ${manLines.map(l=>`<tr><td class="first">${esc(l)}</td>${MONTHS.map((_,i)=>{ const m=ymOf(pl.year,i+1), v=manual[br]?.[m]?.[l];
+        ${manLines.map(l=>`<tr><td class="first">${esc(l)}${(pl.extraManual||[]).includes(l)?` <button class="btn sm danger" type="button" data-rmline="${esc(l)}" title="הסרת השורה" aria-label="הסרת השורה ${esc(l)}">הסרה</button>`:''}</td>${MONTHS.map((_,i)=>{ const m=ymOf(pl.year,i+1), v=manual[br]?.[m]?.[l];
           return `<td class="n"><input type="text" inputmode="decimal" id="man-${i}-${esc(l)}" data-man="${m}|${esc(l)}" value="${v!=null&&v!==''?nf0.format(v):''}" placeholder="${pl.months[m]?.costs?.[l]?nf0.format(pl.months[m].costs[l]):''}" aria-label="${esc(l)} ${MONTHS[i]}" style="width:78px;text-align:left;padding:3px 5px;direction:ltr"></td>`; }).join('')}
           <td class="n">${money(MONTHS.reduce((a,_,i)=>a+(+manual[br]?.[ymOf(pl.year,i+1)]?.[l]||0),0))}</td></tr>`).join('')}
       </tbody></table></div><p class="hint" style="margin-top:8px">הערך האפור בתא הוא סכום התכנית. תא ריק = לא הוזן. אם שורה מסוימת כבר כלולה בדוח השכר, יש להזין 0.</p>`:'<p class="muted">כל שורות העלות בתכנית מגיעות מדוח השכר.</p>'}
@@ -2026,6 +2026,13 @@ document.addEventListener('click', async e=>{
   if(t.id==='map-export'){ const wb=XLSX.utils.book_new(); wb.Workbook={Views:[{RTL:true}]}; XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mappingAoa()), 'טבלת התאמה'); return saveXlsx(wb, 'טבלת-התאמת-לקוחות.xlsx'); }
   if(d.unsite){ const [gid,c]=d.unsite.split('|'); const g=mapping.groups.find(x=>x.id===gid); g.sites=g.sites.filter(x=>x!==c); await store.saveMapping(); render(); return; }
   if(d.unclient){ const i=d.unclient.indexOf('|'); const g=mapping.groups.find(x=>x.id===d.unclient.slice(0,i)); const c=d.unclient.slice(i+1); g.clients=g.clients.filter(x=>x!==c); await store.saveMapping(); render(); return; }
+  if(d.rmline){   // הסרת שורה ידנית נוספת; אם הוזנו בה סכומים, נדרש אישור והם נמחקים
+    const br = ui.planBranch, pl = plans[br], l = d.rmline, has = Object.values(manual[br]||{}).some(m=>m[l]!=null && m[l]!=='');
+    if(has && !t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לאשר: יימחקו הסכומים'; return; }
+    pl.extraManual = (pl.extraManual||[]).filter(x=>x!==l); await store.savePlan();
+    if(has){ for(const m of Object.values(manual[br]||{})) delete m[l]; await store.saveManual(); }
+    render(); toast(`השורה "${l}" הוסרה`); return;
+  }
   if(d.delplan){
     if(!t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לאשר מחיקה'; return; }
     const np={...plans}; delete np[d.delplan]; plans=np; await store.savePlan(); ui.planBranch=null; render(); toast('התכנית נמחקה'); return;
