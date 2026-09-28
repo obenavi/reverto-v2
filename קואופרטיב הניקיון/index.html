@@ -2140,12 +2140,10 @@ document.addEventListener('click', async e=>{
   if(t.id==='map-export'){ const wb=XLSX.utils.book_new(); wb.Workbook={Views:[{RTL:true}]}; XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mappingAoa()), 'טבלת התאמה'); return saveXlsx(wb, 'טבלת-התאמת-לקוחות.xlsx'); }
   if(d.unsite){ const [gid,c]=d.unsite.split('|'); const g=mapping.groups.find(x=>x.id===gid); g.sites=g.sites.filter(x=>x!==c); await store.saveMapping(); render(); return; }
   if(d.unclient){ const i=d.unclient.indexOf('|'); const g=mapping.groups.find(x=>x.id===d.unclient.slice(0,i)); const c=d.unclient.slice(i+1); g.clients=g.clients.filter(x=>x!==c); await store.saveMapping(); render(); return; }
-  if(d.rmline){   // הסרת שורה ידנית נוספת; אם הוזנו בה סכומים, נדרש אישור והם נמחקים
-    const br = ui.planBranch, pl = plans[br], l = d.rmline, has = Object.values(manual[br]||{}).some(m=>m[l]!=null && m[l]!=='');
-    if(has && !t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לאשר: יימחקו הסכומים'; return; }
-    pl.extraManual = (pl.extraManual||[]).filter(x=>x!==l); await store.savePlan();
-    if(has){ for(const m of Object.values(manual[br]||{})) delete m[l]; await store.saveManual(); }
-    render(); toast(`השורה "${l}" הוסרה`); return;
+  if(d.rmline){   // הסרת שורה ידנית נוספת בלחיצה אחת. הסכומים שהוזנו נשארים שמורים וחוזרים אם מוסיפים את השורה שוב
+    const pl = plans[ui.planBranch], l = d.rmline; if(!pl) return;
+    pl.extraManual = (pl.extraManual||[]).filter(x=>x!==l); await store.savePlan(); render();
+    toast(`השורה "${l}" הוסרה מ${ui.planBranch}. הסכומים שהוזנו שמורים, ויחזרו אם תוסיפי את השורה שוב`); return;
   }
   if(d.delplan){
     if(!t.classList.contains('armed')){ t.classList.add('armed'); t.textContent='לאשר מחיקה'; return; }
