@@ -600,6 +600,9 @@ function parsePayroll(wb, fileName){
 const BUCKETS = [['base','בסיס: שעות רגילות ומשכורת'],['topup','השלמת שעות והפסקות'],['ot','שעות נוספות (בימי חול)'],['weekend','עבודה בשבת וחג (מחויבת ללקוח בתעריף מוגדל)'],['sick','ימי מחלה'],['absence','חופשה, חג ומילואים (זכות של העובד)'],
   ['travel','נסיעות ורכב'],['allow','הבראה, ותק ותוספות'],['prov','הפרשות ששולמו בשכר'],['once','חד-פעמי: פדיון, מענקים, בונוסים'],['other','אחר']];
 const BUCKET = Object.fromEntries(BUCKETS);
+// ברוטו ישיר: תשלומים שנגזרים משעות העבודה אצל הלקוח בלבד (שעות רגילות, הפסקות, נוספות, שבת וחג)
+const DIRECT = ['base','topup','ot','weekend'];
+const directOf = comp => DIRECT.reduce((a,k)=>a+(comp?.[k]||0),0);
 function bucketOf(desc){
   const d = normName(desc);
   if(/פדיון|מענק|בונוס|גילום|גלום|שי לחג|הודעה מוקדמת|אשל|קיזוז/.test(d)) return 'once';
@@ -826,7 +829,7 @@ function finishComp(r){
   const once = r.comp?.once || 0, factor = r.gross ? r.cost/r.gross : 1;
   r.onceCost = once*factor; r.recCost = r.cost - r.onceCost;
   r.recMargin = r.rev ? (r.rev-r.recCost-(r.mat||0))/r.rev : NaN; r.recCostH = r.h ? r.recCost/r.h : NaN; r.matH = r.h ? (r.mat||0)/r.h : 0;
-  r.grossH = r.h ? (r.gross||0)/r.h : NaN;
+  r.grossH = r.h ? directOf(r.comp)/r.h : NaN;   // ברוטו ישיר לשעה
   return r;
 }
 function flagsOf(r){
@@ -1776,7 +1779,7 @@ function renderCost(v){
     ${oldComp.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${oldComp.map(monthName).join(', ')} דוח רכיבי השכר נקלט לפני ההפרדה, ולכן עבודה בשבת וחג עדיין כלולה בשעות נוספות, וימי מחלה כלולים בחופשה ובחג. כדי להפריד, יש להעלות מחדש את דוח רכיבי השכר של ${oldComp.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
     ${ui.branch?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(ui.branch)} בלבד:</b> עלות ורכיבי השכר של אתרי הסניף, והלקוחות שלו. <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
     <div class="kpis">
-      ${kpi('ברוטו לשעת עבודה', perH(T.grossH), `${hrs(T.h)} שעות באתרים`)}
+      ${kpi('ברוטו ישיר לשעת עבודה', perH(T.grossH), 'שעות רגילות, הפסקות, נוספות ושבת')}
       ${kpi('עלות מעביד לשעה', perH(T.costH), `מעל הברוטו: ${pct(T.gross?T.cost/T.gross-1:NaN,0)}`)}
       ${kpi('שעות נוספות בימי חול', pct(T.gross?(T.comp.ot||0)/T.gross:NaN), `${money(otAll)} בחודש${T.comp.weekend?` · שבת וחג ${pct((T.comp.weekend||0)/T.gross)} (מחויב ללקוח)`:''}`)}
       ${kpi('רווח גולמי בלי חד-פעמי', pct(T.recMargin), `מדווח ${pct(T.margin)} · חד-פעמי ${money((T.comp.once||0)/nM)} בחודש`)}
