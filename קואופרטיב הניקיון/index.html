@@ -330,7 +330,8 @@ const store = {
   },
   async saveGA(){
     const doc = {lines:[...ga.lines], byMonth:JSON.parse(JSON.stringify(ga.byMonth)), updatedAt:new Date().toISOString()};
-    if(this.db) await this.db.doc('settings/ga').set(doc);
+    if(this.db){ try{ await this.db.doc('settings/ga').set(doc); }
+      catch(e){ console.error(e); toast(`שמירת הנהלה וכלליות נכשלה (${e?.code||e?.message||'שגיאה'}). יש לרענן את הדף ולנסות שוב`); } }
     else try{ localStorage.setItem('coop-ga', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
   async saveMaterials(){
@@ -1023,7 +1024,24 @@ function manualPanel(br){
 
 /* ============================================================ רינדור */
 const TABS = [['overview','סקירה ותובנות'],['dash','דשבורדים חודשיים'],['plan','תכנון מול ביצוע'],['clients','רווחיות לקוחות'],['cost','עלות שעה והתייעלות'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים']];
+// ציור מחדש בלי לאבד את התא שבו מקלידים: עדכון מהמאגר או שמירה של תא קודם לא מוחקים את מה שכבר הוקלד ולא מזיזים את הסמן
+function focusKey(el){
+  if(!el || !['INPUT','TEXTAREA','SELECT'].includes(el.tagName) || el.type==='file' || !$('#view')?.contains(el)) return null;
+  if(el.id) return '#'+CSS.escape(el.id);
+  const a = [...el.attributes].find(x=>x.name.startsWith('data-'));
+  return a ? `${el.tagName.toLowerCase()}[${a.name}="${CSS.escape(a.value)}"]` : null;
+}
 function render(){
+  const el = document.activeElement, key = focusKey(el);
+  const typed = key && el.tagName!=='SELECT' && el.value!==el.defaultValue ? el.value : null, sel = key && typed!=null ? [el.selectionStart, el.selectionEnd] : null;
+  renderNow();
+  if(!key) return;
+  const n = $('#view').querySelector(key); if(!n) return;
+  if(typed!=null) n.value = typed;
+  n.focus({preventScroll:true}); try{ if(sel) n.setSelectionRange(...sel); else if(n.select && n.tagName==='INPUT') n.select(); }catch(e){}
+}
+const renderSoon = () => setTimeout(render, 0);   // אחרי שהמיקוד עבר לתא הבא (Tab / לחיצה)
+function renderNow(){
   const ms = monthList();
   if(!ms.includes(ui.ym)) ui.ym = ms[ms.length-1] || null;
   const un = allUnmatched(); const unN = un.sites.length + un.clients.length;
@@ -1992,21 +2010,21 @@ async function setGA(key, raw){
   if(v!=='' && !isFinite(n)){ toast('יש להזין מספר'); render(); return; }
   const m = ((ga.byMonth[ym] ||= {})[u] ||= {});
   if(n==null) delete m[l]; else m[l] = n;
-  render(); await store.saveGA();
+  renderSoon(); await store.saveGA();
 }
 async function setClothing(br, raw){
   const v = String(raw).replace(/[,₪\s]/g,''), n = v==='' ? null : +v, ym = ui.matYm || monthList().pop();
   if(v!=='' && !isFinite(n)){ toast('יש להזין מספר'); render(); return; }
   const m = ((manual[br] ||= {})[ym] ||= {});
   if(n==null) delete m[CLO]; else m[CLO] = n;
-  render(); await store.saveManual();
+  renderSoon(); await store.saveManual();
 }
 async function setMaterial(kind, id, raw){
   const v = String(raw).replace(/[,₪\s]/g,''), n = v==='' ? null : +v;
   if(v!=='' && !isFinite(n)){ toast('יש להזין מספר'); render(); return; }
   const o = kind==='bill' ? materials.billByMonth : materials.byMonth, m = o[ui.matYm] ||= {};
   if(n==null) delete m[id]; else m[id] = n;
-  await store.saveMaterials(); render();
+  renderSoon(); await store.saveMaterials();
 }
 function materialsTemplate(){
   const ym = ui.matYm || monthList().pop(), R = compute(ym), act = new Set(R.groups.filter(g=>g.rev||g.h).map(g=>g.id));
