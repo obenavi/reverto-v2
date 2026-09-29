@@ -1607,11 +1607,18 @@ const perHourRows = (T) => {   // מבנה עלות השעה: כל רכיב בר
   rows.push({k:'oncost', n:'עלויות מעביד (ב"ל, פנסיה, פיצויים, השתלמות)', v: T.h ? (T.cost-(T.gross||0))/T.h : NaN});
   return rows;
 };
+// סיכום של סניף אחד בתקופה, כולל רכיבי שכר: מהאתרים של הסניף בכל חודש (לעלות מעביד לשעה ולמבנה העלות)
+function branchTot(R, br){
+  const parts = R.parts || [R], b = R.branches[br] || {rev:0, mat:0};
+  const x = parts.map(P=>branchSlice(P, br)).reduce((a,y)=>({h:a.h+y.h, cost:a.cost+y.cost, gross:a.gross+y.gross, comp:addComp(a.comp, y.comp)}), {h:0, cost:0, gross:0, comp:{}});
+  const T = {...x, rev:b.rev, mat:b.mat||0}; T.gp = T.rev-T.cost-T.mat; T.margin = T.rev ? T.gp/T.rev : NaN; T.revH = T.h ? T.rev/T.h : NaN; T.costH = T.h ? T.cost/T.h : NaN;
+  return finishComp(T);
+}
 function renderCost(v){
   const per = period(), R = computePeriod(per.months), t = (ui.target||15)/100;
   const withComp = monthList().filter(m=>months[m].components);
   if(!R.hasComp){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">חסר דוח רכיבי שכר ל${per.label}</h2><p>יש להעלות בלשונית "קליטת נתונים" את דוח הברוטו לפי רכיבי שכר (הנתונים נלקחים מסעיף "תשלומים").</p>${withComp.length?`<p style="margin-top:8px">נקלט עבור: ${withComp.map(monthName).join(', ')}.</p>`:''}</div>`; return; }
-  const T = R.tot, nM = per.months.length;
+  const T = ui.branch ? branchTot(R, ui.branch) : R.tot, nM = per.months.length, inScope = ui.branch ? `בסניף ${esc(ui.branch)}` : 'בארגון';
   let groups = R.groups.filter(g=>g.h>0 || g.rev>0);
   if(ui.branch) groups = groups.filter(g=>g.branchList.includes(ui.branch));
   const share = (g,k) => g.gross ? (g.comp?.[k]||0)/g.gross : NaN;
@@ -1635,15 +1642,16 @@ function renderCost(v){
   if(structural.length) recs.push({level:'bad', title:`${structural.length} לקוחות בהפסד גם בלי תשלומים חד-פעמיים`,
     text:`${structural.map(g=>`<b>${esc(g.name)}</b> (עלות ${perH(g.recCostH)} מול הכנסה ${perH(g.revH)} לשעה)`).join(' · ')}. כאן נדרש עדכון מחיר, צמצום שעות או בחינת המשך ההתקשרות.`});
   if(absent.length) recs.push({level:'warn', title:`היעדרויות בתשלום גבוהות ב-${absent.length} לקוחות`,
-    text:`${absent.slice(0,4).map(g=>`${esc(g.name)} (${pct(share(g,'absence'),0)} מהברוטו)`).join(' · ')}. בממוצע בארגון ${pct((T.comp.absence||0)/T.gross,1)}. חופשה ומחלה ששולמו נכנסות לעלות בלי שעות עבודה מולן. כדאי לוודא שהמחליפים לא נרשמים כשעות נוספות, ולכלול את מקדם ההיעדרות במחיר.`});
+    text:`${absent.slice(0,4).map(g=>`${esc(g.name)} (${pct(share(g,'absence'),0)} מהברוטו)`).join(' · ')}. בממוצע ${inScope} ${pct((T.comp.absence||0)/T.gross,1)}. חופשה ומחלה ששולמו נכנסות לעלות בלי שעות עבודה מולן. כדאי לוודא שהמחליפים לא נרשמים כשעות נוספות, ולכלול את מקדם ההיעדרות במחיר.`});
   if(travel.length) recs.push({level:'warn', title:`נסיעות ורכב מעל 15% מהברוטו ב-${travel.length} לקוחות`,
-    text:`${travel.slice(0,4).map(g=>`${esc(g.name)} (${pct(share(g,'travel'),0)})`).join(' · ')}. בארגון כולו ${pct((T.comp.travel||0)/T.gross,1)} מהברוטו (${money((T.comp.travel||0)/nM)} בחודש). כדאי לבדוק שיבוץ עובדים שגרים קרוב לאתר ואת מדיניות אחזקת הרכב.`});
+    text:`${travel.slice(0,4).map(g=>`${esc(g.name)} (${pct(share(g,'travel'),0)})`).join(' · ')}. ${ui.branch?inScope:'בארגון כולו'} ${pct((T.comp.travel||0)/T.gross,1)} מהברוטו (${money((T.comp.travel||0)/nM)} בחודש). כדאי לבדוק שיבוץ עובדים שגרים קרוב לאתר ואת מדיניות אחזקת הרכב.`});
   // --- השוואה חודשית ---
   const yr = (ui.ym||'').slice(0,4), cm = withComp.filter(m=>m.startsWith(yr) && complete(m));
-  const perMonth = cm.map(m=>({m, R:compute(m)}));
+  const perMonth = cm.map(m=>{ const Rm = compute(m); return {m, R:Rm, T: ui.branch ? branchTot(Rm, ui.branch) : Rm.tot}; });
   const rowsDef = perHourRows(T);
   const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
   v.innerHTML = `<div class="stack">
+    ${ui.branch?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(ui.branch)} בלבד:</b> עלות ורכיבי השכר של אתרי הסניף, והלקוחות שלו. <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
     <div class="kpis">
       ${kpi('ברוטו לשעת עבודה', perH(T.grossH), `${hrs(T.h)} שעות באתרים`)}
       ${kpi('עלות מעביד לשעה', perH(T.costH), `מעל הברוטו: ${pct(T.gross?T.cost/T.gross-1:NaN,0)}`)}
@@ -1655,11 +1663,11 @@ function renderCost(v){
         <div class="panel-head"><h2>מבנה עלות השעה לפי חודש</h2><span class="small muted">₪ לשעת עבודה ב-TimeWatch, אתרי לקוחות בלבד</span></div>
         ${perMonth.length?`<div class="tbl-wrap"><table>
           <thead><tr><th class="first">רכיב</th>${perMonth.map(x=>`<th class="n">${MONTHS[+x.m.slice(5)-1]}</th>`).join('')}${perMonth.length>1?'<th class="n">שינוי בחודש האחרון</th>':''}</tr></thead>
-          <tbody>${rowsDef.map(rd=>{ const vals = perMonth.map(x=>perHourRows(x.R.tot).find(y=>y.k===rd.k)?.v);
+          <tbody>${rowsDef.map(rd=>{ const vals = perMonth.map(x=>perHourRows(x.T).find(y=>y.k===rd.k)?.v);
               const dlt = vals.length>1 ? vals[vals.length-1]-vals[vals.length-2] : null;
               return `<tr><td class="first">${rd.n}</td>${vals.map(x=>`<td class="n">${perH(x)}</td>`).join('')}${perMonth.length>1?`<td class="n">${isFinite(dlt)?`<span class="delta ${dlt<=0?'good':'bad'}">${ltr((dlt>=0?'+':'−')+'₪'+nf1.format(Math.abs(dlt)))}</span>`:'—'}</td>`:''}</tr>`; }).join('')}
-            <tr class="total"><td class="first">עלות מעביד לשעה</td>${perMonth.map(x=>`<td class="n">${perH(x.R.tot.costH)}</td>`).join('')}${perMonth.length>1?(()=>{ const a=perMonth[perMonth.length-2].R.tot.costH, b=perMonth[perMonth.length-1].R.tot.costH; return `<td class="n"><span class="delta ${b<=a?'good':'bad'}">${ltr((b>=a?'+':'−')+'₪'+nf1.format(Math.abs(b-a)))}</span></td>`; })():''}</tr>
-            <tr><td class="first">הכנסה לשעה</td>${perMonth.map(x=>`<td class="n">${perH(x.R.tot.revH)}</td>`).join('')}${perMonth.length>1?'<td></td>':''}</tr>
+            <tr class="total"><td class="first">עלות מעביד לשעה</td>${perMonth.map(x=>`<td class="n">${perH(x.T.costH)}</td>`).join('')}${perMonth.length>1?(()=>{ const a=perMonth[perMonth.length-2].T.costH, b=perMonth[perMonth.length-1].T.costH; return `<td class="n"><span class="delta ${b<=a?'good':'bad'}">${ltr((b>=a?'+':'−')+'₪'+nf1.format(Math.abs(b-a)))}</span></td>`; })():''}</tr>
+            <tr><td class="first">הכנסה לשעה</td>${perMonth.map(x=>`<td class="n">${perH(x.T.revH)}</td>`).join('')}${perMonth.length>1?'<td></td>':''}</tr>
           </tbody></table></div>
           ${perMonth.length<2?'<p class="hint" style="margin-top:8px">ההשוואה החודשית תופיע כשיקלט דוח רכיבים לחודש שלם נוסף (עם דוחות הכנסות, שעות ושכר).</p>':''}`:'<p class="muted">אין עדיין חודש שלם עם דוח רכיבים.</p>'}
       </section>
