@@ -2068,6 +2068,7 @@ function renderData(v){
     ${breaksPanel()}
     ${gaPanel()}
     ${wagesStatus()}
+    ${backupPanel()}
     ${ms.length?`<div class="months">${ms.map(monthCard).join('')}</div>`:'<div class="panel empty">עדיין לא נקלטו חודשים.</div>'}
   </div>`;
 }
@@ -2220,6 +2221,78 @@ function parseMaterials(wb){
     if(bl!=null) (bill[ym] ||= {})[g.id] = ((bill[ym]||{})[g.id]||0) + bl;
   }
   return {cost, bill, missing};
+}
+/* ---------- גיבוי ושחזור ----------
+   גיבוי = קובץ JSON עם כל המסמכים המשותפים (דוחות חודשיים, התאמה, תכניות, עלויות ידניות, חומרים, הנהלה וכלליות, הפסקות).
+   שכר העובדים (אזור פרטי) בקובץ נפרד. שחזור מחזיר את המאגר בדיוק למצב שבקובץ, אחרי אישור. */
+const SHARED_DOCS = ['settings/mapping','settings/plan','settings/manual','settings/materials','settings/ga','settings/breaks'], SHARED_COLS = ['months','ga'];
+let pendingRestore = null;
+function backupPanel(){
+  const pr = pendingRestore;
+  return `<section class="panel">
+    <div class="panel-head"><h2>גיבוי ושחזור</h2><span class="small muted">שמירת מצב הנתונים בקובץ במחשב, וחזרה אליו בעת הצורך</span></div>
+    <div class="actions">
+      <button class="btn primary" type="button" id="bk-shared">גיבוי נתונים</button>
+      ${store.hasPrivate?'<button class="btn" type="button" id="bk-private">גיבוי שכר עובדים (פרטי)</button>':''}
+      <label class="btn" for="bk-file">שחזור מגיבוי…</label><input type="file" id="bk-file" accept=".json,application/json" hidden>
+    </div>
+    ${pr?`<div class="panel small" style="margin-top:10px;background:var(--warn-soft);border-color:transparent">
+      <b>שחזור מהקובץ ${esc(pr.file)}</b> (גיבוי מ-${esc(new Date(pr.data.createdAt).toLocaleString('he-IL'))}): ${pr.data.kind==='private'
+        ? `${Object.keys(pr.data.docs).length} מסמכי שכר עובדים באזור הפרטי שלך.`
+        : `${Object.keys(pr.data.docs).filter(k=>k.startsWith('months/')).length} חודשים ועוד ${Object.keys(pr.data.docs).filter(k=>!k.startsWith('months/')).length} מסמכי הגדרות. כל הנתונים המשותפים יוחלפו במצב שבקובץ, כולל חודשים שנקלטו אחריו.`}
+      מומלץ לגבות את המצב הנוכחי לפני כן.
+      <div class="actions" style="margin-top:8px"><button class="btn danger" type="button" id="bk-restore">אישור שחזור</button><button class="btn" type="button" id="bk-cancel">ביטול</button></div></div>`:''}
+    <p class="hint" style="margin-top:8px">מומלץ לגבות בסוף כל חודש ולפני שינוי גדול, ולשמור את הקבצים בתיקייה במחשב. קובץ שכר העובדים כולל שמות ושכר, ולכן כדאי לשמור אותו במקום מוגן ולא לשלוח אותו.</p>
+  </section>`;
+}
+async function collectShared(){
+  const docs = {};
+  if(store.db){
+    for(const pth of SHARED_DOCS){ const d = await store.db.doc(pth).get(); if(d.exists) docs[pth] = thaw(d.data()); }
+    for(const c of SHARED_COLS){ const q = await store.db.collection(c).get(); q.docs.forEach(d=>docs[c+'/'+d.id] = thaw(d.data())); }
+  } else {
+    const ls = k => { try{ return JSON.parse(localStorage.getItem(k)||'null'); }catch(e){ return null; } };
+    [['settings/mapping','coop-mapping'],['settings/plan','coop-plan'],['settings/manual','coop-manual'],['settings/materials','coop-materials'],['settings/ga','coop-ga'],['settings/breaks','coop-breaks']].forEach(([p,k])=>{ const v = ls(k); if(v) docs[p] = v; });
+    for(const [ym, M] of Object.entries(months)) docs['months/'+ym] = thaw(M);
+  }
+  return docs;
+}
+async function saveJson(obj, filename){
+  const blob = new Blob([JSON.stringify(obj)], {type:'application/json'});
+  const dl = window.claude?.use ? await window.claude.use('downloads').catch(()=>null) : null;
+  if(dl){ try{ await dl.save({filename, data:blob}); toast('הגיבוי נשמר'); }catch(e){ if(e?.code!=='declined') toast('השמירה לא הושלמה'); } return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000); toast('הגיבוי נשמר');
+}
+const today = () => new Date().toISOString().slice(0,10);
+async function backupShared(){
+  toast('מכינים גיבוי…');
+  try{ const docs = await collectShared(); await saveJson({app:'coop-profit', kind:'shared', v:1, createdAt:new Date().toISOString(), docs}, `גיבוי-נתונים-${today()}.json`); }
+  catch(e){ console.error(e); toast(`הגיבוי נכשל: ${e?.message||e?.code||e}`); }
+}
+async function backupPrivate(){ await saveJson({app:'coop-profit', kind:'private', v:1, createdAt:new Date().toISOString(), docs:thaw(priv)}, `גיבוי-שכר-עובדים-${today()}.json`); }
+async function readBackup(f){
+  try{ const data = JSON.parse(await f.text());
+    if(data?.app!=='coop-profit' || !['shared','private'].includes(data.kind) || typeof data.docs!=='object') throw new Error('זה לא קובץ גיבוי של האפליקציה');
+    pendingRestore = {file:f.name, data}; render();
+  }catch(e){ toast(`לא ניתן לקרוא את הקובץ: ${e?.message||e}`); }
+}
+async function doRestore(){
+  const pr = pendingRestore; if(!pr) return; pendingRestore = null; toast('משחזרים…');
+  try{
+    if(pr.data.kind==='private'){ for(const [id, doc] of Object.entries(pr.data.docs)) await store.savePrivate(id, doc); render(); toast(`שוחזרו ${Object.keys(pr.data.docs).length} מסמכי שכר עובדים`); return; }
+    const docs = pr.data.docs;
+    if(store.db){
+      const cur = await collectShared();
+      for(const pth of Object.keys(cur)) if(!(pth in docs)) await store.db.doc(pth).delete();   // מסמכים שנוספו אחרי הגיבוי
+      for(const [pth, d] of Object.entries(docs)) if(SHARED_DOCS.includes(pth) || SHARED_COLS.includes(pth.split('/')[0])) await store.db.doc(pth).set(d);
+    } else {
+      const map = {'settings/mapping':'coop-mapping','settings/plan':'coop-plan','settings/manual':'coop-manual','settings/materials':'coop-materials','settings/ga':'coop-ga','settings/breaks':'coop-breaks'};
+      for(const [p,k] of Object.entries(map)){ if(docs[p]) localStorage.setItem(k, JSON.stringify(docs[p])); else localStorage.removeItem(k); }
+      const ms = {}; for(const [p,d] of Object.entries(docs)) if(p.startsWith('months/')) ms[p.slice(7)] = d;
+      localStorage.setItem('coop-months', JSON.stringify(ms)); await store.init();
+    }
+    render(); toast(`השחזור הושלם: ${Object.keys(docs).length} מסמכים`);
+  }catch(e){ console.error(e); toast(`השחזור נכשל באמצע: ${e?.message||e?.code||e}. יש לרענן ולנסות שוב מאותו קובץ`); }
 }
 function wagesStatus(){
   if(!store.hasPrivate) return '<div class="panel small muted">שכר שעתי לפי עובד: אין אזור פרטי בתצוגה הזו, ולכן אי אפשר להעלות אותו כאן.</div>';
@@ -2418,6 +2491,10 @@ document.addEventListener('click', async e=>{
   if(d.brkrm){ const g=mapping.groups.find(x=>x.id===d.brkrm); if(g){ delete g.noBreakBill; await store.saveMapping(); render(); toast(`${g.name}: ההפסקות נספרות שוב בשעות`); } return; }
   if(d.comp){ ui.compSel = ui.compSel===d.comp ? null : d.comp; render(); if(ui.compSel) document.getElementById('comp-list')?.scrollIntoView({behavior:'smooth', block:'start'}); return; }
   if(t.id==='comp-close'){ ui.compSel = null; render(); return; }
+  if(t.id==='bk-shared'){ t.disabled = true; try{ await backupShared(); } finally { t.disabled = false; } return; }
+  if(t.id==='bk-private'){ await backupPrivate(); return; }
+  if(t.id==='bk-restore'){ await doRestore(); return; }
+  if(t.id==='bk-cancel'){ pendingRestore = null; render(); return; }
   if(d.unrule){ const r = {...mapping.clientRules}; delete r[d.unrule]; mapping.clientRules = r; await store.saveMapping(); render(); toast(`${d.unrule} חזר לרשימת ההתאמה`); return; }
   if(t.id==='ga-save'){ if(Date.now()-gaDown > 1000) await saveGAPanel(); return; }
   if(t.id==='ga-copy'){   // העתקת הסכומים מהחודש הקודם לתאים הריקים בחודש הנוכחי
@@ -2501,6 +2578,7 @@ document.addEventListener('change', async e=>{
   else if(d.matcost){ await setMaterial('cost', d.matcost, t.value); }
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
   else if(d.clo){ await setClothing(d.clo, t.value); }
+  else if(t.id==='bk-file' && t.files[0]){ const f = t.files[0]; t.value=''; await readBackup(f); }
   else if(t.id==='comp-sel'){ ui.compSel = t.value; render(); }
   else if(d.brk){ await setBreak(d.brk, t.value); }
   else if(t.id==='brk-add' && t.value){ const g=mapping.groups.find(x=>x.id===t.value); if(g){ g.noBreakBill=true; await store.saveMapping(); render(); toast(`${g.name} נוסף. אפשר להזין לו שעות הפסקה`); } }
