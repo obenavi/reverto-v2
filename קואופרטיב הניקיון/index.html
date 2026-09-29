@@ -59,7 +59,7 @@ button,select,input{font:inherit;color:inherit}
 .btn:disabled{opacity:.5;cursor:default}
 .store-note{font-size:12px;color:var(--muted)}
 
-.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;gap:4px;overflow-x:auto;padding-block:10px;border-bottom:1px solid var(--line);scrollbar-width:none}
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;flex-wrap:wrap;gap:4px;padding-block:10px;border-bottom:1px solid var(--line);scrollbar-width:none}
 .tab{border:0;background:transparent;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:500;color:var(--ink-2);white-space:nowrap}
 .tab[aria-selected="true"]{background:var(--accent-soft);color:var(--ink);font-weight:600}
 .tab .badge{display:inline-block;min-width:18px;padding:0 5px;margin-inline-start:6px;border-radius:9px;background:var(--warn-soft);color:var(--warn);font-size:12px;font-weight:600;text-align:center}
