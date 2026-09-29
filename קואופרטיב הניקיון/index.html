@@ -1116,9 +1116,9 @@ function renderOverview(v){
   // שכר הנהלה לכל סניף בטבלה; מה שלא הוקצה לאף סניף מוצג בשורת "הנהלה כללית"
   const bOh = b => br ? T.overhead : branchOverhead(R, b.name);
   const genOh = br ? 0 : T.overhead - brs.reduce((a,b)=>a+bOh(b),0);
-  const hasMat = T.mat>0, hasClo = T.clo>0, hasGa = T.ga>0;
-  // הנהלה וכלליות, רווח תפעולי ושיעורו (מוצג כשיש נתונים)
-  const gc = (g, op, rev) => hasGa ? `<td class="n">${g}</td><td class="n">${op}</td><td class="n">${rev}</td>` : '';
+  const hasMat = T.mat>0, hasClo = T.clo>0;
+  // הנהלה וכלליות, והסה״כ אחרי שכר הנהלה והנהלה וכלליות ושיעורו
+  const gc = (g, op, rev) => `<td class="n">${g}</td><td class="n">${op}</td><td class="n">${rev}</td>`;
   const mc = (v, c) => (hasMat ? `<td class="n">${v}</td>` : '') + (hasClo ? `<td class="n">${c??''}</td>` : '');   // חומרי ניקיון, ביגוד
   const chartMonths = per.months.length>1 ? per.months : monthList();
   v.innerHTML = `<div class="stack">
@@ -1137,13 +1137,13 @@ function renderOverview(v){
         <section class="panel">
           <div class="panel-head"><h2>${br?`רווחיות ${esc(br)}`:'רווחיות לפי סניף'}</h2><span class="small muted">${per.label}</span></div>
           <div class="tbl-wrap"><table class="compact">
-            <thead><tr><th class="first">סניף</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th>${hasMat?'<th class="n">חומרי ניקיון</th>':''}${hasClo?'<th class="n">ביגוד</th>':''}<th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">${br?esc(ohLabel):'שכר הנהלה'}</th><th class="n">אחרי שכר הנהלה</th><th class="n">שיעור</th>${hasGa?'<th class="n">הנהלה וכלליות</th><th class="n">רווח תפעולי</th><th class="n">שיעור</th>':''}<th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th>${P?'<th class="n">שינוי בשיעור</th>':''}</tr></thead>
+            <thead><tr><th class="first">סניף</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th>${hasMat?'<th class="n">חומרי ניקיון</th>':''}${hasClo?'<th class="n">ביגוד</th>':''}<th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">${br?esc(ohLabel):'שכר הנהלה'}</th><th class="n">הנהלה וכלליות</th><th class="n">אחרי הנהלה וכלליות</th><th class="n">שיעור</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th>${P?'<th class="n">שינוי בשיעור</th>':''}</tr></thead>
             <tbody>${brs.map(b=>{ const pb = P?.branches[b.name], o = bOh(b), net = b.gp-o, g = br ? T.ga : (b.ga||0), op = net-g;
               return `<tr class="clickable" data-branch-go="${esc(b.name)}"><td class="first">${chartMonths.length>1?`<span class="legend" style="margin:0;display:inline"><i style="background:var(${color(b.name)})"></i></span>`:''}${esc(b.name)}</td><td class="n">${money(b.rev)}</td><td class="n">${hrs(b.h)}</td><td class="n">${money(b.cost)}</td>${mc(money(b.mat||0), money(b.clo||0))}<td class="n">${money(b.gp)}</td><td class="n">${marginPill(b.margin, b.rev)}</td>
-              <td class="n">${money(o)}</td><td class="n">${money(net)}</td><td class="n">${marginPill(b.rev?net/b.rev:NaN, b.rev)}</td>${gc(money(g), money(op), marginPill(b.rev?op/b.rev:NaN, b.rev))}<td class="n">${perH(b.revH)}</td><td class="n">${perH(b.costH)}</td>
+              <td class="n">${money(o)}</td>${gc(money(g), money(op), marginPill(b.rev?op/b.rev:NaN, b.rev))}<td class="n">${perH(b.revH)}</td><td class="n">${perH(b.costH)}</td>
               ${P?`<td class="n">${pb&&isFinite(pb.margin)&&isFinite(b.margin)?`<span class="delta ${b.margin>=pb.margin?'good':'bad'}">${ltr((b.margin>=pb.margin?'+':'−')+Math.abs((b.margin-pb.margin)*100).toFixed(1)+' נק׳')}</span>`:'—'}</td>`:''}</tr>`;}).join('')}
-            ${genOh>0.5 || T.gaOrg>0?`<tr><td class="first muted">כללי (לא משויך)</td><td></td><td></td><td></td>${mc('')}<td></td><td></td><td class="n">${money(genOh)}</td><td class="n">${money(-genOh)}</td><td></td>${gc(money(T.gaOrg||0), money(-genOh-(T.gaOrg||0)), '')}<td></td><td></td>${P?'<td></td>':''}</tr>`:''}
-            <tr class="total"><td class="first">סה״כ</td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td>${mc(money(T.mat), money(T.clo))}<td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${money(T.overhead)}</td><td class="n">${money(T.net)}</td><td class="n">${pct(T.netMargin)}</td>${gc(money(T.ga), money(T.op), pct(T.opMargin))}<td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td>${P?'<td></td>':''}</tr>
+            ${genOh>0.5 || T.gaOrg>0?`<tr><td class="first muted">כללי (לא משויך)</td><td></td><td></td><td></td>${mc('')}<td></td><td></td><td class="n">${money(genOh)}</td>${gc(money(T.gaOrg||0), money(-genOh-(T.gaOrg||0)), '')}<td></td><td></td>${P?'<td></td>':''}</tr>`:''}
+            <tr class="total"><td class="first">סה״כ</td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td>${mc(money(T.mat), money(T.clo))}<td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${money(T.overhead)}</td>${gc(money(T.ga), money(T.op), pct(T.opMargin))}<td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td>${P?'<td></td>':''}</tr>
             </tbody></table></div>
           <p class="hint" style="margin-top:8px">לחיצה על ${br?'הסניף':'סניף'} פותחת את רשימת הלקוחות שלו.</p>
         </section>
@@ -1211,9 +1211,9 @@ function monthTable(R){
   return `<section class="panel">
     <div class="panel-head"><h2>פירוט לפי חודש</h2></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th class="first">חודש</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">שכר הנהלה</th><th class="n">אחרי שכר הנהלה</th><th class="n">שיעור</th></tr></thead>
-      <tbody>${R.parts.map(p=>{ const t=p.tot; return `<tr><td class="first">${monthName(p.ym)}</td><td class="n">${money(t.rev)}</td><td class="n">${hrs(t.h)}</td><td class="n">${money(t.cost)}</td><td class="n">${money(t.gp)}</td><td class="n">${marginPill(t.margin,t.rev)}</td><td class="n">${money(t.overhead)}</td><td class="n">${money(t.net)}</td><td class="n">${marginPill(t.netMargin,t.rev)}</td></tr>`; }).join('')}
-      ${(()=>{ const t=R.tot; return `<tr class="total"><td class="first">סה״כ</td><td class="n">${money(t.rev)}</td><td class="n">${hrs(t.h)}</td><td class="n">${money(t.cost)}</td><td class="n">${money(t.gp)}</td><td class="n">${pct(t.margin)}</td><td class="n">${money(t.overhead)}</td><td class="n">${money(t.net)}</td><td class="n">${pct(t.netMargin)}</td></tr>`; })()}
+      <thead><tr><th class="first">חודש</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">שכר הנהלה</th><th class="n">הנהלה וכלליות</th><th class="n">אחרי הנהלה וכלליות</th><th class="n">שיעור</th></tr></thead>
+      <tbody>${R.parts.map(p=>{ const t=p.tot; return `<tr><td class="first">${monthName(p.ym)}</td><td class="n">${money(t.rev)}</td><td class="n">${hrs(t.h)}</td><td class="n">${money(t.cost)}</td><td class="n">${money(t.gp)}</td><td class="n">${marginPill(t.margin,t.rev)}</td><td class="n">${money(t.overhead)}</td><td class="n">${money(t.ga||0)}</td><td class="n">${money(t.op)}</td><td class="n">${marginPill(t.opMargin,t.rev)}</td></tr>`; }).join('')}
+      ${(()=>{ const t=R.tot; return `<tr class="total"><td class="first">סה״כ</td><td class="n">${money(t.rev)}</td><td class="n">${hrs(t.h)}</td><td class="n">${money(t.cost)}</td><td class="n">${money(t.gp)}</td><td class="n">${pct(t.margin)}</td><td class="n">${money(t.overhead)}</td><td class="n">${money(t.ga||0)}</td><td class="n">${money(t.op)}</td><td class="n">${pct(t.opMargin)}</td></tr>`; })()}
       </tbody></table></div></section>`;
 }
 function marginPill(m, rev){
