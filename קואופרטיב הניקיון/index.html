@@ -1078,17 +1078,16 @@ function renderOverview(v){
             </tbody></table></div>
           <p class="hint" style="margin-top:8px">לחיצה על ${br?'הסניף':'סניף'} פותחת את רשימת הלקוחות שלו.</p>
         </section>
-        <section class="panel">
-          <div class="panel-head"><h2>תובנות</h2><span class="small muted">${per.label}</span></div>
+        ${br ? `<section class="panel">
+          <div class="panel-head"><h2>תובנות · ${esc(br)}</h2><span class="small muted">${per.label}</span></div>
           <div class="insights">${insights(R, P, per).map(i=>`<div class="insight"><span class="pill ${i.level}">${{good:'▲ חיובי',bad:'▼ דורש טיפול',warn:'● לבדיקה',info:'● מידע'}[i.level]}</span><h3>${i.title}</h3><p>${i.text}</p></div>`).join('')}</div>
-        </section>
+        </section>` : branchInsightsPanel(R, P, per, allBr, color)}
         <section class="panel">
           <div class="panel-head"><h2>${chartMonths.length>1?'שיעור רווח גולמי לפי חודש':'הכנסות מול עלות מעביד לפי סניף'}</h2></div>
           <div class="legend">${chartMonths.length>1 ? brNames.map(b=>`<span><i class="line" style="background:var(${color(b)})"></i>${esc(b)}</span>`).join('') : '<span><i style="background:var(--s1)"></i>הכנסות</span><span><i style="background:var(--s2)"></i>עלות מעביד</span>'}</div>
           <div class="chart-box"><canvas id="ch-main" aria-label="גרף רווחיות לפי סניף"></canvas></div>
         </section>
     </div>
-    ${br ? '' : branchInsightsPanel(R, P, per, allBr, color)}
     ${P?driversPanel(R, P, per, !br):''}
     ${R.parts?monthTable(R):''}
   </div>`;
