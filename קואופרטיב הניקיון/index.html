@@ -1827,6 +1827,26 @@ function renderCost(v){
   const yr = (ui.ym||'').slice(0,4), cm = withComp.filter(m=>m.startsWith(yr) && complete(m));
   const perMonth = cm.map(m=>{ const Rm = compute(m); return {m, R:Rm, T: ui.branch ? branchTot(Rm, ui.branch) : Rm.tot}; });
   const rowsDef = perHourRows(T);
+  // רשימת לקוחות לרכיב שנבחר (לחיצה על שורה בטבלת מבנה העלות)
+  const compPanel = () => {
+    const k = ui.compSel; if(!k || !rowsDef.some(r=>r.k===k)) return '';
+    const name = rowsDef.find(r=>r.k===k).n, valOf = g => k==='oncost' ? (g.cost-(g.gross||0)) : (g.comp?.[k]||0);
+    const tv = k==='oncost' ? T.cost-(T.gross||0) : (T.comp?.[k]||0), avgH = T.h ? tv/T.h : NaN;
+    const list = groups.map(g=>({g, v:valOf(g)})).filter(x=>Math.abs(x.v)>=1).sort((a,b)=>b.v-a.v);
+    const sum = list.reduce((a,x)=>a+x.v,0);
+    return `<section class="panel" id="comp-list">
+      <div class="panel-head"><h2>לקוחות לפי רכיב</h2>
+        <label class="small">רכיב <select id="comp-sel">${rowsDef.map(r=>`<option value="${r.k}" ${r.k===k?'selected':''}>${esc(r.n)}</option>`).join('')}</select></label>
+        <span class="small muted">${per.label}${ui.branch?` · ${esc(ui.branch)}`:''} · ${list.length} לקוחות · ממוצע ${inScope} ${perH(avgH)} לשעה</span>
+        <button class="btn sm" type="button" id="comp-close">סגירה</button></div>
+      ${list.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">לקוח</th><th>סניף</th><th class="n">סכום בתקופה</th>${nM>1?'<th class="n">בחודש (ממוצע)</th>':''}<th class="n">שעות</th><th class="n">לשעת עבודה</th><th class="n">מול הממוצע</th><th class="n">מהברוטו של הלקוח</th><th class="n">חלק מהרכיב</th></tr></thead><tbody>
+        ${list.map(({g,v})=>{ const ph = g.h ? v/g.h : NaN, r = isFinite(ph)&&avgH ? ph/avgH : NaN, hi = r>=1.5 && v/nM>=500;
+          return `<tr class="clickable" data-client="${g.id}"><td class="first">${esc(g.name)}${hi?' <span class="pill warn">חריג</span>':''}</td><td>${esc(g.branchList.join(' / '))}</td><td class="n">${money(v)}</td>${nM>1?`<td class="n">${money(v/nM)}</td>`:''}<td class="n">${hrs(g.h)}</td><td class="n">${g.h?perH(ph):'<span class="muted">אין שעות</span>'}</td><td class="n">${isFinite(r)?ltr('×'+nf1.format(r)):'—'}</td><td class="n">${k==='oncost'?'—':pct(g.gross?v/g.gross:NaN,1)}</td><td class="n">${pct(sum?v/sum:NaN,0)}</td></tr>`; }).join('')}
+        <tr class="total"><td class="first">סה״כ</td><td></td><td class="n">${money(sum)}</td>${nM>1?`<td class="n">${money(sum/nM)}</td>`:''}<td></td><td class="n">${perH(avgH)}</td><td></td><td></td><td></td></tr>
+      </tbody></table></div><p class="hint" style="margin-top:8px">"חריג" = לפחות פי 1.5 מהממוצע לשעה, ולפחות ${money(500)} בחודש. לחיצה על לקוח פותחת את כרטיס הלקוח.</p>`
+      : `<p class="muted">אין לקוחות עם תשלום ב${esc(name)} בתקופה.</p>`}
+    </section>`;
+  };
   const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
   v.innerHTML = `<div class="stack">
     ${oldComp.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${oldComp.map(monthName).join(', ')} דוח רכיבי השכר נקלט לפני ההפרדה, ולכן עבודה בשבת וחג עדיין כלולה בשעות נוספות, וימי מחלה כלולים בחופשה ובחג. כדי להפריד, יש להעלות מחדש את דוח רכיבי השכר של ${oldComp.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
@@ -1844,10 +1864,11 @@ function renderCost(v){
           <thead><tr><th class="first">רכיב</th>${perMonth.map(x=>`<th class="n">${MONTHS[+x.m.slice(5)-1]}</th>`).join('')}${perMonth.length>1?'<th class="n">שינוי בחודש האחרון</th>':''}</tr></thead>
           <tbody>${rowsDef.map(rd=>{ const vals = perMonth.map(x=>perHourRows(x.T).find(y=>y.k===rd.k)?.v);
               const dlt = vals.length>1 ? vals[vals.length-1]-vals[vals.length-2] : null;
-              return `<tr><td class="first">${rd.n}</td>${vals.map(x=>`<td class="n">${perH(x)}</td>`).join('')}${perMonth.length>1?`<td class="n">${isFinite(dlt)?`<span class="delta ${dlt<=0?'good':'bad'}">${ltr((dlt>=0?'+':'−')+'₪'+nf1.format(Math.abs(dlt)))}</span>`:'—'}</td>`:''}</tr>`; }).join('')}
+              return `<tr class="clickable" data-comp="${rd.k}" title="הצגת הלקוחות ברכיב הזה"${ui.compSel===rd.k?' style="background:var(--accent-soft)"':''}><td class="first">${rd.n} <span class="muted small">›</span></td>${vals.map(x=>`<td class="n">${perH(x)}</td>`).join('')}${perMonth.length>1?`<td class="n">${isFinite(dlt)?`<span class="delta ${dlt<=0?'good':'bad'}">${ltr((dlt>=0?'+':'−')+'₪'+nf1.format(Math.abs(dlt)))}</span>`:'—'}</td>`:''}</tr>`; }).join('')}
             <tr class="total"><td class="first">עלות מעביד לשעה</td>${perMonth.map(x=>`<td class="n">${perH(x.T.costH)}</td>`).join('')}${perMonth.length>1?(()=>{ const a=perMonth[perMonth.length-2].T.costH, b=perMonth[perMonth.length-1].T.costH; return `<td class="n"><span class="delta ${b<=a?'good':'bad'}">${ltr((b>=a?'+':'−')+'₪'+nf1.format(Math.abs(b-a)))}</span></td>`; })():''}</tr>
             <tr><td class="first">הכנסה לשעה</td>${perMonth.map(x=>`<td class="n">${perH(x.T.revH)}</td>`).join('')}${perMonth.length>1?'<td></td>':''}</tr>
           </tbody></table></div>
+          <p class="hint" style="margin-top:8px">לחיצה על רכיב מציגה את רשימת הלקוחות שלו.</p>
           ${perMonth.length<2?'<p class="hint" style="margin-top:8px">ההשוואה החודשית תופיע כשיקלט דוח רכיבים לחודש שלם נוסף (עם דוחות הכנסות, שעות ושכר).</p>':''}`:'<p class="muted">אין עדיין חודש שלם עם דוח רכיבים.</p>'}
       </section>
       <section class="panel">
@@ -1855,6 +1876,7 @@ function renderCost(v){
         <div class="insights">${recs.length?recs.map(i=>`<div class="insight"><span class="pill ${i.level}">${{good:'▲ חיובי',bad:'▼ עדיפות גבוהה',warn:'● לבדיקה',info:'● מידע'}[i.level]}</span><h3>${i.title}</h3><p>${i.text}</p></div>`).join(''):'<p class="muted">לא נמצאו חריגות.</p>'}</div>
       </section>
     </div>
+    ${compPanel()}
     <section class="panel">
       <div class="panel-head"><h2>עלות חוזרת ותמחור לפי לקוח</h2>
         <label class="small muted">יעד רווח גולמי <input type="text" id="f-target" value="${ui.target||15}" inputmode="decimal" style="width:52px;text-align:center"> %</label></div>
@@ -2383,7 +2405,7 @@ function drawChart(id, cfg, tick, label){
 
 /* ============================================================ אירועים */
 document.addEventListener('click', async e=>{
-  const t = e.target.closest('button, tr[data-open], tr[data-branch-go], tr[data-client], tr[data-tab], th[data-sort]'); if(!t) return;
+  const t = e.target.closest('button, tr[data-open], tr[data-branch-go], tr[data-client], tr[data-tab], tr[data-comp], th[data-sort]'); if(!t) return;
   const d = t.dataset;
   if(d.tab){ ui.tab=d.tab; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(d.branchGo){ ui.tab='clients'; ui.branch=d.branchGo; saveUi(); render(); return; }
@@ -2394,6 +2416,8 @@ document.addEventListener('click', async e=>{
   if(t.id==='btn-pdf'){ t.disabled = true; toast('מכינים את ה-PDF…'); try{ await tabPdf(); } finally { t.disabled = false; } return; }
   if(t.id==='mat-template') return materialsTemplate();
   if(d.brkrm){ const g=mapping.groups.find(x=>x.id===d.brkrm); if(g){ delete g.noBreakBill; await store.saveMapping(); render(); toast(`${g.name}: ההפסקות נספרות שוב בשעות`); } return; }
+  if(d.comp){ ui.compSel = ui.compSel===d.comp ? null : d.comp; render(); if(ui.compSel) document.getElementById('comp-list')?.scrollIntoView({behavior:'smooth', block:'start'}); return; }
+  if(t.id==='comp-close'){ ui.compSel = null; render(); return; }
   if(d.unrule){ const r = {...mapping.clientRules}; delete r[d.unrule]; mapping.clientRules = r; await store.saveMapping(); render(); toast(`${d.unrule} חזר לרשימת ההתאמה`); return; }
   if(t.id==='ga-save'){ if(Date.now()-gaDown > 1000) await saveGAPanel(); return; }
   if(t.id==='ga-copy'){   // העתקת הסכומים מהחודש הקודם לתאים הריקים בחודש הנוכחי
@@ -2477,6 +2501,7 @@ document.addEventListener('change', async e=>{
   else if(d.matcost){ await setMaterial('cost', d.matcost, t.value); }
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
   else if(d.clo){ await setClothing(d.clo, t.value); }
+  else if(t.id==='comp-sel'){ ui.compSel = t.value; render(); }
   else if(d.brk){ await setBreak(d.brk, t.value); }
   else if(t.id==='brk-add' && t.value){ const g=mapping.groups.find(x=>x.id===t.value); if(g){ g.noBreakBill=true; await store.saveMapping(); render(); toast(`${g.name} נוסף. אפשר להזין לו שעות הפסקה`); } }
   else if(d.lease){ await setClothing(d.lease, t.value, LEASE); }
