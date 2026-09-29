@@ -230,6 +230,7 @@ let manual = {};                 // settings/manual: עלויות ידניות �
 // billByMonth: ym -> קבוצה -> חיוב ללקוח על חומרים (כלול בחשבונית ללקוח, ולכן כבר בהכנסות)
 // fixedBill: לקוחות בחיוב חודשי קבוע על חומרים (קבוצה -> ₪). markup: תקורה על חשבונית הספק בחיוב ללקוח (ברירת מחדל 15%)
 let materials = {byMonth:{}, billByMonth:{}, fixedBill:{}, markup:0.15};
+const CLO = 'ביגוד';   // עלות ביגוד לסניף בחודש: manual[סניף][חודש]['ביגוד'], נכנסת לרווח הגולמי של הסניף
 const loadMaterials = d => ({byMonth:{...(d?.byMonth||{})}, billByMonth:{...(d?.billByMonth||{})}, fixedBill:{...(d?.fixedBill||{})}, markup: d?.markup!=null ? +d.markup : 0.15});
 const matFor = (gid, ym) => +(materials.byMonth[ym]?.[gid] || 0);
 // החיוב ללקוח על חומרים בחודש: סכום שהוזן ידנית; אחרת חיוב קבוע ללקוח (למשל סאמיט); אחרת עלות החשבונית + תקורה
@@ -755,13 +756,15 @@ function compute(ym){
     r.flags = flagsOf(r); finishComp(r);
   }
   for(const s of Object.values(unSites)){ const x=B(s.branch); x.h+=s.h; x.cost+=s.cost; }
-  Object.values(branches).forEach(b=>{ b.gp=b.rev-b.cost-b.mat; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
+  // ביגוד: עלות ישירה של הסניף (הזנה חודשית), נכנסת לרווח הגולמי של הסניף והארגון
+  let clo = 0; for(const b of Object.keys(manual)){ const v = +(manual[b]?.[ym]?.[CLO]||0); if(v){ B(b).clo = v; clo += v; } }
+  Object.values(branches).forEach(b=>{ b.clo ||= 0; b.gp=b.rev-b.cost-b.mat-b.clo; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
   const list = Object.values(G);
   const oh = allocOverhead(ym, overhead); overhead = oh.total;
   const tot = {rev:list.reduce((a,r)=>a+r.rev,0)+Object.values(unClients).reduce((a,c)=>a+c.rev,0),
                cost:list.reduce((a,r)=>a+r.cost,0)+Object.values(unSites).reduce((a,s)=>a+s.cost,0),
-               h:list.reduce((a,r)=>a+r.h,0)+Object.values(unSites).reduce((a,s)=>a+s.h,0), overhead, mat:list.reduce((a,r)=>a+r.mat,0)};
-  tot.gp = tot.rev - tot.cost - tot.mat; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp - overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
+               h:list.reduce((a,r)=>a+r.h,0)+Object.values(unSites).reduce((a,s)=>a+s.h,0), overhead, mat:list.reduce((a,r)=>a+r.mat,0), clo};
+  tot.gp = tot.rev - tot.cost - tot.mat - tot.clo; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp - overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
   tot.gross = list.reduce((a,r)=>a+(r.gross||0),0) + Object.values(unSites).reduce((a,s)=>a+s.gross,0);
   tot.comp = [...list.map(r=>r.comp||{}), ...Object.values(unSites).map(s=>s.comp)].reduce((a,c)=>addComp(a,c), {});
@@ -848,7 +851,7 @@ function computePeriod(yms){
       for(const [c,a] of Object.entries(g.clients)) x.clients[c]=(x.clients[c]||0)+a;
       for(const [b,w] of Object.entries(g.branchShare)) x.weight[b]=(x.weight[b]||0)+w*(g.rev+g.h+1);
     }
-    for(const b of Object.values(R.branches)){ const y = branches[b.name] ||= {name:b.name, rev:0, h:0, cost:0, mat:0}; y.rev+=b.rev; y.h+=b.h; y.cost+=b.cost; y.mat+=b.mat||0; }
+    for(const b of Object.values(R.branches)){ const y = branches[b.name] ||= {name:b.name, rev:0, h:0, cost:0, mat:0, clo:0}; y.rev+=b.rev; y.h+=b.h; y.cost+=b.cost; y.mat+=b.mat||0; y.clo+=b.clo||0; }
     for(const st of Object.values(R.unSites)){ const y = unSites[st.code] ||= {...st, h:0, cost:0}; y.h+=st.h; y.cost+=st.cost; }
     for(const c of Object.values(R.unClients)){ const y = unClients[c.name] ||= {name:c.name, rev:0}; y.rev+=c.rev; }
   }
@@ -859,9 +862,9 @@ function computePeriod(yms){
     r.branchList = w.map(x=>x[0]); r.branch = w[0][0];
     r.gp = r.rev-r.cost-r.mat; r.margin = r.rev? r.gp/r.rev : NaN; r.revH = r.h? r.rev/r.h : NaN; r.costH = r.h? r.cost/r.h : NaN; r.flags = flagsOf(r); finishComp(r);
   }
-  Object.values(branches).forEach(b=>{ b.gp=b.rev-b.cost-b.mat; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
-  const tot = ['rev','cost','h','overhead','mat'].reduce((o,k)=>(o[k]=parts.reduce((a,R)=>a+(R.tot[k]||0),0),o),{});
-  tot.gp = tot.rev-tot.cost-tot.mat; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-tot.overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
+  Object.values(branches).forEach(b=>{ b.gp=b.rev-b.cost-b.mat-b.clo; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
+  const tot = ['rev','cost','h','overhead','mat','clo'].reduce((o,k)=>(o[k]=parts.reduce((a,R)=>a+(R.tot[k]||0),0),o),{});
+  tot.gp = tot.rev-tot.cost-tot.mat-tot.clo; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-tot.overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
   tot.gross = parts.reduce((a,R)=>a+(R.tot.gross||0),0); tot.comp = parts.reduce((a,R)=>addComp(a,R.tot.comp),{}); tot.ohComp = parts.reduce((a,R)=>addComp(a,R.tot.ohComp),{}); finishComp(tot);
   const oh = {byBranch:{}, general:0, fixed:0, total:0, exact:parts.every(R=>R.oh.exact)};
@@ -892,8 +895,9 @@ function branchActual(ym, branch){
   }
   const man = manual[branch]?.[ym] || {}, manLines = manualLinesOf(P);
   const manTotal = manLines.reduce((a,l)=>a+(+man[l]||0),0), manEntered = manLines.some(l=>man[l]!=null && man[l]!=='');
-  const mat = b.mat || 0, tc = b.cost + manTotal + mat;   // חומרי ניקיון: סכום הלקוחות של הסניף
-  return {ym, h:b.h, revenue:b.rev, payroll:b.cost, mat, manual:man, manTotal, manEntered, tc, gm:b.rev-tc, workers};
+  // חומרי ניקיון: סכום הלקוחות של הסניף. ביגוד: מההזנה החודשית (אם הוא לא כבר בשורות הידניות)
+  const mat = b.mat || 0, clo = manLines.includes(CLO) ? 0 : +(man[CLO]||0), tc = b.cost + manTotal + mat + clo;
+  return {ym, h:b.h, revenue:b.rev, payroll:b.cost, mat, clo, manual:man, manTotal, manEntered, tc, gm:b.rev-tc, workers};
 }
 function planFor(branches, yms){
   const P = {hours:0, revenue:0, tc:0, gm:0, workers:0, costs:{}};
@@ -905,11 +909,11 @@ function planFor(branches, yms){
   return P;
 }
 function actualFor(branches, yms){
-  const A = {h:0, revenue:0, payroll:0, mat:0, manTotal:0, tc:0, gm:0, workers:null, manual:{}};
+  const A = {h:0, revenue:0, payroll:0, mat:0, clo:0, manTotal:0, tc:0, gm:0, workers:null, manual:{}};
   let wSum = 0, wAny = false;
   for(const br of branches){
     const rows = yms.map(m=>branchActual(m, br)).filter(Boolean);
-    for(const r of rows){ A.h+=r.h; A.revenue+=r.revenue; A.payroll+=r.payroll; A.mat+=r.mat; A.manTotal+=r.manTotal; A.tc+=r.tc; A.gm+=r.gm;
+    for(const r of rows){ A.h+=r.h; A.revenue+=r.revenue; A.payroll+=r.payroll; A.mat+=r.mat; A.clo+=r.clo; A.manTotal+=r.manTotal; A.tc+=r.tc; A.gm+=r.gm;
       for(const [l,v] of Object.entries(r.manual)) A.manual[l]=(A.manual[l]||0)+(+v||0); }
     const w = rows.filter(r=>r.workers!=null); if(w.length){ wAny = true; wSum += w.reduce((a,r)=>a+r.workers,0)/w.length; }
   }
@@ -972,7 +976,9 @@ function renderPlan(v){
       ${act.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">שורה</th><th class="n">תכנון</th><th class="n">ביצוע</th><th class="n">פער</th><th>מקור הביצוע</th></tr></thead><tbody>
         <tr><td class="first">עלות מעביד: ${esc(payLinesAll.join(', '))}${A.mat?` <span class="muted small">(כולל חומרי ניקיון ${money(A.mat)})</span>`:''}</td><td class="n">${money(planPay)}</td><td class="n">${money(A.payroll+A.mat)}</td><td class="n">${money(A.payroll+A.mat-planPay)}</td><td class="small muted">דוח השכר${A.mat?' + חשבוניות חומרים':''}</td></tr>
         ${manLinesAll.filter(l=>l!=='חומרי ניקיון').map(l=>`<tr><td class="first">${esc(l)}${inPlanCost(l)?'':' <span class="muted small">(לא בעלות המכר של התכנית)</span>'}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">${money(A.manual[l]||0)}</td><td class="n">${money((A.manual[l]||0)-(P.costs[l]||0))}</td><td class="small muted">הזנה ידנית</td></tr>`).join('')}
-        ${noneAll.map(l=>`<tr><td class="first">${esc(l)}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">—</td><td class="n">—</td><td class="small muted">לא נמדד בביצוע</td></tr>`).join('')}
+        ${noneAll.map(l=>l===CLO
+          ? `<tr><td class="first">${esc(l)}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">${money(A.clo)}</td><td class="n">${money(A.clo-(P.costs[l]||0))}</td><td class="small muted">הזנה בקליטת נתונים</td></tr>`
+          : `<tr><td class="first">${esc(l)}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">—</td><td class="n">—</td><td class="small muted">לא נמדד בביצוע</td></tr>`).join('')}
         <tr class="total"><td class="first">סה״כ עלות המכר</td><td class="n">${money(P.tc)}</td><td class="n">${money(A.tc)}</td><td class="n">${money(A.tc-P.tc)}</td><td></td></tr>
       </tbody></table></div>`:'<p class="muted">אין עדיין ביצוע לתקופה.</p>'}
     </section>
@@ -1027,7 +1033,7 @@ function scopeR(R, br){
   if(!R || !br) return R;
   const b = R.branches[br] || {name:br, rev:0, h:0, cost:0};
   const share = R.tot.rev ? b.rev/R.tot.rev : 0, overhead = branchOverhead(R, br);
-  const tot = {rev:b.rev, h:b.h, cost:b.cost, mat:b.mat||0, gp:b.rev-b.cost-(b.mat||0), overhead, overheadShare:share, ohExact:(R.parts||[R]).every(P=>P.oh.exact), ohGeneral:R.oh.general};
+  const tot = {rev:b.rev, h:b.h, cost:b.cost, mat:b.mat||0, clo:b.clo||0, gp:b.rev-b.cost-(b.mat||0)-(b.clo||0), overhead, overheadShare:share, ohExact:(R.parts||[R]).every(P=>P.oh.exact), ohGeneral:R.oh.general};
   tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
   return {...R, groups:R.groups.filter(g=>g.branch===br), branches:{[br]:{...b, gp:tot.gp, margin:tot.margin, revH:tot.revH, costH:tot.costH}},
@@ -1051,7 +1057,8 @@ function renderOverview(v){
   // שכר הנהלה לכל סניף בטבלה; מה שלא הוקצה לאף סניף מוצג בשורת "הנהלה כללית"
   const bOh = b => br ? T.overhead : branchOverhead(R, b.name);
   const genOh = br ? 0 : T.overhead - brs.reduce((a,b)=>a+bOh(b),0);
-  const hasMat = T.mat>0, mc = v => hasMat ? `<td class="n">${v}</td>` : '';
+  const hasMat = T.mat>0, hasClo = T.clo>0;
+  const mc = (v, c) => (hasMat ? `<td class="n">${v}</td>` : '') + (hasClo ? `<td class="n">${c??''}</td>` : '');   // חומרי ניקיון, ביגוד
   const chartMonths = per.months.length>1 ? per.months : monthList();
   v.innerHTML = `<div class="stack">
     ${gaps.length?`<div class="panel" style="background:var(--warn-soft);border-color:transparent"><b>החישוב ל${per.label} חלקי.</b> ${gaps.join(' · ')}.</div>`:''}
@@ -1069,13 +1076,13 @@ function renderOverview(v){
         <section class="panel">
           <div class="panel-head"><h2>${br?`רווחיות ${esc(br)}`:'רווחיות לפי סניף'}</h2><span class="small muted">${per.label}</span></div>
           <div class="tbl-wrap"><table>
-            <thead><tr><th class="first">סניף</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th>${hasMat?'<th class="n">חומרי ניקיון</th>':''}<th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">${br?esc(ohLabel):'שכר הנהלה'}</th><th class="n">אחרי שכר הנהלה</th><th class="n">שיעור</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th>${P?'<th class="n">שינוי בשיעור</th>':''}</tr></thead>
+            <thead><tr><th class="first">סניף</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th>${hasMat?'<th class="n">חומרי ניקיון</th>':''}${hasClo?'<th class="n">ביגוד</th>':''}<th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">${br?esc(ohLabel):'שכר הנהלה'}</th><th class="n">אחרי שכר הנהלה</th><th class="n">שיעור</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th>${P?'<th class="n">שינוי בשיעור</th>':''}</tr></thead>
             <tbody>${brs.map(b=>{ const pb = P?.branches[b.name], o = bOh(b), net = b.gp-o;
-              return `<tr class="clickable" data-branch-go="${esc(b.name)}"><td class="first">${chartMonths.length>1?`<span class="legend" style="margin:0;display:inline"><i style="background:var(${color(b.name)})"></i></span>`:''}${esc(b.name)}</td><td class="n">${money(b.rev)}</td><td class="n">${hrs(b.h)}</td><td class="n">${money(b.cost)}</td>${mc(money(b.mat||0))}<td class="n">${money(b.gp)}</td><td class="n">${marginPill(b.margin, b.rev)}</td>
+              return `<tr class="clickable" data-branch-go="${esc(b.name)}"><td class="first">${chartMonths.length>1?`<span class="legend" style="margin:0;display:inline"><i style="background:var(${color(b.name)})"></i></span>`:''}${esc(b.name)}</td><td class="n">${money(b.rev)}</td><td class="n">${hrs(b.h)}</td><td class="n">${money(b.cost)}</td>${mc(money(b.mat||0), money(b.clo||0))}<td class="n">${money(b.gp)}</td><td class="n">${marginPill(b.margin, b.rev)}</td>
               <td class="n">${money(o)}</td><td class="n">${money(net)}</td><td class="n">${marginPill(b.rev?net/b.rev:NaN, b.rev)}</td><td class="n">${perH(b.revH)}</td><td class="n">${perH(b.costH)}</td>
               ${P?`<td class="n">${pb&&isFinite(pb.margin)&&isFinite(b.margin)?`<span class="delta ${b.margin>=pb.margin?'good':'bad'}">${ltr((b.margin>=pb.margin?'+':'−')+Math.abs((b.margin-pb.margin)*100).toFixed(1)+' נק׳')}</span>`:'—'}</td>`:''}</tr>`;}).join('')}
             ${genOh>0.5?`<tr><td class="first muted">הנהלה כללית (לא משויכת)</td><td></td><td></td><td></td>${mc('')}<td></td><td></td><td class="n">${money(genOh)}</td><td class="n">${money(-genOh)}</td><td></td><td></td><td></td>${P?'<td></td>':''}</tr>`:''}
-            <tr class="total"><td class="first">סה״כ</td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td>${mc(money(T.mat))}<td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${money(T.overhead)}</td><td class="n">${money(T.net)}</td><td class="n">${pct(T.netMargin)}</td><td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td>${P?'<td></td>':''}</tr>
+            <tr class="total"><td class="first">סה״כ</td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td>${mc(money(T.mat), money(T.clo))}<td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${money(T.overhead)}</td><td class="n">${money(T.net)}</td><td class="n">${pct(T.netMargin)}</td><td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td>${P?'<td></td>':''}</tr>
             </tbody></table></div>
           <p class="hint" style="margin-top:8px">לחיצה על ${br?'הסניף':'סניף'} פותחת את רשימת הלקוחות שלו.</p>
         </section>
@@ -1220,7 +1227,7 @@ function workerSet(ctx, ym, br){
 }
 function branchMonth(ctx, ym, br){
   const R = ctx.C(ym), b = br ? (R.branches[br] || {rev:0,h:0,cost:0}) : R.tot, w = workerSet(ctx, ym, br);
-  const rev = b.rev, h = b.h, cost = b.cost, gp = rev-cost-(b.mat||0);
+  const rev = b.rev, h = b.h, cost = b.cost, gp = rev-cost-(b.mat||0)-(b.clo||0);
   return {ym, rev, h, cost, mat:b.mat||0, gp, margin:rev?gp/rev:NaN, revH:h?rev/h:NaN, costH:h?cost/h:NaN, workers:w?w.size:null, wset:w, overhead:br?0:R.tot.overhead};
 }
 const hasPlan = br => !!plans[br]?.months;
@@ -1640,7 +1647,7 @@ const perHourRows = (T) => {   // מבנה עלות השעה: כל רכיב בר
 function branchTot(R, br){
   const parts = R.parts || [R], b = R.branches[br] || {rev:0, mat:0};
   const x = parts.map(P=>branchSlice(P, br)).reduce((a,y)=>({h:a.h+y.h, cost:a.cost+y.cost, gross:a.gross+y.gross, comp:addComp(a.comp, y.comp)}), {h:0, cost:0, gross:0, comp:{}});
-  const T = {...x, rev:b.rev, mat:b.mat||0}; T.gp = T.rev-T.cost-T.mat; T.margin = T.rev ? T.gp/T.rev : NaN; T.revH = T.h ? T.rev/T.h : NaN; T.costH = T.h ? T.cost/T.h : NaN;
+  const T = {...x, rev:b.rev, mat:b.mat||0, clo:b.clo||0}; T.gp = T.rev-T.cost-T.mat-T.clo; T.margin = T.rev ? T.gp/T.rev : NaN; T.revH = T.h ? T.rev/T.h : NaN; T.costH = T.h ? T.cost/T.h : NaN;
   return finishComp(T);
 }
 function renderCost(v){
@@ -1892,6 +1899,7 @@ function renderData(v){
       <input type="file" id="file-in" accept=".xlsx,.xls,.html,.htm" multiple hidden>
     </label>
     ${materialsPanel()}
+    ${clothingPanel()}
     ${wagesStatus()}
     ${ms.length?`<div class="months">${ms.map(monthCard).join('')}</div>`:'<div class="panel empty">עדיין לא נקלטו חודשים.</div>'}
   </div>`;
@@ -1923,6 +1931,23 @@ function materialsPanel(){
     </tbody></table></div>
     <p class="hint" style="margin-top:8px">חיוב ריק מחושב אוטומטית: עלות החשבונית + ${pct(materials.markup,0)}${fixed.length?`; חיוב קבוע בכל חודש: ${fixed.join(', ')}`:''}. עלות החשבונית יורדת מהרווח הגולמי של הלקוח.</p>
   </section>`;
+}
+// ביגוד לפי סניף, לחודש שנבחר בפאנל חומרי הניקיון. נשמר עם העלויות הידניות של הסניף
+function clothingPanel(){
+  const ms = monthList(); if(!ms.length) return '';
+  const ym = ui.matYm || ms[ms.length-1], brs = branchNames().filter(b=>b!==NO_BRANCH);
+  return `<section class="panel">
+    <div class="panel-head"><h2>ביגוד</h2><span class="small muted">${monthName(ym)} · עלות ישירה של הסניף, יורדת מהרווח הגולמי שלו</span></div>
+    <div class="actions">${brs.map(b=>`<label class="small">${esc(b)} <input type="text" inputmode="decimal" data-clo="${esc(b)}" value="${manual[b]?.[ym]?.[CLO]?nf0.format(manual[b][ym][CLO]):''}" aria-label="ביגוד ${esc(b)} ${monthName(ym)}" style="width:100px;text-align:left;direction:ltr"> ₪</label>`).join('')}</div>
+    <p class="hint" style="margin-top:8px">החודש נבחר בפאנל חומרי הניקיון שמעל. מקלידים סכום ויוצאים מהתא, והוא נשמר. תא ריק = אין.</p>
+  </section>`;
+}
+async function setClothing(br, raw){
+  const v = String(raw).replace(/[,₪\s]/g,''), n = v==='' ? null : +v, ym = ui.matYm || monthList().pop();
+  if(v!=='' && !isFinite(n)){ toast('יש להזין מספר'); render(); return; }
+  const m = ((manual[br] ||= {})[ym] ||= {});
+  if(n==null) delete m[CLO]; else m[CLO] = n;
+  render(); await store.saveManual();
 }
 async function setMaterial(kind, id, raw){
   const v = String(raw).replace(/[,₪\s]/g,''), n = v==='' ? null : +v;
@@ -2227,6 +2252,7 @@ document.addEventListener('change', async e=>{
   else if(t.id==='mat-ym'){ ui.matYm=t.value; render(); }
   else if(d.matcost){ await setMaterial('cost', d.matcost, t.value); }
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
+  else if(d.clo){ await setClothing(d.clo, t.value); }
 
   else if(d.matm){ await setMaterial('month', d.matm, t.value); }
   else if(d.man){ const br=ui.planBranch, i=d.man.indexOf('|'), m=d.man.slice(0,i), l=d.man.slice(i+1); const raw=String(t.value).replace(/[,₪\s]/g,'');
