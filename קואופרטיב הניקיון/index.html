@@ -2118,12 +2118,15 @@ function breaksPanel(){
   const ym = ui.matYm || ms[ms.length-1], hs = months[ym]?.hours?.sites || {};
   const gs = mapping.groups.filter(g=>g.noBreakBill).sort((a,b)=>a.name.localeCompare(b.name,'he'));
   const row = g => { const h = g.sites.reduce((a,c)=>a+(hs[c]?.h||0),0), sh = g.sites.reduce((a,c)=>a+(hs[c]?.shifts||0),0), v = breaks.byMonth[ym]?.[g.id];
-    return `<tr><td class="first">${esc(g.name)}</td><td class="n">${hrs(h)}</td><td class="n">${nf0.format(sh)}</td><td class="n"><input type="text" inputmode="decimal" data-brk="${g.id}" value="${v!=null&&v!==''?nf1.format(v):''}" aria-label="שעות הפסקה ${esc(g.name)} ${monthName(ym)}" style="width:80px;text-align:left;direction:ltr"></td><td class="n">${v?hrs(h-v):'—'}</td></tr>`; };
+    return `<tr><td class="first">${esc(g.name)}</td><td class="n">${hrs(h)}</td><td class="n">${nf0.format(sh)}</td><td class="n"><input type="text" inputmode="decimal" data-brk="${g.id}" value="${v!=null&&v!==''?nf1.format(v):''}" aria-label="שעות הפסקה ${esc(g.name)} ${monthName(ym)}" style="width:80px;text-align:left;direction:ltr"></td><td class="n">${v?hrs(h-v):'—'}</td><td><button class="btn sm danger" type="button" data-brkrm="${g.id}" aria-label="הסרת ${esc(g.name)} מהרשימה">הסרה</button></td></tr>`; };
+  const others = mapping.groups.filter(g=>!g.noBreakBill && g.sites.length).sort((a,b)=>a.name.localeCompare(b.name,'he'));
+  const add = `<label class="small">הוספת לקוח שלא מחויב על הפסקות <select id="brk-add"><option value="">בחירת לקוח…</option>${others.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></label>`;
   return `<section class="panel">
     <div class="panel-head"><h2>הפסקות שלא מחויבות</h2><span class="small muted">${monthName(ym)} · שעות הפסקה שיורדות משעות TimeWatch של הלקוח</span></div>
-    ${gs.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">לקוח</th><th class="n">שעות TimeWatch</th><th class="n">משמרות</th><th class="n">שעות הפסקה</th><th class="n">שעות לחיוב</th></tr></thead><tbody>${gs.map(row).join('')}</tbody></table></div>
-    <p class="hint" style="margin-top:8px">החודש נבחר בפאנל חומרי הניקיון. מקלידים את סך שעות ההפסקה של הלקוח בחודש ויוצאים מהתא, והוא נשמר. תא ריק = לא הורדו הפסקות. לקוחות מסמנים "לא מחויב על הפסקות" בטבלת ההתאמה בלשונית "התאמת לקוחות".</p>`
-      : '<p class="muted">אין לקוחות שסומנו "לא מחויב על הפסקות". הסימון נמצא בטבלת ההתאמה בלשונית "התאמת לקוחות".</p>'}
+    ${gs.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">לקוח</th><th class="n">שעות TimeWatch</th><th class="n">משמרות</th><th class="n">שעות הפסקה</th><th class="n">שעות לחיוב</th><th></th></tr></thead><tbody>${gs.map(row).join('')}</tbody></table></div>
+    <div class="actions" style="margin-top:10px">${add}</div>
+    <p class="hint" style="margin-top:8px">החודש נבחר בפאנל חומרי הניקיון. מקלידים את סך שעות ההפסקה של הלקוח בחודש ויוצאים מהתא, והוא נשמר. תא ריק = לא הורדו הפסקות. לקוח חדש מוסיפים ברשימה שמתחת לטבלה. "הסרה" מחזירה את הלקוח לחישוב רגיל; השעות שהוזנו לו נשמרות.</p>`
+      : `<p class="muted">אין לקוחות שסומנו "לא מחויב על הפסקות".</p><div class="actions" style="margin-top:10px">${add}</div>`}
   </section>`;
 }
 async function setBreak(gid, raw){
@@ -2371,6 +2374,7 @@ document.addEventListener('click', async e=>{
   if(t.id==='btn-export') return exportReport();
   if(t.id==='btn-pdf'){ t.disabled = true; toast('מכינים את ה-PDF…'); try{ await tabPdf(); } finally { t.disabled = false; } return; }
   if(t.id==='mat-template') return materialsTemplate();
+  if(d.brkrm){ const g=mapping.groups.find(x=>x.id===d.brkrm); if(g){ delete g.noBreakBill; await store.saveMapping(); render(); toast(`${g.name}: ההפסקות נספרות שוב בשעות`); } return; }
   if(d.unrule){ const r = {...mapping.clientRules}; delete r[d.unrule]; mapping.clientRules = r; await store.saveMapping(); render(); toast(`${d.unrule} חזר לרשימת ההתאמה`); return; }
   if(t.id==='ga-save'){ if(Date.now()-gaDown > 1000) await saveGAPanel(); return; }
   if(t.id==='ga-copy'){   // העתקת הסכומים מהחודש הקודם לתאים הריקים בחודש הנוכחי
@@ -2455,6 +2459,7 @@ document.addEventListener('change', async e=>{
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
   else if(d.clo){ await setClothing(d.clo, t.value); }
   else if(d.brk){ await setBreak(d.brk, t.value); }
+  else if(t.id==='brk-add' && t.value){ const g=mapping.groups.find(x=>x.id===t.value); if(g){ g.noBreakBill=true; await store.saveMapping(); render(); toast(`${g.name} נוסף. אפשר להזין לו שעות הפסקה`); } }
   else if(d.lease){ await setClothing(d.lease, t.value, LEASE); }
   else if(d.ga){ await setGA(d.ga, t.value); }
   else if(t.id==='ga-addline'){ const n = normName(t.value); if(n && !ga.lines.includes(n)){ ga.lines = [...ga.lines, n]; render(); await store.saveGA(); toast(`נוספה שורה: ${n}`); } }
