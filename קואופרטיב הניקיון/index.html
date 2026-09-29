@@ -652,13 +652,14 @@ const rateTxt = b => !b ? '—' : b.fixed ? 'פיקס' : perH(b.rate);
 /* שכר הנהלה לפי סניף. עובדי הנהלה (אתר 999): החלק שלהם בהנהלה מוקצה לסניף לפי הכלל; עבודה שדווחה על לקוח נשארת אצל הלקוח.
    מה שלא מוקצה (למשל 642, והחצי השני של 709 ו-1203) הוא הנהלה כללית. OH_FIXED: עלות הנהלה קבועה שלא מופיעה בדוח השכר. */
 const OH_RULES = {'709':["גרעין ג'אסר",0.5], '506':["גרעין ג'אסר",1], '70':["גרעין ג'אסר",1], '92':["גרעין ג'אסר",1],
-                  '865':['גרעין ירושלים',1], '306':['גרעין ירושלים',1], '1203':['נגב',0.5], '962':['נגב',1]};
+                  '865':['גרעין ירושלים',1], '306':['גרעין ירושלים',1], '1203':['נגב',0.5], '962':['נגב',1],
+                  '82':["גרעין ג'אסר",1,'2026-01','2026-02']};   // [סניף, חלק, מחודש, עד חודש]
 const OH_FIXED = [{branch:'גרעין ירושלים', amt:11000, label:'מנהלת סניף ירושלים (שכר משולם מהעמותה)', from:'2026-01'}];
 // עלות מעביד לפי עובד באתרי ההנהלה נלקחת מהאזור הפרטי (פיצול השכר לפי עובד). בלי פירוט לחודש: רק העלות הקבועה מוקצית, והשאר לפי הכנסות
 function allocOverhead(ym, payOh){
   const byBranch = {}, st = priv['staff-'+ym]?.cost, fixed = OH_FIXED.filter(f=>months[ym]?.payroll && f.from<=ym);
   let alloc = 0; const exact = !!st && mapping.overheadSites.some(c=>st[c]);
-  if(exact) for(const code of mapping.overheadSites) for(const [e,c] of Object.entries(st[code]||{})){ const r = OH_RULES[e]; if(r){ byBranch[r[0]] = (byBranch[r[0]]||0) + c*r[1]; alloc += c*r[1]; } }
+  if(exact) for(const code of mapping.overheadSites) for(const [e,c] of Object.entries(st[code]||{})){ const r = OH_RULES[e]; if(r && (!r[2] || ym>=r[2]) && (!r[3] || ym<=r[3])){ byBranch[r[0]] = (byBranch[r[0]]||0) + c*r[1]; alloc += c*r[1]; } }
   fixed.forEach(f=>byBranch[f.branch] = (byBranch[f.branch]||0) + f.amt);
   const fx = fixed.reduce((a,f)=>a+f.amt,0);
   return {byBranch, general: exact ? payOh-alloc : payOh, fixed:fx, total:payOh+fx, exact, pay:payOh};
