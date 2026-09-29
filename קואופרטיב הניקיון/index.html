@@ -239,6 +239,14 @@ const CLO = 'ביגוד';   // עלות ביגוד לסניף בחודש: manual
 const GA_ORG = 'כללי (ארגון)', GA_LINES = ['ביטוח','הנהלת חשבונות','משרדיות'];
 let ga = {lines:[...GA_LINES], byMonth:{}};
 const loadGA = d => ({lines: d?.lines?.length ? [...d.lines] : [...GA_LINES], byMonth:{...(d?.byMonth||{})}});
+// במאגר: מסמך לכל חודש ga/YYYY-MM ({units}) ומסמך ga/lines. היחידה הכללית נשמרת בשם 'org'. settings/ga הישן נקרא רק לשם המשכיות.
+const GA_ORG_KEY = 'org';
+let gaLegacy = loadGA(null), gaDocs = {};
+function mergeGA(){
+  const byMonth = {...gaLegacy.byMonth};
+  for(const [id, d] of Object.entries(gaDocs)) if(/^\d{4}-\d{2}$/.test(id)){ const u = {}; for(const [k,v] of Object.entries(d.units||{})) u[k===GA_ORG_KEY?GA_ORG:k] = {...v}; byMonth[id] = u; }
+  ga = {lines: gaDocs.lines?.lines?.length ? [...gaDocs.lines.lines] : gaLegacy.lines, byMonth};
+}
 const gaFor = (ym, unit) => ga.lines.reduce((a,l)=>a+(+(ga.byMonth[ym]?.[unit]?.[l])||0),0);   // רק שורות פעילות
 const loadMaterials = d => ({byMonth:{...(d?.byMonth||{})}, billByMonth:{...(d?.billByMonth||{})}, fixedBill:{...(d?.fixedBill||{})}, markup: d?.markup!=null ? +d.markup : 0.15});
 const matFor = (gid, ym) => +(materials.byMonth[ym]?.[gid] || 0);
@@ -297,7 +305,8 @@ const store = {
       this.db.doc('settings/plan').onSnapshot(s=>{ plans = loadPlans(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/manual').onSnapshot(s=>{ manual = loadManual(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/materials').onSnapshot(s=>{ materials = loadMaterials(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
-      this.db.doc('settings/ga').onSnapshot(s=>{ ga = loadGA(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
+      this.db.doc('settings/ga').onSnapshot(s=>{ gaLegacy = loadGA(s.exists ? s.data() : null); mergeGA(); render(); }, e=>this.fail(e));
+      this.db.collection('ga').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=d.data()); gaDocs = m; mergeGA(); render(); }, e=>this.fail(e));
     } else {
       try{ mapping = normalizeMapping(JSON.parse(localStorage.getItem('coop-mapping')||'null')||{}); months = JSON.parse(localStorage.getItem('coop-months')||'{}');
            plans = loadPlans(JSON.parse(localStorage.getItem('coop-plan')||'null')); manual = loadManual(JSON.parse(localStorage.getItem('coop-manual')||'null'));
@@ -328,10 +337,17 @@ const store = {
     if(this.db) await this.db.doc('settings/manual').set(doc);
     else try{ localStorage.setItem('coop-manual', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
   },
-  async saveGA(){
+  // ym: שמירת החודש הזה. בלי ym: שמירת רשימת השורות
+  async saveGA(ym){
     const doc = {lines:[...ga.lines], byMonth:JSON.parse(JSON.stringify(ga.byMonth)), updatedAt:new Date().toISOString()};
-    if(this.db){ try{ await this.db.doc('settings/ga').set(doc); }
-      catch(e){ console.error(e); toast(`שמירת הנהלה וכלליות נכשלה (${e?.code||e?.message||'שגיאה'}). יש לרענן את הדף ולנסות שוב`); return false; } }
+    if(this.db){
+      const path = ym ? 'ga/'+ym : 'ga/lines', body = {updatedAt:doc.updatedAt};
+      if(ym){ body.units = {}; for(const [u,v] of Object.entries(ga.byMonth[ym]||{})) body.units[u===GA_ORG?GA_ORG_KEY:u] = {...v}; } else body.lines = [...ga.lines];
+      let timer;
+      try{ await Promise.race([this.db.doc(path).set(body), new Promise((_,rej)=>timer=setTimeout(()=>rej({code:'timeout', message:'אין תשובה מהמאגר אחרי 15 שניות'}),15000))]); }
+      catch(e){ console.error(e); toast(`שמירת הנהלה וכלליות נכשלה: ${e?.message||e?.code||e}. ${e?.code?`(${e.code}) `:''}יש לרענן את הדף ולנסות שוב`); return false; }
+      finally{ clearTimeout(timer); }
+    }
     else try{ localStorage.setItem('coop-ga', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); return false; }
     return true;
   },
@@ -2012,11 +2028,14 @@ async function setGA(key, raw){
   if(v!=='' && !isFinite(n)){ toast('יש להזין מספר'); render(); return; }
   const m = ((ga.byMonth[ym] ||= {})[u] ||= {});
   if(n==null) delete m[l]; else m[l] = n;
-  renderSoon(); await store.saveGA();
+  renderSoon(); await store.saveGA(ym);
 }
 // כפתור השמירה: קורא את כל התאים שעל המסך (גם תא שעדיין לא יצאו ממנו) ושומר במאגר
 let gaDown = 0;   // לחיצה בעכבר שומרת כבר ב-pointerdown; ה-click שאחריה לא שומר שוב
 async function saveGAPanel(){
+  try{ await saveGAPanelNow(); }catch(e){ console.error(e); toast(`השמירה נכשלה: ${e?.message||e}`); }
+}
+async function saveGAPanelNow(){
   const ym = ui.matYm || monthList().pop(), cur = ga.byMonth[ym] ||= {}; let bad = 0, n = 0;
   for(const inp of $('#view').querySelectorAll('input[data-ga]')){
     const k = inp.dataset.ga, i = k.indexOf('|'), u = k.slice(0,i), l = k.slice(i+1);
@@ -2024,7 +2043,8 @@ async function saveGAPanel(){
     if(v!=='' && !isFinite(x)){ bad++; continue; }
     const m = cur[u] ||= {}; if(x==null) delete m[l]; else { m[l] = x; n++; }
   }
-  const ok = await store.saveGA(); render();
+  toast('שומר…');
+  const ok = await store.saveGA(ym); render();
   if(ok) toast(bad ? `נשמר, חוץ מ-${bad} תאים שאינם מספר` : `נשמר: ${n} סכומים ל${monthName(ym)}`);
 }
 async function setClothing(br, raw){
@@ -2270,7 +2290,7 @@ document.addEventListener('click', async e=>{
     const ym = ui.matYm || monthList().pop(), prev = monthList().filter(m=>m<ym).pop(), src = ga.byMonth[prev] || {};
     const dst = ga.byMonth[ym] ||= {}; let n = 0;
     for(const [u, ls] of Object.entries(src)) for(const [l, v] of Object.entries(ls)) if(v!=null && v!=='' && (dst[u]?.[l]==null)){ (dst[u] ||= {})[l] = v; n++; }
-    render(); await store.saveGA(); toast(n ? `הועתקו ${n} סכומים מ${monthName(prev)}` : 'אין מה להעתיק'); return;
+    render(); await store.saveGA(ym); toast(n ? `הועתקו ${n} סכומים מ${monthName(prev)}` : 'אין מה להעתיק'); return;
   }
   if(d.garm){ ga.lines = ga.lines.filter(x=>x!==d.garm); render(); await store.saveGA(); toast(`השורה "${d.garm}" הוסרה. סכומים שהוזנו בה שמורים ולא נספרים`); return; }
   if(t.id==='mat-new-add'){
