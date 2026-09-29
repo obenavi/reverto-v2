@@ -557,7 +557,7 @@ function parsePayroll(wb, fileName){
 /* --- דוח רכיבי שכר (ברוטו לפי סמל) ---
    נלקח רק סוג הנתון "תשלומים" (רכיבי הברוטו). כל רכיב של עובד מתחלק בין האתרים לפי חלוקת
    עלות המעביד שלו בדוח השכר של אותו חודש, ולכן דוח השכר צריך להיקלט קודם. נשמרים רק סיכומים לפי אתר ורכיב. */
-const BUCKETS = [['base','בסיס: שעות רגילות ומשכורת'],['topup','השלמת שעות והפסקות'],['ot','שעות נוספות (בימי חול)'],['weekend','עבודה בשבת וחג (מחויבת ללקוח בתעריף מוגדל)'],['absence','היעדרויות בתשלום (חופשה, מחלה, חג)'],
+const BUCKETS = [['base','בסיס: שעות רגילות ומשכורת'],['topup','השלמת שעות והפסקות'],['ot','שעות נוספות (בימי חול)'],['weekend','עבודה בשבת וחג (מחויבת ללקוח בתעריף מוגדל)'],['sick','ימי מחלה'],['absence','חופשה, חג ומילואים (זכות של העובד)'],
   ['travel','נסיעות ורכב'],['allow','הבראה, ותק ותוספות'],['prov','הפרשות ששולמו בשכר'],['once','חד-פעמי: פדיון, מענקים, בונוסים'],['other','אחר']];
 const BUCKET = Object.fromEntries(BUCKETS);
 function bucketOf(desc){
@@ -565,7 +565,8 @@ function bucketOf(desc){
   if(/פדיון|מענק|בונוס|גילום|גלום|שי לחג|הודעה מוקדמת|אשל|קיזוז/.test(d)) return 'once';
   if(/שבת/.test(d) || (/חג/.test(d) && /%/.test(d))) return 'weekend';   // שבת וחג מחויבים ללקוח ב-150%: לא יעד לחיסכון
   if(/%|נוספות/.test(d)) return 'ot';
-  if(/חופשה|מחלה|חג|מילואים|אבל/.test(d)) return 'absence';
+  if(/מחלה/.test(d)) return 'sick';   // מחלה בנפרד: מדד שאפשר לנהל. חופשה וחג הם זכות צבורה שתשולם בכל מקרה
+  if(/חופשה|חג|מילואים|אבל/.test(d)) return 'absence';
   if(/נסיע|רכב|חניה/.test(d)) return 'travel';
   if(/השלמ|הפסק/.test(d)) return 'topup';
   if(/הבראה|ותק|תוספת|טלפון|ביגוד/.test(d)) return 'allow';
@@ -610,7 +611,7 @@ function parseComponents(wb, fileName){
     }
     for(const x of Object.values(sites)) for(const k in x) x[k] = round2(x[k]);
     for(const x of Object.values(symbols)) x.total = round2(x.total);
-    out.push({ym, data:{v:2, file:fileName, uploadedAt:new Date().toISOString(), sites, symbols, total:round2(total), unallocated:round2(unallocated), employees:emps.size}});
+    out.push({ym, data:{v:3, file:fileName, uploadedAt:new Date().toISOString(), sites, symbols, total:round2(total), unallocated:round2(unallocated), employees:emps.size}});
   }
   return out;
 }
@@ -1619,7 +1620,7 @@ function renderCost(v){
   const per = period(), R = computePeriod(per.months), t = (ui.target||15)/100;
   const withComp = monthList().filter(m=>months[m].components);
   if(!R.hasComp){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">חסר דוח רכיבי שכר ל${per.label}</h2><p>יש להעלות בלשונית "קליטת נתונים" את דוח הברוטו לפי רכיבי שכר (הנתונים נלקחים מסעיף "תשלומים").</p>${withComp.length?`<p style="margin-top:8px">נקלט עבור: ${withComp.map(monthName).join(', ')}.</p>`:''}</div>`; return; }
-  const oldComp = per.months.filter(m=>months[m]?.components && months[m].components.v!==2);
+  const oldComp = monthList().filter(m=>(per.months.includes(m) || (m.slice(0,4)===(ui.ym||'').slice(0,4) && complete(m))) && months[m]?.components && !(months[m].components.v>=3));
   const T = ui.branch ? branchTot(R, ui.branch) : R.tot, nM = per.months.length, inScope = ui.branch ? `בסניף ${esc(ui.branch)}` : 'בארגון';
   let groups = R.groups.filter(g=>g.h>0 || g.rev>0);
   if(ui.branch) groups = groups.filter(g=>g.branchList.includes(ui.branch));
@@ -1632,7 +1633,8 @@ function renderCost(v){
   const otPrem = (T.comp.otPrem||0)*factor/nM, otAll = (T.comp.ot||0)/nM;
   const oneTimeLoss = groups.filter(g=>g.rev>0 && g.margin<0 && g.recMargin>=0);
   const structural = groups.filter(g=>g.rev>0 && g.h>=10 && g.recMargin<0);
-  const absent = groups.filter(g=>g.h>=10 && share(g,'absence')>0.10).sort((a,b)=>share(b,'absence')-share(a,'absence'));
+  const sickAvg = T.gross ? (T.comp.sick||0)/T.gross : 0;
+  const sick = groups.filter(g=>g.h>=10 && share(g,'sick')>Math.max(0.04, sickAvg*2)).sort((a,b)=>share(b,'sick')-share(a,'sick'));
   const travel = groups.filter(g=>g.h>=10 && share(g,'travel')>0.15).sort((a,b)=>share(b,'travel')-share(a,'travel'));
   const recs = [];
   if(priced.length) recs.push({level:'bad', title:`עדכון מחיר ל-${priced.length} לקוחות: עד ${money(upliftSum)} בחודש`,
@@ -1643,8 +1645,8 @@ function renderCost(v){
     text:`${oneTimeLoss.map(g=>`${esc(g.name)}: ${pct(g.margin)} מדווח, ${pct(g.recMargin)} בלי החד-פעמי`).join(' · ')}. זה פדיון חופשה לעוזב או מענק, ולא בעיה במבנה העלות. לא לתמחר מחדש על סמך החודש הזה.`});
   if(structural.length) recs.push({level:'bad', title:`${structural.length} לקוחות בהפסד גם בלי תשלומים חד-פעמיים`,
     text:`${structural.map(g=>`<b>${esc(g.name)}</b> (עלות ${perH(g.recCostH)} מול הכנסה ${perH(g.revH)} לשעה)`).join(' · ')}. כאן נדרש עדכון מחיר, צמצום שעות או בחינת המשך ההתקשרות.`});
-  if(absent.length) recs.push({level:'warn', title:`היעדרויות בתשלום גבוהות ב-${absent.length} לקוחות`,
-    text:`${absent.slice(0,4).map(g=>`${esc(g.name)} (${pct(share(g,'absence'),0)} מהברוטו)`).join(' · ')}. בממוצע ${inScope} ${pct((T.comp.absence||0)/T.gross,1)}. חופשה ומחלה ששולמו נכנסות לעלות בלי שעות עבודה מולן. כדאי לוודא שהמחליפים לא נרשמים כשעות נוספות, ולכלול את מקדם ההיעדרות במחיר.`});
+  if(sick.length) recs.push({level:'warn', title:`ימי מחלה גבוהים ב-${sick.length} לקוחות`,
+    text:`${sick.slice(0,5).map(g=>`<b>${esc(g.name)}</b> (${pct(share(g,'sick'),1)} מהברוטו, ${money((g.comp.sick||0)/nM)} בחודש)`).join(' · ')}. בממוצע ${inScope} ${pct(sickAvg,1)}. ימי מחלה משולמים בלי שעות עבודה מולם, ולעיתים גם מחליף באותן שעות. כדאי לבדוק היעדרויות חוזרות אצל אותם עובדים ואת השיבוץ באתר.`});
   if(travel.length) recs.push({level:'warn', title:`נסיעות ורכב מעל 15% מהברוטו ב-${travel.length} לקוחות`,
     text:`${travel.slice(0,4).map(g=>`${esc(g.name)} (${pct(share(g,'travel'),0)})`).join(' · ')}. ${ui.branch?inScope:'בארגון כולו'} ${pct((T.comp.travel||0)/T.gross,1)} מהברוטו (${money((T.comp.travel||0)/nM)} בחודש). כדאי לבדוק שיבוץ עובדים שגרים קרוב לאתר ואת מדיניות אחזקת הרכב.`});
   // --- השוואה חודשית ---
@@ -1653,7 +1655,7 @@ function renderCost(v){
   const rowsDef = perHourRows(T);
   const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
   v.innerHTML = `<div class="stack">
-    ${oldComp.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${oldComp.map(monthName).join(', ')} עבודה בשבת וחג עדיין כלולה בשעות נוספות, כי דוח רכיבי השכר נקלט לפני ההפרדה. כדי להפריד, יש להעלות מחדש את דוח רכיבי השכר של ${oldComp.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
+    ${oldComp.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${oldComp.map(monthName).join(', ')} דוח רכיבי השכר נקלט לפני ההפרדה, ולכן עבודה בשבת וחג עדיין כלולה בשעות נוספות, וימי מחלה כלולים בחופשה ובחג. כדי להפריד, יש להעלות מחדש את דוח רכיבי השכר של ${oldComp.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
     ${ui.branch?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(ui.branch)} בלבד:</b> עלות ורכיבי השכר של אתרי הסניף, והלקוחות שלו. <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
     <div class="kpis">
       ${kpi('ברוטו לשעת עבודה', perH(T.grossH), `${hrs(T.h)} שעות באתרים`)}
@@ -1661,7 +1663,7 @@ function renderCost(v){
       ${kpi('שעות נוספות בימי חול', pct(T.gross?(T.comp.ot||0)/T.gross:NaN), `${money(otAll)} בחודש${T.comp.weekend?` · שבת וחג ${pct((T.comp.weekend||0)/T.gross)} (מחויב ללקוח)`:''}`)}
       ${kpi('רווח גולמי בלי חד-פעמי', pct(T.recMargin), `מדווח ${pct(T.margin)} · חד-פעמי ${money((T.comp.once||0)/nM)} בחודש`)}
     </div>
-    <div class="grid2">
+    <div class="stack">
       <section class="panel">
         <div class="panel-head"><h2>מבנה עלות השעה לפי חודש</h2><span class="small muted">₪ לשעת עבודה ב-TimeWatch, אתרי לקוחות בלבד</span></div>
         ${perMonth.length?`<div class="tbl-wrap"><table>
@@ -1683,14 +1685,14 @@ function renderCost(v){
       <div class="panel-head"><h2>עלות שעה ורווחיות לפי לקוח</h2>
         <label class="small muted">יעד רווח גולמי <input type="text" id="f-target" value="${ui.target||15}" inputmode="decimal" style="width:52px;text-align:center"> %</label></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th class="first">לקוח</th><th class="n">שעות</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th><th class="n">עלות חוזרת לשעה</th><th class="n">רווח מדווח</th><th class="n" title="רווח גולמי בלי תשלומים חד-פעמיים: פדיון חופשה, מענקים, בונוסים, גילום ושי לחג. שעות נוספות ושבת נשארות בחישוב">רווח בלי חד-פעמי</th><th class="n" title="שעות נוספות בימי חול, מתוך הברוטו. בלי שבת וחג, שמחויבים ללקוח">נוספות (חול)</th><th class="n">היעדרויות</th><th class="n">נסיעות לשעה</th><th class="n">חד-פעמי</th><th class="n">מחיר לשעה ליעד</th><th class="n">תוספת בחודש</th></tr></thead>
+        <thead><tr><th class="first">לקוח</th><th class="n">שעות</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th><th class="n">עלות חוזרת לשעה</th><th class="n">רווח מדווח</th><th class="n" title="רווח גולמי בלי תשלומים חד-פעמיים: פדיון חופשה, מענקים, בונוסים, גילום ושי לחג. שעות נוספות ושבת נשארות בחישוב">רווח בלי חד-פעמי</th><th class="n" title="שעות נוספות בימי חול, מתוך הברוטו. בלי שבת וחג, שמחויבים ללקוח">נוספות (חול)</th><th class="n" title="ימי מחלה ששולמו, מתוך הברוטו">מחלה</th><th class="n">נסיעות לשעה</th><th class="n">חד-פעמי</th><th class="n">מחיר לשעה ליעד</th><th class="n">תוספת בחודש</th></tr></thead>
         <tbody>${groups.slice().sort((a,b)=>(a.recMargin||0)-(b.recMargin||0)).map(g=>{ const need = (g.recCostH+g.matH)/(1-t), up = g.rev>0&&g.h>0 ? Math.max(0,(need-g.revH)*g.h)/nM : 0;
           return `<tr class="clickable" data-client="${g.id}"><td class="first">${esc(g.name)}</td><td class="n">${hrs(g.h)}</td><td class="n">${perH(g.revH)}</td><td class="n">${perH(g.costH)}</td><td class="n">${perH(g.recCostH)}</td>
           <td class="n">${marginPill(g.margin,g.rev)}</td><td class="n">${marginPill(g.recMargin,g.rev)}</td>
-          <td class="n">${pct(share(g,'ot'),0)}</td><td class="n">${pct(share(g,'absence'),0)}</td><td class="n" title="${pct(share(g,'travel'),0)} מהברוטו">${g.h?perH((g.comp?.travel||0)/g.h):'—'}</td><td class="n">${g.comp?.once?money(g.comp.once/nM):'—'}</td>
+          <td class="n">${pct(share(g,'ot'),0)}</td><td class="n">${pct(share(g,'sick'),1)}</td><td class="n" title="${pct(share(g,'travel'),0)} מהברוטו">${g.h?perH((g.comp?.travel||0)/g.h):'—'}</td><td class="n">${g.comp?.once?money(g.comp.once/nM):'—'}</td>
           <td class="n">${g.rev>0&&g.h>0?perH(need):'—'}</td><td class="n">${up>0?`<b>${money(up)}</b>`:'—'}</td></tr>`; }).join('')}
         </tbody></table></div>
-      <p class="hint" style="margin-top:8px">עלות חוזרת = עלות מעביד בלי תשלומים חד-פעמיים. אחוזי נוספות והיעדרויות הם מתוך הברוטו של הלקוח. נסיעות לשעה = נסיעות ואחזקת רכב ששויכו ללקוח ÷ שעות העבודה אצלו (ממוצע הרשת: ${perH(T.h?(T.comp.travel||0)/T.h:NaN)}). מחיר ליעד מחושב על העלות החוזרת. לחיצה על שורה פותחת את כרטיס הלקוח.</p>
+      <p class="hint" style="margin-top:8px">עלות חוזרת = עלות מעביד בלי תשלומים חד-פעמיים. אחוזי נוספות (חול) ומחלה הם מתוך הברוטו של הלקוח. נסיעות לשעה = נסיעות ואחזקת רכב ששויכו ללקוח ÷ שעות העבודה אצלו (ממוצע הרשת: ${perH(T.h?(T.comp.travel||0)/T.h:NaN)}). מחיר ליעד מחושב על העלות החוזרת. לחיצה על שורה פותחת את כרטיס הלקוח.</p>
     </section>
   </div>`;
 }
