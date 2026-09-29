@@ -307,6 +307,7 @@ const store = {
       this.db.collection('months').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=thaw(d.data())); months=m; render(); }, e=>this.fail(e));
       this.db.doc('settings/plan').onSnapshot(s=>{ plans = loadPlans(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/manual').onSnapshot(s=>{ manual = loadManual(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
+      this.db.doc('settings/breaks').onSnapshot(s=>{ breaks = loadBreaks(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/materials').onSnapshot(s=>{ materials = loadMaterials(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/ga').onSnapshot(s=>{ gaLegacy = loadGA(s.exists ? thaw(s.data()) : null); mergeGA(); render(); }, e=>this.fail(e));
       this.db.collection('ga').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=thaw(d.data())); gaDocs = m; mergeGA(); render(); }, e=>this.fail(e));
@@ -314,7 +315,7 @@ const store = {
       try{ mapping = normalizeMapping(JSON.parse(localStorage.getItem('coop-mapping')||'null')||{}); months = JSON.parse(localStorage.getItem('coop-months')||'{}');
            plans = loadPlans(JSON.parse(localStorage.getItem('coop-plan')||'null')); manual = loadManual(JSON.parse(localStorage.getItem('coop-manual')||'null'));
            priv = JSON.parse(localStorage.getItem('coop-private')||'{}'); materials = loadMaterials(JSON.parse(localStorage.getItem('coop-materials')||'null'));
-           ga = loadGA(JSON.parse(localStorage.getItem('coop-ga')||'null')); }catch(e){}
+           ga = loadGA(JSON.parse(localStorage.getItem('coop-ga')||'null')); breaks = loadBreaks(JSON.parse(localStorage.getItem('coop-breaks')||'null')); }catch(e){}
     }
   },
   get hasPrivate(){ return this.mode==='local' || !!this.uid; },
@@ -339,6 +340,12 @@ const store = {
     const doc = {byBranch:JSON.parse(JSON.stringify(manual)), updatedAt:new Date().toISOString()};
     if(this.db) await this.db.doc('settings/manual').set(doc);
     else try{ localStorage.setItem('coop-manual', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
+  },
+  async saveBreaks(){
+    const doc = {byMonth:JSON.parse(JSON.stringify(breaks.byMonth)), updatedAt:new Date().toISOString()};
+    if(this.db){ try{ await this.db.doc('settings/breaks').set(doc); return true; }
+      catch(e){ console.error(e); toast(`שמירת ההפסקות נכשלה: ${e?.message||e?.code||e}`); return false; } }
+    try{ localStorage.setItem('coop-breaks', JSON.stringify(doc)); return true; }catch(e){ toast('השמירה בדפדפן נכשלה'); return false; }
   },
   // ym: שמירת החודש הזה. בלי ym: שמירת רשימת השורות
   async saveGA(ym){
@@ -372,7 +379,7 @@ const store = {
 };
 function normalizeMapping(m){
   return {
-    groups:(m.groups||[]).map(g=>({id:g.id, name:g.name, sites:(g.sites||[]).map(String), clients:(g.clients||[]).map(normName), ...(g.splitBy?{splitBy:g.splitBy}:{}), ...(g.branch?{branch:g.branch}:{}), ...(g.fixedFee?{fixedFee:+g.fixedFee}:{})})),
+    groups:(m.groups||[]).map(g=>({id:g.id, name:g.name, sites:(g.sites||[]).map(String), clients:(g.clients||[]).map(normName), ...(g.splitBy?{splitBy:g.splitBy}:{}), ...(g.branch?{branch:g.branch}:{}), ...(g.fixedFee?{fixedFee:+g.fixedFee}:{}), ...(g.noBreakBill?{noBreakBill:true}:{})})),
     rateTables:(m.rateTables||[]).map(t=>({...t, rates:{...t.rates}, fixed:[...(t.fixed||[])], missing:[...(t.missing||[])]})),
     overheadSites:(m.overheadSites||['999']).map(String), updatedAt:m.updatedAt||null,
     // שמות מהנהלת החשבונות שאינם לקוחות: ignore = לא נכלל בדוח (למשל שורת התאמה למע״מ); ohCredit = מקטין את שכר ההנהלה של הסניף
@@ -602,6 +609,9 @@ const BUCKETS = [['base','בסיס: שעות רגילות ומשכורת'],['top
 const BUCKET = Object.fromEntries(BUCKETS);
 // ברוטו ישיר: תשלומים שנגזרים משעות העבודה אצל הלקוח בלבד (שעות רגילות, הפסקות, נוספות, שבת וחג)
 const DIRECT = ['base','topup','ot','weekend'];
+// הפסקות שלא מחויבות: שעות לחודש ללקוח (settings/breaks, הזנה ידנית), יורדות משעות TimeWatch של לקוח שסומן "לא מחויב על הפסקות"
+let breaks = {byMonth:{}};
+const loadBreaks = d => ({byMonth: JSON.parse(JSON.stringify(d?.byMonth||{}))});
 const directOf = comp => DIRECT.reduce((a,k)=>a+(comp?.[k]||0),0);
 function bucketOf(desc){
   const d = normName(desc);
@@ -638,6 +648,18 @@ function parseComponents(wb, fileName){
     const shares = months[ym]?.payroll?.empShares;
     if(!shares) throw new Error(`יש להעלות קודם את דוח השכר (עלות מעביד לפי אתר) של ${monthName(ym)}${months[ym]?.payroll?' מחדש, כדי שיישמר פיצול העובדים בין האתרים':''}`);
     const sites = {}, symbols = {}; let total = 0, unallocated = 0; const emps = new Set();
+    // שעות לפי רכיב (סוג נתון "יחידות"): שעות ששולמו בפועל לכל רכיב ישיר, ו"שעות עבודה בפועל" (בלי הפסקות).
+    // נשמרות ברכיבים כ-u_<רכיב>; pu_<רכיב> = התשלום של רכיבים שיש להם שעות (בלי משכורת גלובלית), לחישוב ברוטו לשעה
+    const withUnits = new Set(), paySyms = new Set(aoa.slice(hi+1).filter(r=>!normName(r[0]) && normName(r[iType])==='תשלומים').map(r=>normName(r[iSym])));
+    for(const r of aoa.slice(hi+1)){
+      if(normName(r[0]) || normName(r[iType])!=='יחידות') continue;
+      const emp = num(r[iEmp]), v = num(r[col]); if(emp==null || !v) continue;
+      const desc = normName(r[iDesc]), b = desc==='שעות עבודה בפועל' ? 'worked' : bucketOf(desc);
+      if(b!=='worked' && (!DIRECT.includes(b) || !paySyms.has(normName(r[iSym])))) continue;   // רק שעות של רכיב תשלום (לא "תקן שעות" וכד')
+      if(b!=='worked') withUnits.add(normName(r[iSym]));
+      const sh = shares[emp]; if(!sh) continue;
+      for(const [code, w] of Object.entries(sh)){ const x = sites[code] ||= {}; x['u_'+b] = (x['u_'+b]||0) + v*w; }
+    }
     for(const r of aoa.slice(hi+1)){
       if(normName(r[0]) || normName(r[iType])!=='תשלומים') continue;
       const emp = num(r[iEmp]), v = num(r[col]); if(emp==null || !v) continue;
@@ -649,12 +671,13 @@ function parseComponents(wb, fileName){
       for(const [code, w] of Object.entries(sh)){
         const x = sites[code] ||= {};
         x[b] = (x[b]||0) + v*w;
+        if(DIRECT.includes(b) && withUnits.has(sym)) x['pu_'+b] = (x['pu_'+b]||0) + v*w;
         if(prem && b==='ot') x.otPrem = (x.otPrem||0) + v*w*prem;   // פרמיה רק על שעות נוספות בימי חול
       }
     }
     for(const x of Object.values(sites)) for(const k in x) x[k] = round2(x[k]);
     for(const x of Object.values(symbols)) x.total = round2(x.total);
-    out.push({ym, data:{v:3, file:fileName, uploadedAt:new Date().toISOString(), sites, symbols, total:round2(total), unallocated:round2(unallocated), employees:emps.size}});
+    out.push({ym, data:{v:4, file:fileName, uploadedAt:new Date().toISOString(), sites, symbols, total:round2(total), unallocated:round2(unallocated), employees:emps.size}});
   }
   return out;
 }
@@ -728,7 +751,14 @@ function compute(ym){
     if(isOverhead(code)){ overhead += cost; addComp(ohComp, info.comp); continue; }
     const g = bySite[code];
     if(!g){ unSites[code] = info; continue; }
-    const r = get(g); r.h += h; r.cost += cost; r.gross = (r.gross||0) + info.gross; r.comp = addComp(r.comp||{}, info.comp); r.sites[code] = info;
+    // לקוח שלא מחויב על הפסקות: שעות TimeWatch כוללות הפסקות (שלא משולמות), ולכן מורידים את שעות ההפסקה שהוזנו
+    // ידנית לחודש. הסכום של הלקוח מתחלק בין האתרים שלו לפי שעות TimeWatch
+    if(g.noBreakBill && h>0){
+      const gb = +(breaks.byMonth[ym]?.[g.id]||0), gh = g.sites.reduce((a,c)=>a+(hs[c]?.h||0),0);
+      const br = gb && gh ? Math.min(h, gb*h/gh) : 0;
+      info.twH = h; info.breakH = br; info.h = h - br;
+    }
+    const r = get(g); r.h += info.h; r.breakH = (r.breakH||0) + (info.breakH||0); r.cost += cost; r.gross = (r.gross||0) + info.gross; r.comp = addComp(r.comp||{}, info.comp); r.sites[code] = info;
   }
   const ohCredit = {};
   for(const [name, x] of Object.entries(rev)){
@@ -829,7 +859,9 @@ function finishComp(r){
   const once = r.comp?.once || 0, factor = r.gross ? r.cost/r.gross : 1;
   r.onceCost = once*factor; r.recCost = r.cost - r.onceCost;
   r.recMargin = r.rev ? (r.rev-r.recCost-(r.mat||0))/r.rev : NaN; r.recCostH = r.h ? r.recCost/r.h : NaN; r.matH = r.h ? (r.mat||0)/r.h : 0;
-  r.grossH = r.h ? directOf(r.comp)/r.h : NaN;   // ברוטו ישיר לשעה
+  // ברוטו ישיר לשעה ששולמה: תשלום הרכיבים הישירים חלקי השעות ששולמו עליהם (מדוח רכיבי השכר). בלי שעות בדוח: אין נתון
+  const c = r.comp||{}, pu = DIRECT.reduce((a,k)=>a+(c['pu_'+k]||0),0), u = DIRECT.reduce((a,k)=>a+(c['u_'+k]||0),0);
+  r.grossH = u ? pu/u : NaN; r.regH = c.u_base ? c.pu_base/c.u_base : NaN; r.paidH = u;
   return r;
 }
 function flagsOf(r){
@@ -898,7 +930,7 @@ function computePeriod(yms){
       x.splits[g.split] = (x.splits[g.split]||[]).concat(R.ym);
       if(g.rateProxy) x.rateProxy = (x.rateProxy||[]).concat(R.ym);
       if(g.expected!=null){ x.expected = (x.expected||0) + g.expected; x.billRev = (x.billRev||0) + g.rev; x.fee = (x.fee||0) + (g.fee||0); x.estimateSites = [...new Set([...(x.estimateSites||[]), ...(g.estimateSites||[])])]; }
-      x.rev+=g.rev; x.h+=g.h; x.cost+=g.cost; x.mat+=g.mat||0; x.matBill=(x.matBill||0)+(g.matBill||0); x.gross+=g.gross||0; addComp(x.comp, g.comp);
+      x.rev+=g.rev; x.h+=g.h; x.breakH=(x.breakH||0)+(g.breakH||0); x.cost+=g.cost; x.mat+=g.mat||0; x.matBill=(x.matBill||0)+(g.matBill||0); x.gross+=g.gross||0; addComp(x.comp, g.comp);
       for(const st of Object.values(g.sites)){ const y = x.sites[st.code] ||= {code:st.code, name:st.name, branch:st.branch, h:0, cost:0, revShare:0, isFee:st.isFee}; y.h+=st.h; y.cost+=st.cost; y.revShare+=st.revShare||0; y.rate = st.rate; y.fixed = st.fixed; y.byRate = y.byRate || st.byRate; }
       for(const [c,a] of Object.entries(g.clients)) x.clients[c]=(x.clients[c]||0)+a;
       for(const [b,w] of Object.entries(g.branchShare)) x.weight[b]=(x.weight[b]||0)+w*(g.rev+g.h+1);
@@ -1742,6 +1774,7 @@ function renderCost(v){
   const withComp = monthList().filter(m=>months[m].components);
   if(!R.hasComp){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">חסר דוח רכיבי שכר ל${per.label}</h2><p>יש להעלות בלשונית "קליטת נתונים" את דוח הברוטו לפי רכיבי שכר (הנתונים נלקחים מסעיף "תשלומים").</p>${withComp.length?`<p style="margin-top:8px">נקלט עבור: ${withComp.map(monthName).join(', ')}.</p>`:''}</div>`; return; }
   const oldComp = monthList().filter(m=>(per.months.includes(m) || (m.slice(0,4)===(ui.ym||'').slice(0,4) && complete(m))) && months[m]?.components && !(months[m].components.v>=3));
+  const noUnits = monthList().filter(m=>per.months.includes(m) && months[m]?.components && !(months[m].components.v>=4));
   const T = ui.branch ? branchTot(R, ui.branch) : R.tot, nM = per.months.length, inScope = ui.branch ? `בסניף ${esc(ui.branch)}` : 'בארגון';
   let groups = R.groups.filter(g=>g.h>0 || g.rev>0);
   if(ui.branch) groups = groups.filter(g=>g.branchList.includes(ui.branch));
@@ -1777,9 +1810,10 @@ function renderCost(v){
   const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
   v.innerHTML = `<div class="stack">
     ${oldComp.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${oldComp.map(monthName).join(', ')} דוח רכיבי השכר נקלט לפני ההפרדה, ולכן עבודה בשבת וחג עדיין כלולה בשעות נוספות, וימי מחלה כלולים בחופשה ובחג. כדי להפריד, יש להעלות מחדש את דוח רכיבי השכר של ${oldComp.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
+    ${noUnits.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${noUnits.map(monthName).join(', ')} דוח רכיבי השכר נקלט בלי השעות לכל רכיב, ולכן אין ברוטו לשעה ששולמה, וההפסקות אצל לקוחות שלא מחויבים עליהן מוערכות בחצי שעה למשמרת. כדי לחשב מדויק, יש להעלות מחדש את דוח רכיבי השכר של ${noUnits.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
     ${ui.branch?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(ui.branch)} בלבד:</b> עלות ורכיבי השכר של אתרי הסניף, והלקוחות שלו. <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
     <div class="kpis">
-      ${kpi('ברוטו ישיר לשעת עבודה', perH(T.grossH), 'שעות רגילות, הפסקות, נוספות ושבת')}
+      ${kpi('ברוטו ישיר לשעה ששולמה', perH(T.grossH), isFinite(T.regH) ? `שעה רגילה ${perH(T.regH)} · ${hrs(T.paidH)} שעות ששולמו` : 'חסרות שעות בדוח רכיבי השכר')}
       ${kpi('עלות מעביד לשעה', perH(T.costH), `מעל הברוטו: ${pct(T.gross?T.cost/T.gross-1:NaN,0)}`)}
       ${kpi('שעות נוספות בימי חול', pct(T.gross?(T.comp.ot||0)/T.gross:NaN), `${money(otAll)} בחודש${T.comp.weekend?` · שבת וחג ${pct((T.comp.weekend||0)/T.gross)} (מחויב ללקוח)`:''}`)}
       ${kpi('רווח גולמי בלי חד-פעמי', pct(T.recMargin), `מדווח ${pct(T.margin)} · חד-פעמי ${money((T.comp.once||0)/nM)} בחודש`)}
@@ -1943,7 +1977,7 @@ function renderMatch(v){
         <div class="actions"><label class="btn" for="map-file">ייבוא מאקסל</label><input type="file" id="map-file" accept=".xlsx,.xls" hidden><button class="btn" type="button" id="map-export">ייצוא לאקסל</button></div></div>
       <p class="hint" style="margin-bottom:10px">כל לקוח מחבר אתרים (לפי הקוד ב-TimeWatch ובשכר) לשמות בהנהלת החשבונות. הסרת פריט מחזירה אותו לרשימת הממתינים. ${mapping.updatedAt?`עודכן לאחרונה ${new Date(mapping.updatedAt).toLocaleString('he-IL')}.`:''}</p>
       ${mapping.groups.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">לקוח</th><th>אתרים</th><th>שמות בהנהלת החשבונות</th></tr></thead><tbody>
-        ${mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<tr><td class="first"><input type="text" value="${esc(g.name)}" data-rename="${g.id}" aria-label="שם הלקוח" style="width:190px">${g.sites.length>1?`<div style="margin-top:4px"><select data-splitby="${g.id}" aria-label="חלוקת ההכנסה בין האתרים" style="font-size:12px;padding:2px 4px"><option value="">הכנסה בין האתרים: לפי שעות</option><option value="price" ${g.splitBy==='price'?'selected':''}>הכנסה בין האתרים: לפי תעריף × שעות</option></select></div>`:''}${!g.sites.length?`<div style="margin-top:4px"><select data-gbranch="${g.id}" aria-label="סניף ללקוח בלי אתר" style="font-size:12px;padding:2px 4px"><option value="">סניף: לא הוגדר</option>${branchNames().map(b=>`<option ${g.branch===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>`:''}${g.splitBy==='price'?`<label class="small muted" style="display:flex;gap:4px;align-items:center;margin-top:4px">חיוב חודשי קבוע ללא אתר ₪<input type="text" inputmode="decimal" data-fee="${g.id}" value="${g.fixedFee||''}" placeholder="0" style="width:70px;font-size:12px;padding:2px 4px"></label>`:''}</td>
+        ${mapping.groups.slice().sort((a,b)=>a.name.localeCompare(b.name,'he')).map(g=>`<tr><td class="first"><input type="text" value="${esc(g.name)}" data-rename="${g.id}" aria-label="שם הלקוח" style="width:190px"><label class="small muted" style="display:flex;gap:4px;align-items:center;margin-top:4px"><input type="checkbox" data-nobreak="${g.id}" ${g.noBreakBill?'checked':''}> לא מחויב על הפסקות</label>${g.sites.length>1?`<div style="margin-top:4px"><select data-splitby="${g.id}" aria-label="חלוקת ההכנסה בין האתרים" style="font-size:12px;padding:2px 4px"><option value="">הכנסה בין האתרים: לפי שעות</option><option value="price" ${g.splitBy==='price'?'selected':''}>הכנסה בין האתרים: לפי תעריף × שעות</option></select></div>`:''}${!g.sites.length?`<div style="margin-top:4px"><select data-gbranch="${g.id}" aria-label="סניף ללקוח בלי אתר" style="font-size:12px;padding:2px 4px"><option value="">סניף: לא הוגדר</option>${branchNames().map(b=>`<option ${g.branch===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>`:''}${g.splitBy==='price'?`<label class="small muted" style="display:flex;gap:4px;align-items:center;margin-top:4px">חיוב חודשי קבוע ללא אתר ₪<input type="text" inputmode="decimal" data-fee="${g.id}" value="${g.fixedFee||''}" placeholder="0" style="width:70px;font-size:12px;padding:2px 4px"></label>`:''}</td>
           <td class="wrap">${g.sites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}${g.splitBy==='price'?(RTn?.rates[c]!=null?` · ${ltr('₪'+RTn.rates[c])}`:RTn?.fixed.includes(c)?' · פיקס':''):''}<button type="button" data-unsite="${g.id}|${esc(c)}" aria-label="הסרת אתר ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td>
           <td class="wrap">${g.clients.map(c=>`<span class="chip">${esc(c)}<button type="button" data-unclient="${g.id}|${esc(c)}" aria-label="הסרת ${esc(c)}">×</button></span>`).join('')||'<span class="muted small">—</span>'}</td></tr>`).join('')}
         <tr><td class="first">עלות הנהלה</td><td class="wrap" colspan="2">${mapping.overheadSites.map(c=>`<span class="chip">${esc(c)} · ${esc(allSiteInfo[c]?.name||'')}<button type="button" data-unoverhead="${esc(c)}" aria-label="הסרה">×</button></span>`).join('')}</td></tr>
@@ -1990,6 +2024,7 @@ function renderData(v){
     </label>
     ${materialsPanel()}
     ${clothingPanel()}
+    ${breaksPanel()}
     ${gaPanel()}
     ${wagesStatus()}
     ${ms.length?`<div class="months">${ms.map(monthCard).join('')}</div>`:'<div class="panel empty">עדיין לא נקלטו חודשים.</div>'}
@@ -2077,6 +2112,26 @@ async function saveGAPanelNow(){
   toast('שומר…');
   const ok = await store.saveGA(ym); render();
   if(ok) toast(bad ? `נשמר, חוץ מ-${bad} תאים שאינם מספר` : `נשמר: ${n} סכומים ל${monthName(ym)}`);
+}
+function breaksPanel(){
+  const ms = monthList(); if(!ms.length) return '';
+  const ym = ui.matYm || ms[ms.length-1], hs = months[ym]?.hours?.sites || {};
+  const gs = mapping.groups.filter(g=>g.noBreakBill).sort((a,b)=>a.name.localeCompare(b.name,'he'));
+  const row = g => { const h = g.sites.reduce((a,c)=>a+(hs[c]?.h||0),0), sh = g.sites.reduce((a,c)=>a+(hs[c]?.shifts||0),0), v = breaks.byMonth[ym]?.[g.id];
+    return `<tr><td class="first">${esc(g.name)}</td><td class="n">${hrs(h)}</td><td class="n">${nf0.format(sh)}</td><td class="n"><input type="text" inputmode="decimal" data-brk="${g.id}" value="${v!=null&&v!==''?nf1.format(v):''}" aria-label="שעות הפסקה ${esc(g.name)} ${monthName(ym)}" style="width:80px;text-align:left;direction:ltr"></td><td class="n">${v?hrs(h-v):'—'}</td></tr>`; };
+  return `<section class="panel">
+    <div class="panel-head"><h2>הפסקות שלא מחויבות</h2><span class="small muted">${monthName(ym)} · שעות הפסקה שיורדות משעות TimeWatch של הלקוח</span></div>
+    ${gs.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">לקוח</th><th class="n">שעות TimeWatch</th><th class="n">משמרות</th><th class="n">שעות הפסקה</th><th class="n">שעות לחיוב</th></tr></thead><tbody>${gs.map(row).join('')}</tbody></table></div>
+    <p class="hint" style="margin-top:8px">החודש נבחר בפאנל חומרי הניקיון. מקלידים את סך שעות ההפסקה של הלקוח בחודש ויוצאים מהתא, והוא נשמר. תא ריק = לא הורדו הפסקות. לקוחות מסמנים "לא מחויב על הפסקות" בטבלת ההתאמה בלשונית "התאמת לקוחות".</p>`
+      : '<p class="muted">אין לקוחות שסומנו "לא מחויב על הפסקות". הסימון נמצא בטבלת ההתאמה בלשונית "התאמת לקוחות".</p>'}
+  </section>`;
+}
+async function setBreak(gid, raw){
+  const v = String(raw).replace(/[,\s]/g,''), n = v==='' ? null : +v, ym = ui.matYm || monthList().pop();
+  if(v!=='' && !(isFinite(n) && n>=0)){ toast('יש להזין מספר שעות'); render(); return; }
+  const m = breaks.byMonth[ym] ||= {};
+  if(n==null) delete m[gid]; else m[gid] = n;
+  renderSoon(); if(await store.saveBreaks()) toast('נשמר');
 }
 async function setClothing(br, raw, key=CLO){
   const v = String(raw).replace(/[,₪\s]/g,''), n = v==='' ? null : +v, ym = ui.matYm || monthList().pop();
@@ -2399,6 +2454,7 @@ document.addEventListener('change', async e=>{
   else if(d.matcost){ await setMaterial('cost', d.matcost, t.value); }
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
   else if(d.clo){ await setClothing(d.clo, t.value); }
+  else if(d.brk){ await setBreak(d.brk, t.value); }
   else if(d.lease){ await setClothing(d.lease, t.value, LEASE); }
   else if(d.ga){ await setGA(d.ga, t.value); }
   else if(t.id==='ga-addline'){ const n = normName(t.value); if(n && !ga.lines.includes(n)){ ga.lines = [...ga.lines, n]; render(); await store.saveGA(); toast(`נוספה שורה: ${n}`); } }
@@ -2411,6 +2467,7 @@ document.addEventListener('change', async e=>{
   else if(d.gbranch){ const g=mapping.groups.find(x=>x.id===d.gbranch); if(g){ if(t.value) g.branch=t.value; else delete g.branch; await store.saveMapping(); render(); toast(t.value?`${g.name} שויך לסניף ${t.value}`:'הסניף הוסר'); } }
   else if(d.fee && t.tagName==='INPUT'){ const g=mapping.groups.find(x=>x.id===d.fee); const n=parseFloat(String(t.value).replace(/[,₪\s]/g,''))||0; if(g){ if(n>0) g.fixedFee=n; else delete g.fixedFee; await store.saveMapping(); render(); toast(n>0?`חיוב קבוע של ${moneyRaw(n)} בחודש נשמר`:'החיוב הקבוע הוסר'); } }
   else if(d.ratefrom){ const r=(mapping.rateTables||[]).find(x=>x.id===d.ratefrom); if(r){ r.from=t.value; await store.saveMapping(); render(); toast(`התעריפים בתוקף מ${monthName(t.value)}`); } }
+  else if(d.nobreak){ const g=mapping.groups.find(x=>x.id===d.nobreak); if(g){ if(t.checked) g.noBreakBill=true; else delete g.noBreakBill; await store.saveMapping(); render(); toast(t.checked?`${g.name}: ההפסקות יורדו מהשעות`:`${g.name}: ההפסקות נספרות בשעות`); } }
   else if(d.splitby){ const g=mapping.groups.find(x=>x.id===d.splitby); if(g){ if(t.value) g.splitBy=t.value; else delete g.splitBy; await store.saveMapping(); render(); toast('אופן החלוקה עודכן'); } }
   else if(d.rename){ const g=mapping.groups.find(x=>x.id===d.rename); const n=normName(t.value); if(n && g && n!==g.name){ g.name=n; await store.saveMapping(); toast('השם עודכן'); } }
 });
