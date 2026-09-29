@@ -859,9 +859,8 @@ function finishComp(r){
   const once = r.comp?.once || 0, factor = r.gross ? r.cost/r.gross : 1;
   r.onceCost = once*factor; r.recCost = r.cost - r.onceCost;
   r.recMargin = r.rev ? (r.rev-r.recCost-(r.mat||0))/r.rev : NaN; r.recCostH = r.h ? r.recCost/r.h : NaN; r.matH = r.h ? (r.mat||0)/r.h : 0;
-  // ברוטו ישיר לשעה ששולמה: תשלום הרכיבים הישירים חלקי השעות ששולמו עליהם (מדוח רכיבי השכר). בלי שעות בדוח: אין נתון
-  const c = r.comp||{}, pu = DIRECT.reduce((a,k)=>a+(c['pu_'+k]||0),0), u = DIRECT.reduce((a,k)=>a+(c['u_'+k]||0),0);
-  r.grossH = u ? pu/u : NaN; r.regH = c.u_base ? c.pu_base/c.u_base : NaN; r.paidH = u;
+  // ברוטו ישיר לשעה: רכיבים שנגזרים משעות העבודה חלקי שעות TimeWatch, בקיזוז הפסקות שלא מחויבות (שהוזנו ידנית)
+  r.grossH = r.h ? directOf(r.comp)/r.h : NaN;
   return r;
 }
 function flagsOf(r){
@@ -1774,7 +1773,6 @@ function renderCost(v){
   const withComp = monthList().filter(m=>months[m].components);
   if(!R.hasComp){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">חסר דוח רכיבי שכר ל${per.label}</h2><p>יש להעלות בלשונית "קליטת נתונים" את דוח הברוטו לפי רכיבי שכר (הנתונים נלקחים מסעיף "תשלומים").</p>${withComp.length?`<p style="margin-top:8px">נקלט עבור: ${withComp.map(monthName).join(', ')}.</p>`:''}</div>`; return; }
   const oldComp = monthList().filter(m=>(per.months.includes(m) || (m.slice(0,4)===(ui.ym||'').slice(0,4) && complete(m))) && months[m]?.components && !(months[m].components.v>=3));
-  const noUnits = monthList().filter(m=>per.months.includes(m) && months[m]?.components && !(months[m].components.v>=4));
   const T = ui.branch ? branchTot(R, ui.branch) : R.tot, nM = per.months.length, inScope = ui.branch ? `בסניף ${esc(ui.branch)}` : 'בארגון';
   let groups = R.groups.filter(g=>g.h>0 || g.rev>0);
   if(ui.branch) groups = groups.filter(g=>g.branchList.includes(ui.branch));
@@ -1810,10 +1808,9 @@ function renderCost(v){
   const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
   v.innerHTML = `<div class="stack">
     ${oldComp.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${oldComp.map(monthName).join(', ')} דוח רכיבי השכר נקלט לפני ההפרדה, ולכן עבודה בשבת וחג עדיין כלולה בשעות נוספות, וימי מחלה כלולים בחופשה ובחג. כדי להפריד, יש להעלות מחדש את דוח רכיבי השכר של ${oldComp.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
-    ${noUnits.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${noUnits.map(monthName).join(', ')} דוח רכיבי השכר נקלט בלי השעות לכל רכיב, ולכן אין ברוטו לשעה ששולמה, וההפסקות אצל לקוחות שלא מחויבים עליהן מוערכות בחצי שעה למשמרת. כדי לחשב מדויק, יש להעלות מחדש את דוח רכיבי השכר של ${noUnits.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
     ${ui.branch?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(ui.branch)} בלבד:</b> עלות ורכיבי השכר של אתרי הסניף, והלקוחות שלו. <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
     <div class="kpis">
-      ${kpi('ברוטו ישיר לשעה ששולמה', perH(T.grossH), isFinite(T.regH) ? `שעה רגילה ${perH(T.regH)} · ${hrs(T.paidH)} שעות ששולמו` : 'חסרות שעות בדוח רכיבי השכר')}
+      ${kpi('ברוטו ישיר לשעת עבודה', perH(T.grossH), 'שעות TimeWatch בקיזוז הפסקות שלא מחויבות')}
       ${kpi('עלות מעביד לשעה', perH(T.costH), `מעל הברוטו: ${pct(T.gross?T.cost/T.gross-1:NaN,0)}`)}
       ${kpi('שעות נוספות בימי חול', pct(T.gross?(T.comp.ot||0)/T.gross:NaN), `${money(otAll)} בחודש${T.comp.weekend?` · שבת וחג ${pct((T.comp.weekend||0)/T.gross)} (מחויב ללקוח)`:''}`)}
       ${kpi('רווח גולמי בלי חד-פעמי', pct(T.recMargin), `מדווח ${pct(T.margin)} · חד-פעמי ${money((T.comp.once||0)/nM)} בחודש`)}
