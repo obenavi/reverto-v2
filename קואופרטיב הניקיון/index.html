@@ -331,8 +331,9 @@ const store = {
   async saveGA(){
     const doc = {lines:[...ga.lines], byMonth:JSON.parse(JSON.stringify(ga.byMonth)), updatedAt:new Date().toISOString()};
     if(this.db){ try{ await this.db.doc('settings/ga').set(doc); }
-      catch(e){ console.error(e); toast(`שמירת הנהלה וכלליות נכשלה (${e?.code||e?.message||'שגיאה'}). יש לרענן את הדף ולנסות שוב`); } }
-    else try{ localStorage.setItem('coop-ga', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
+      catch(e){ console.error(e); toast(`שמירת הנהלה וכלליות נכשלה (${e?.code||e?.message||'שגיאה'}). יש לרענן את הדף ולנסות שוב`); return false; } }
+    else try{ localStorage.setItem('coop-ga', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); return false; }
+    return true;
   },
   async saveMaterials(){
     const doc = {byMonth:JSON.parse(JSON.stringify(materials.byMonth)), billByMonth:JSON.parse(JSON.stringify(materials.billByMonth)), fixedBill:{...materials.fixedBill}, markup:materials.markup, updatedAt:new Date().toISOString()};
@@ -1998,6 +1999,7 @@ function gaPanel(){
       <tr class="total"><td class="first">סה״כ</td>${units.map(u=>`<td class="n">${money(gaFor(ym,u))}</td>`).join('')}</tr>
     </tbody></table></div>
     <div class="actions" style="margin-top:10px">
+      <button class="btn primary" type="button" id="ga-save">שמירה</button>
       ${prev?`<button class="btn sm" type="button" id="ga-copy">העתקה מ${monthName(prev)} (לתאים הריקים)</button>`:''}
       <label class="small">שורה נוספת <input type="text" id="ga-addline" placeholder="למשל: תוכנה" style="width:130px"></label>
     </div>
@@ -2011,6 +2013,19 @@ async function setGA(key, raw){
   const m = ((ga.byMonth[ym] ||= {})[u] ||= {});
   if(n==null) delete m[l]; else m[l] = n;
   renderSoon(); await store.saveGA();
+}
+// כפתור השמירה: קורא את כל התאים שעל המסך (גם תא שעדיין לא יצאו ממנו) ושומר במאגר
+let gaDown = 0;   // לחיצה בעכבר שומרת כבר ב-pointerdown; ה-click שאחריה לא שומר שוב
+async function saveGAPanel(){
+  const ym = ui.matYm || monthList().pop(), cur = ga.byMonth[ym] ||= {}; let bad = 0, n = 0;
+  for(const inp of $('#view').querySelectorAll('input[data-ga]')){
+    const k = inp.dataset.ga, i = k.indexOf('|'), u = k.slice(0,i), l = k.slice(i+1);
+    const v = String(inp.value).replace(/[,₪\s]/g,''), x = v==='' ? null : +v;
+    if(v!=='' && !isFinite(x)){ bad++; continue; }
+    const m = cur[u] ||= {}; if(x==null) delete m[l]; else { m[l] = x; n++; }
+  }
+  const ok = await store.saveGA(); render();
+  if(ok) toast(bad ? `נשמר, חוץ מ-${bad} תאים שאינם מספר` : `נשמר: ${n} סכומים ל${monthName(ym)}`);
 }
 async function setClothing(br, raw){
   const v = String(raw).replace(/[,₪\s]/g,''), n = v==='' ? null : +v, ym = ui.matYm || monthList().pop();
@@ -2250,6 +2265,7 @@ document.addEventListener('click', async e=>{
   if(t.id==='btn-export') return exportReport();
   if(t.id==='btn-pdf'){ t.disabled = true; toast('מכינים את ה-PDF…'); try{ await tabPdf(); } finally { t.disabled = false; } return; }
   if(t.id==='mat-template') return materialsTemplate();
+  if(t.id==='ga-save'){ if(Date.now()-gaDown > 1000) await saveGAPanel(); return; }
   if(t.id==='ga-copy'){   // העתקת הסכומים מהחודש הקודם לתאים הריקים בחודש הנוכחי
     const ym = ui.matYm || monthList().pop(), prev = monthList().filter(m=>m<ym).pop(), src = ga.byMonth[prev] || {};
     const dst = ga.byMonth[ym] ||= {}; let n = 0;
@@ -2309,6 +2325,7 @@ document.addEventListener('click', async e=>{
     await store.deleteMonth(d.delmonth); render(); toast('החודש נמחק'); return;
   }
 });
+document.addEventListener('pointerdown', e=>{ if(e.target.closest?.('#ga-save')){ e.preventDefault(); gaDown = Date.now(); saveGAPanel(); } });   // לפני שהתא מאבד מיקוד והמסך מצויר מחדש
 document.addEventListener('change', async e=>{
   const t = e.target, d = t.dataset;
   if(t.id==='f-ym'){ ui.ym=t.value; ui.open=null; saveUi(); render(); }
