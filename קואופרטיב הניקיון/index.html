@@ -374,6 +374,8 @@ function normalizeMapping(m){
     groups:(m.groups||[]).map(g=>({id:g.id, name:g.name, sites:(g.sites||[]).map(String), clients:(g.clients||[]).map(normName), ...(g.splitBy?{splitBy:g.splitBy}:{}), ...(g.branch?{branch:g.branch}:{}), ...(g.fixedFee?{fixedFee:+g.fixedFee}:{})})),
     rateTables:(m.rateTables||[]).map(t=>({...t, rates:{...t.rates}, fixed:[...(t.fixed||[])], missing:[...(t.missing||[])]})),
     overheadSites:(m.overheadSites||['999']).map(String), updatedAt:m.updatedAt||null,
+    // שמות מהנהלת החשבונות שאינם לקוחות: ignore = לא נכלל בדוח (למשל שורת התאמה למע״מ); ohCredit = מקטין את שכר ההנהלה של הסניף
+    clientRules:Object.fromEntries(Object.entries(m.clientRules||{}).map(([k,v])=>[normName(k), {...v}])),
   };
 }
 
@@ -724,8 +726,11 @@ function compute(ym){
     if(!g){ unSites[code] = info; continue; }
     const r = get(g); r.h += h; r.cost += cost; r.gross = (r.gross||0) + info.gross; r.comp = addComp(r.comp||{}, info.comp); r.sites[code] = info;
   }
+  const ohCredit = {};
   for(const [name, x] of Object.entries(rev)){
-    const net = x.inv - x.cr, g = byClient[name];
+    const net = x.inv - x.cr, g = byClient[name], rule = mapping.clientRules?.[name];
+    if(!g && rule?.kind==='ignore') continue;
+    if(!g && rule?.kind==='ohCredit'){ ohCredit[rule.branch] = (ohCredit[rule.branch]||0) + net; continue; }
     if(!g){ unClients[name] = {name, rev:net}; continue; }
     const r = get(g); r.rev += net; r.clients[name] = net;
   }
@@ -799,7 +804,9 @@ function compute(ym){
   for(const u of Object.keys(ga.byMonth[ym]||{})) if(u!==GA_ORG){ const v = gaFor(ym, u); if(v){ B(u).ga = v; gaT += v; } }
   Object.values(branches).forEach(b=>{ b.clo ||= 0; b.gp=b.rev-b.cost-b.mat-b.clo; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
   const list = Object.values(G);
-  const oh = allocOverhead(ym, overhead); overhead = oh.total;
+  const oh = allocOverhead(ym, overhead);
+  oh.credit = 0; for(const [b,v] of Object.entries(ohCredit)){ oh.byBranch[b] = (oh.byBranch[b]||0) - v; oh.credit += v; }   // קיזוז משכר ההנהלה של הסניף
+  oh.creditBy = ohCredit; oh.total -= oh.credit; overhead = oh.total;
   const tot = {rev:list.reduce((a,r)=>a+r.rev,0)+Object.values(unClients).reduce((a,c)=>a+c.rev,0),
                cost:list.reduce((a,r)=>a+r.cost,0)+Object.values(unSites).reduce((a,s)=>a+s.cost,0),
                h:list.reduce((a,r)=>a+r.h,0)+Object.values(unSites).reduce((a,s)=>a+s.h,0), overhead, mat:list.reduce((a,r)=>a+r.mat,0), clo, ga:gaT, gaOrg};
@@ -838,7 +845,7 @@ function allUnmatched(){
   for(const [ym,M] of Object.entries(months)){
     for(const [code,s] of Object.entries(M.hours?.sites||{})) if(!bySite[code] && !isOverhead(code)){ const x=sites[code] ||= {code,name:s.name,branch:s.branch,h:0,cost:0,months:new Set()}; x.h+=s.h; x.months.add(ym); }
     for(const [code,s] of Object.entries(M.payroll?.sites||{})) if(!bySite[code] && !isOverhead(code)){ const x=sites[code] ||= {code,name:s.name,branch:knownBranch(code, ym),h:0,cost:0,months:new Set()}; x.cost+=s.cost; x.months.add(ym); }
-    for(const [c,x] of Object.entries(M.revenue?.clients||{})) if(!byClient[c]){ const y=clients[c] ||= {name:c,rev:0,months:new Set()}; y.rev+=x.inv-x.cr; y.months.add(ym); }
+    for(const [c,x] of Object.entries(M.revenue?.clients||{})) if(!byClient[c] && !mapping.clientRules?.[c]){ const y=clients[c] ||= {name:c,rev:0,months:new Set()}; y.rev+=x.inv-x.cr; y.months.add(ym); }
   }
   return {sites:Object.values(sites), clients:Object.values(clients)};
 }
@@ -1916,11 +1923,13 @@ function renderMatch(v){
       <div class="panel-head"><h2>ממתינים להתאמה</h2><span class="small muted">אתרים מ-TimeWatch או מהשכר, ושמות מהנהלת החשבונות, שעדיין לא שויכו ללקוח</span></div>
       ${un.sites.length||un.clients.length ? `
         ${un.clients.sort((a,b)=>b.rev-a.rev).map(c=>`<div class="queue-row"><div><b>${esc(c.name)}</b> <span class="chip" style="padding-inline:8px">הנהלת חשבונות</span><div class="small muted">הכנסה ${money(c.rev)} · ${[...c.months].map(monthName).join(', ')}</div></div>
-          <select data-assign-client="${esc(c.name)}" aria-label="שיוך ${esc(c.name)}">${opts}</select></div>`).join('')}
+          <select data-assign-client="${esc(c.name)}" aria-label="שיוך ${esc(c.name)}">${opts}<option value="__ignore">לא לכלול בדוח (לא לקוח)</option>${branchNames().filter(b=>b!==NO_BRANCH).map(b=>`<option value="__oh|${esc(b)}">קיזוז משכר הנהלה: ${esc(b)}</option>`).join('')}</select></div>`).join('')}
         ${un.sites.sort((a,b)=>b.h-a.h||b.cost-a.cost).map(s=>`<div class="queue-row"><div><b>${esc(s.name)}</b> <span class="chip" style="padding-inline:8px">אתר ${esc(s.code)}</span><div class="small muted">${esc(s.branch)} · ${hrs(s.h)} שעות · עלות ${money(s.cost)} · ${[...s.months].map(monthName).join(', ')}</div></div>
           <select data-assign-site="${esc(s.code)}" aria-label="שיוך אתר ${esc(s.name)}">${opts}<option value="__overhead">עלות הנהלה (לא לקוח)</option></select></div>`).join('')}`
         : '<p class="muted">כל האתרים והלקוחות משויכים.</p>'}
     </section>
+    ${Object.keys(mapping.clientRules||{}).length?`<section class="panel"><div class="panel-head"><h2>שמות שאינם לקוחות</h2><span class="small muted">שורות מהנהלת החשבונות שלא נספרות כהכנסה</span></div>
+      ${Object.entries(mapping.clientRules).map(([n,r])=>`<div class="queue-row"><div><b>${esc(n)}</b><div class="small muted">${r.kind==='ignore'?'לא נכלל בדוח':`מקטין את שכר ההנהלה של ${esc(r.branch)}`}</div></div><button class="btn sm" type="button" data-unrule="${esc(n)}">ביטול</button></div>`).join('')}</section>`:''}
     ${rateTablesPanel()}
     <section class="panel">
       <div class="panel-head"><h2>טבלת ההתאמה</h2>
@@ -1951,6 +1960,7 @@ function rateTablesPanel(){
 async function assign(kind, key, target){
   if(!target) return;
   if(target==='__overhead'){ mapping.overheadSites.push(key); }
+  else if(target==='__ignore' || target.startsWith('__oh|')){ mapping.clientRules = {...(mapping.clientRules||{}), [key]: target==='__ignore' ? {kind:'ignore'} : {kind:'ohCredit', branch:target.slice(5)}}; }
   else {
     let g = mapping.groups.find(x=>x.id===target);
     if(target==='__new'){
@@ -2289,7 +2299,7 @@ function drawChart(id, cfg, tick, label){
 
 /* ============================================================ אירועים */
 document.addEventListener('click', async e=>{
-  const t = e.target.closest('button, tr[data-open], tr[data-branch-go], tr[data-client], th[data-sort]'); if(!t) return;
+  const t = e.target.closest('button, tr[data-open], tr[data-branch-go], tr[data-client], tr[data-tab], th[data-sort]'); if(!t) return;
   const d = t.dataset;
   if(d.tab){ ui.tab=d.tab; saveUi(); render(); window.scrollTo({top:0}); return; }
   if(d.branchGo){ ui.tab='clients'; ui.branch=d.branchGo; saveUi(); render(); return; }
@@ -2299,6 +2309,7 @@ document.addEventListener('click', async e=>{
   if(t.id==='btn-export') return exportReport();
   if(t.id==='btn-pdf'){ t.disabled = true; toast('מכינים את ה-PDF…'); try{ await tabPdf(); } finally { t.disabled = false; } return; }
   if(t.id==='mat-template') return materialsTemplate();
+  if(d.unrule){ const r = {...mapping.clientRules}; delete r[d.unrule]; mapping.clientRules = r; await store.saveMapping(); render(); toast(`${d.unrule} חזר לרשימת ההתאמה`); return; }
   if(t.id==='ga-save'){ if(Date.now()-gaDown > 1000) await saveGAPanel(); return; }
   if(t.id==='ga-copy'){   // העתקת הסכומים מהחודש הקודם לתאים הריקים בחודש הנוכחי
     const ym = ui.matYm || monthList().pop(), prev = monthList().filter(m=>m<ym).pop(), src = ga.byMonth[prev] || {};
