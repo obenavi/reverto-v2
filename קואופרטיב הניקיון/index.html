@@ -649,6 +649,25 @@ function billedRate(G, ym){
     unrated:sites.filter(x=>x.h>0 && x.r==null && !x.fixed).length, fee:+G.fixedFee||0, from:RT.from, rates:[...new Set(rated.map(x=>x.r))]};
 }
 const rateTxt = b => !b ? '—' : b.fixed ? 'פיקס' : perH(b.rate);
+/* שכר הנהלה לפי סניף. עובדי הנהלה (אתר 999): החלק שלהם בהנהלה מוקצה לסניף לפי הכלל; עבודה שדווחה על לקוח נשארת אצל הלקוח.
+   מה שלא מוקצה (למשל 642, והחצי השני של 709 ו-1203) הוא הנהלה כללית. OH_FIXED: עלות הנהלה קבועה שלא מופיעה בדוח השכר. */
+const OH_RULES = {'709':["גרעין ג'אסר",0.5], '506':["גרעין ג'אסר",1], '70':["גרעין ג'אסר",1], '92':["גרעין ג'אסר",1],
+                  '865':['גרעין ירושלים',1], '306':['גרעין ירושלים',1], '1203':['נגב',0.5]};
+const OH_FIXED = [{branch:'גרעין ירושלים', amt:11000, label:'מנהלת סניף ירושלים (שכר משולם מהעמותה)', from:'2026-01'}];
+// עלות מעביד לפי עובד באתרי ההנהלה נלקחת מהאזור הפרטי (פיצול השכר לפי עובד). בלי פירוט לחודש: רק העלות הקבועה מוקצית, והשאר לפי הכנסות
+function allocOverhead(ym, payOh){
+  const byBranch = {}, st = priv['staff-'+ym]?.cost, fixed = OH_FIXED.filter(f=>months[ym]?.payroll && f.from<=ym);
+  let alloc = 0; const exact = !!st && mapping.overheadSites.some(c=>st[c]);
+  if(exact) for(const code of mapping.overheadSites) for(const [e,c] of Object.entries(st[code]||{})){ const r = OH_RULES[e]; if(r){ byBranch[r[0]] = (byBranch[r[0]]||0) + c*r[1]; alloc += c*r[1]; } }
+  fixed.forEach(f=>byBranch[f.branch] = (byBranch[f.branch]||0) + f.amt);
+  const fx = fixed.reduce((a,f)=>a+f.amt,0);
+  return {byBranch, general: exact ? payOh-alloc : payOh, fixed:fx, total:payOh+fx, exact, pay:payOh};
+}
+// שכר הנהלה של סניף בתקופה: הקצאה ישירה בחודשים עם פירוט, אחרת עלות קבועה + חלק יחסי לפי הכנסות
+function branchOverhead(R, br){
+  const parts = R.parts || [R];
+  return parts.reduce((a,P)=>{ const d = P.oh.byBranch[br]||0; if(P.oh.exact) return a+d; const b = P.branches[br]; return a + d + (P.tot.rev && b ? P.oh.pay*b.rev/P.tot.rev : 0); }, 0);
+}
 function compute(ym){
   const M = months[ym] || {};
   const rev = M.revenue?.clients || {}, hs = M.hours?.sites || {}, pay = M.payroll?.sites || {}, comp = M.components?.sites || null;
@@ -736,6 +755,7 @@ function compute(ym){
   for(const s of Object.values(unSites)){ const x=B(s.branch); x.h+=s.h; x.cost+=s.cost; }
   Object.values(branches).forEach(b=>{ b.gp=b.rev-b.cost-b.mat; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
   const list = Object.values(G);
+  const oh = allocOverhead(ym, overhead); overhead = oh.total;
   const tot = {rev:list.reduce((a,r)=>a+r.rev,0)+Object.values(unClients).reduce((a,c)=>a+c.rev,0),
                cost:list.reduce((a,r)=>a+r.cost,0)+Object.values(unSites).reduce((a,s)=>a+s.cost,0),
                h:list.reduce((a,r)=>a+r.h,0)+Object.values(unSites).reduce((a,s)=>a+s.h,0), overhead, mat:list.reduce((a,r)=>a+r.mat,0)};
@@ -744,7 +764,7 @@ function compute(ym){
   tot.gross = list.reduce((a,r)=>a+(r.gross||0),0) + Object.values(unSites).reduce((a,s)=>a+s.gross,0);
   tot.comp = [...list.map(r=>r.comp||{}), ...Object.values(unSites).map(s=>s.comp)].reduce((a,c)=>addComp(a,c), {});
   tot.ohComp = ohComp; finishComp(tot);
-  return {ym, hasComp:!!comp, groups:list, branches, unSites, unClients, tot, has:{rev:!!M.revenue, hours:!!M.hours, pay:!!M.payroll}};
+  return {ym, hasComp:!!comp, groups:list, branches, unSites, unClients, tot, oh, has:{rev:!!M.revenue, hours:!!M.hours, pay:!!M.payroll}};
 }
 const addComp = (a, c) => { for(const [k,v] of Object.entries(c||{})) a[k]=(a[k]||0)+v; return a; };
 // עלות חוזרת: בלי תשלומים חד-פעמיים (פדיון חופשה לעוזב, מענקים), כולל חלקם בעלויות המעביד
@@ -842,7 +862,9 @@ function computePeriod(yms){
   tot.gp = tot.rev-tot.cost-tot.mat; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-tot.overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
   tot.gross = parts.reduce((a,R)=>a+(R.tot.gross||0),0); tot.comp = parts.reduce((a,R)=>addComp(a,R.tot.comp),{}); tot.ohComp = parts.reduce((a,R)=>addComp(a,R.tot.ohComp),{}); finishComp(tot);
-  return {ym:yms[yms.length-1], yms, parts, groups, branches, unSites, unClients, tot, hasComp:parts.every(R=>R.hasComp),
+  const oh = {byBranch:{}, general:0, fixed:0, total:0, exact:parts.every(R=>R.oh.exact)};
+  for(const R of parts){ for(const [b,v] of Object.entries(R.oh.byBranch)) oh.byBranch[b]=(oh.byBranch[b]||0)+v; oh.general+=R.oh.general; oh.fixed+=R.oh.fixed; oh.total+=R.oh.total; }
+  return {ym:yms[yms.length-1], yms, parts, groups, branches, unSites, unClients, tot, oh, hasComp:parts.every(R=>R.hasComp),
           has:{rev:parts.every(R=>R.has.rev), hours:parts.every(R=>R.has.hours), pay:parts.every(R=>R.has.pay)}};
 }
 function periodGaps(per){
@@ -1002,8 +1024,8 @@ function render(){
 function scopeR(R, br){
   if(!R || !br) return R;
   const b = R.branches[br] || {name:br, rev:0, h:0, cost:0};
-  const share = R.tot.rev ? b.rev/R.tot.rev : 0, overhead = R.tot.overhead*share;
-  const tot = {rev:b.rev, h:b.h, cost:b.cost, mat:b.mat||0, gp:b.rev-b.cost-(b.mat||0), overhead, overheadShare:share};
+  const share = R.tot.rev ? b.rev/R.tot.rev : 0, overhead = branchOverhead(R, br);
+  const tot = {rev:b.rev, h:b.h, cost:b.cost, mat:b.mat||0, gp:b.rev-b.cost-(b.mat||0), overhead, overheadShare:share, ohExact:(R.parts||[R]).every(P=>P.oh.exact), ohGeneral:R.oh.general};
   tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
   return {...R, groups:R.groups.filter(g=>g.branch===br), branches:{[br]:{...b, gp:tot.gp, margin:tot.margin, revH:tot.revH, costH:tot.costH}},
@@ -1023,20 +1045,21 @@ function renderOverview(v){
   const allBr = branchNames(), brNames = br ? [br] : allBr;
   const color = b => ['--s1','--s2','--s3'][allBr.indexOf(b)] || '--muted';
   const gaps = periodGaps(per);
-  const ohLabel = br ? 'שכר הנהלה (חלק יחסי)' : 'שכר הנהלה';
+  const ohLabel = br ? (T.ohExact ? 'הנהלת הסניף' : 'שכר הנהלה (חלק יחסי)') : 'שכר הנהלה';
+  // פירוט שכר ההנהלה בתצוגת הארגון: הנהלת כל סניף והנהלה כללית
+  const ohRows = !br && R.oh?.exact ? [...allBr.filter(b=>R.oh.byBranch[b]).map(b=>[`הנהלת ${b}`, R.oh.byBranch[b]]), ['הנהלה כללית (לא משויכת)', R.oh.general]] : [];
   const hasMat = T.mat>0, mc = v => hasMat ? `<td class="n">${v}</td>` : '';
   const chartMonths = per.months.length>1 ? per.months : monthList();
   v.innerHTML = `<div class="stack">
     ${gaps.length?`<div class="panel" style="background:var(--warn-soft);border-color:transparent"><b>החישוב ל${per.label} חלקי.</b> ${gaps.join(' · ')}.</div>`:''}
-    ${br?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(br)} בלבד.</b> הכנסות, שעות ועלות מעביד של אתרי הסניף; לקוח שעובד בכמה סניפים נספר לפי החלק שלו בכל סניף. שכר ההנהלה מוקצה לסניף לפי חלקו בהכנסות (${pct(T.overheadShare)}). <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
+    ${br?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(br)} בלבד.</b> הכנסות, שעות ועלות מעביד של אתרי הסניף; לקוח שעובד בכמה סניפים נספר לפי החלק שלו בכל סניף. ${T.ohExact ? `הנהלת הסניף: עלות עובדי ההנהלה שמשויכים לסניף${OH_FIXED.some(f=>f.branch===br)?` ו${OH_FIXED.filter(f=>f.branch===br).map(f=>`${f.label} (${money(f.amt)} בחודש)`).join(', ')}`:''}. הנהלה כללית (${money(T.ohGeneral)}) לא מוקצית לסניפים.` : `שכר ההנהלה מוקצה לסניף לפי חלקו בהכנסות (${pct(T.overheadShare)}), כי לחלק מהחודשים אין פירוט שכר לפי עובד; להקצאה המדויקת יש להעלות מחדש את דוח השכר של החודשים האלה.`} <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
     <div class="kpis">
       ${kpi('הכנסות (לפני מע״מ)', moneyC(T.rev), d(T.rev, P?.tot.rev))}
       ${kpi('עלות מעביד באתרים', moneyC(T.cost), `${hrs(T.h)} שעות · ${perH(T.costH)} לשעה${hasMat?` · חומרי ניקיון ${moneyC(T.mat)}`:''}`)}
       ${kpi('רווח גולמי', moneyC(T.gp), `שיעור ${pct(T.margin)} ${d(T.margin, P?.tot.margin, 'up', true)}`)}
       ${kpi('אחרי שכר הנהלה', moneyC(T.net), `${ohLabel} ${moneyC(T.overhead)} · שיעור ${pct(T.netMargin)}`)}
     </div>
-    <div class="grid2">
-      <div class="stack">
+    <div class="stack">
         <section class="panel">
           <div class="panel-head"><h2>${br?`רווחיות ${esc(br)}`:'רווחיות לפי סניף'}</h2><span class="small muted">${per.label}</span></div>
           <div class="tbl-wrap"><table>
@@ -1045,21 +1068,21 @@ function renderOverview(v){
               return `<tr class="clickable" data-branch-go="${esc(b.name)}"><td class="first">${chartMonths.length>1?`<span class="legend" style="margin:0;display:inline"><i style="background:var(${color(b.name)})"></i></span>`:''}${esc(b.name)}</td><td class="n">${money(b.rev)}</td><td class="n">${hrs(b.h)}</td><td class="n">${money(b.cost)}</td>${mc(money(b.mat||0))}<td class="n">${money(b.gp)}</td><td class="n">${marginPill(b.margin, b.rev)}</td><td class="n">${perH(b.revH)}</td><td class="n">${perH(b.costH)}</td>
               ${P?`<td class="n">${pb&&isFinite(pb.margin)&&isFinite(b.margin)?`<span class="delta ${b.margin>=pb.margin?'good':'bad'}">${ltr((b.margin>=pb.margin?'+':'−')+Math.abs((b.margin-pb.margin)*100).toFixed(1)+' נק׳')}</span>`:'—'}</td>`:''}</tr>`;}).join('')}
             <tr class="total"><td class="first">סה״כ אתרים</td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td>${mc(money(T.mat))}<td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td>${P?'<td></td>':''}</tr>
+            ${ohRows.map(([l,v])=>`<tr><td class="first small muted">${esc(l)}</td><td></td><td></td><td class="n small muted">${money(v)}</td>${mc('')}<td></td><td></td><td></td><td></td>${P?'<td></td>':''}</tr>`).join('')}
             <tr><td class="first">${ohLabel}</td><td></td><td></td><td class="n">${money(T.overhead)}</td>${mc('')}<td class="n">${money(-T.overhead)}</td><td></td><td></td><td></td>${P?'<td></td>':''}</tr>
             <tr class="total"><td class="first">רווח אחרי שכר הנהלה</td><td class="n">${money(T.rev)}</td><td></td><td class="n">${money(T.cost+T.overhead)}</td>${mc(money(T.mat))}<td class="n">${money(T.net)}</td><td class="n">${pct(T.netMargin)}</td><td></td><td></td>${P?'<td></td>':''}</tr>
             </tbody></table></div>
           <p class="hint" style="margin-top:8px">לחיצה על ${br?'הסניף':'סניף'} פותחת את רשימת הלקוחות שלו.</p>
         </section>
         <section class="panel">
+          <div class="panel-head"><h2>תובנות</h2><span class="small muted">${per.label}</span></div>
+          <div class="insights">${insights(R, P, per).map(i=>`<div class="insight"><span class="pill ${i.level}">${{good:'▲ חיובי',bad:'▼ דורש טיפול',warn:'● לבדיקה',info:'● מידע'}[i.level]}</span><h3>${i.title}</h3><p>${i.text}</p></div>`).join('')}</div>
+        </section>
+        <section class="panel">
           <div class="panel-head"><h2>${chartMonths.length>1?'שיעור רווח גולמי לפי חודש':'הכנסות מול עלות מעביד לפי סניף'}</h2></div>
           <div class="legend">${chartMonths.length>1 ? brNames.map(b=>`<span><i class="line" style="background:var(${color(b)})"></i>${esc(b)}</span>`).join('') : '<span><i style="background:var(--s1)"></i>הכנסות</span><span><i style="background:var(--s2)"></i>עלות מעביד</span>'}</div>
           <div class="chart-box"><canvas id="ch-main" aria-label="גרף רווחיות לפי סניף"></canvas></div>
         </section>
-      </div>
-      <section class="panel">
-        <div class="panel-head"><h2>תובנות</h2><span class="small muted">${per.label}</span></div>
-        <div class="insights">${insights(R, P, per).map(i=>`<div class="insight"><span class="pill ${i.level}">${{good:'▲ חיובי',bad:'▼ דורש טיפול',warn:'● לבדיקה',info:'● מידע'}[i.level]}</span><h3>${i.title}</h3><p>${i.text}</p></div>`).join('')}</div>
-      </section>
     </div>
     ${br ? '' : branchInsightsPanel(R, P, per, allBr, color)}
     ${P?driversPanel(R, P, per, !br):''}
