@@ -1056,9 +1056,11 @@ function renderOverview(v){
     ${br?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(br)} בלבד.</b> הכנסות, שעות ועלות מעביד של אתרי הסניף; לקוח שעובד בכמה סניפים נספר לפי החלק שלו בכל סניף. ${T.ohExact ? `הנהלת הסניף: עלות עובדי ההנהלה שמשויכים לסניף${OH_FIXED.some(f=>f.branch===br)?` ו${OH_FIXED.filter(f=>f.branch===br).map(f=>`${f.label} (${money(f.amt)} בחודש)`).join(', ')}`:''}. הנהלה כללית (${money(T.ohGeneral)}) לא מוקצית לסניפים.` : `שכר ההנהלה מוקצה לסניף לפי חלקו בהכנסות (${pct(T.overheadShare)}), כי לחלק מהחודשים אין פירוט שכר לפי עובד; להקצאה המדויקת יש להעלות מחדש את דוח השכר של החודשים האלה.`} <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
     <div class="kpis">
       ${kpi('הכנסות (לפני מע״מ)', moneyC(T.rev), d(T.rev, P?.tot.rev))}
-      ${kpi('עלות מעביד באתרים', moneyC(T.cost), `${hrs(T.h)} שעות · ${perH(T.costH)} לשעה${hasMat?` · חומרי ניקיון ${moneyC(T.mat)}`:''}`)}
+      ${kpi('עלות מעביד באתרים', moneyC(T.cost), `${perH(T.costH)} לשעה${hasMat?` · חומרי ניקיון ${moneyC(T.mat)}`:''}`)}
       ${kpi('רווח גולמי', moneyC(T.gp), `שיעור ${pct(T.margin)} ${d(T.margin, P?.tot.margin, 'up', true)}`)}
-      ${kpi('אחרי שכר הנהלה', moneyC(T.net), `${ohLabel} ${moneyC(T.overhead)} · שיעור ${pct(T.netMargin)}`)}
+      ${per.months.length>1
+        ? kpi('שעות עבודה לחודש (ממוצע)', hrs(T.h/per.months.length), `סה״כ ${hrs(T.h)} שעות ב-${per.months.length} חודשים ${d(T.h/per.months.length, P ? P.tot.h/per.prev.months.length : null)}`)
+        : kpi('שעות עבודה בחודש', hrs(T.h), d(T.h, P?.tot.h))}
     </div>
     <div class="stack">
         <section class="panel">
