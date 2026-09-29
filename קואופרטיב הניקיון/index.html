@@ -238,7 +238,7 @@ const CLO = 'ביגוד';   // עלות ביגוד לסניף בחודש: manual
 // נכנס אחרי שכר ההנהלה, ומוריד מהרווח התפעולי. החלק הכללי לא מוקצה לסניפים.
 const GA_ORG = 'כללי (ארגון)', GA_LINES = ['ביטוח','הנהלת חשבונות','משרדיות'];
 let ga = {lines:[...GA_LINES], byMonth:{}};
-const loadGA = d => ({lines: d?.lines?.length ? [...d.lines] : [...GA_LINES], byMonth:{...(d?.byMonth||{})}});
+const loadGA = d => ({lines: d?.lines?.length ? [...d.lines] : [...GA_LINES], byMonth:JSON.parse(JSON.stringify(d?.byMonth||{}))});   // עותק עמוק: נתונים מהמאגר מגיעים קפואים ולא ניתנים לשינוי
 // במאגר: מסמך לכל חודש ga/YYYY-MM ({units}) ומסמך ga/lines. היחידה הכללית נשמרת בשם 'org'. settings/ga הישן נקרא רק לשם המשכיות.
 const GA_ORG_KEY = 'org';
 let gaLegacy = loadGA(null), gaDocs = {};
@@ -291,6 +291,8 @@ function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; cle
 
 /* ============================================================ אחסון
    בעמוד שפורסם: מאגר משותף (db). בפתיחה מקומית של הקובץ: אחסון הדפדפן. */
+// נתונים שמגיעים מהמאגר קפואים (אי אפשר לשנות אותם); עובדים תמיד על עותק
+const thaw = x => x==null ? x : JSON.parse(JSON.stringify(x));
 const store = {
   db:null, mode:'local', uid:null,
   async init(){
@@ -299,14 +301,14 @@ const store = {
     if(this.db){
       // נתוני עובדים (שמות ושכר) נשמרים רק באזור הפרטי של הצופה, שאף אחד אחר לא רואה
       try{ const u = await window.claude.use('user'); this.uid = (await u?.id()) || null; }catch(e){ this.uid = null; }
-      if(this.uid) this.db.collection('data/users/'+this.uid).onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=d.data()); priv=m; render(); }, e=>this.fail(e));
-      this.db.doc('settings/mapping').onSnapshot(s=>{ if(s.exists){ mapping = normalizeMapping(s.data()); render(); } }, e=>this.fail(e));
-      this.db.collection('months').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=d.data()); months=m; render(); }, e=>this.fail(e));
-      this.db.doc('settings/plan').onSnapshot(s=>{ plans = loadPlans(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
-      this.db.doc('settings/manual').onSnapshot(s=>{ manual = loadManual(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
-      this.db.doc('settings/materials').onSnapshot(s=>{ materials = loadMaterials(s.exists ? s.data() : null); render(); }, e=>this.fail(e));
-      this.db.doc('settings/ga').onSnapshot(s=>{ gaLegacy = loadGA(s.exists ? s.data() : null); mergeGA(); render(); }, e=>this.fail(e));
-      this.db.collection('ga').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=d.data()); gaDocs = m; mergeGA(); render(); }, e=>this.fail(e));
+      if(this.uid) this.db.collection('data/users/'+this.uid).onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=thaw(d.data())); priv=m; render(); }, e=>this.fail(e));
+      this.db.doc('settings/mapping').onSnapshot(s=>{ if(s.exists){ mapping = normalizeMapping(thaw(s.data())); render(); } }, e=>this.fail(e));
+      this.db.collection('months').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=thaw(d.data())); months=m; render(); }, e=>this.fail(e));
+      this.db.doc('settings/plan').onSnapshot(s=>{ plans = loadPlans(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
+      this.db.doc('settings/manual').onSnapshot(s=>{ manual = loadManual(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
+      this.db.doc('settings/materials').onSnapshot(s=>{ materials = loadMaterials(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
+      this.db.doc('settings/ga').onSnapshot(s=>{ gaLegacy = loadGA(s.exists ? thaw(s.data()) : null); mergeGA(); render(); }, e=>this.fail(e));
+      this.db.collection('ga').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=thaw(d.data())); gaDocs = m; mergeGA(); render(); }, e=>this.fail(e));
     } else {
       try{ mapping = normalizeMapping(JSON.parse(localStorage.getItem('coop-mapping')||'null')||{}); months = JSON.parse(localStorage.getItem('coop-months')||'{}');
            plans = loadPlans(JSON.parse(localStorage.getItem('coop-plan')||'null')); manual = loadManual(JSON.parse(localStorage.getItem('coop-manual')||'null'));
