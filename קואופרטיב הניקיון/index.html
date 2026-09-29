@@ -1727,7 +1727,7 @@ function staffPanel(codes, yms, title){
 /* ---------- עלות שעה והתייעלות ---------- */
 const perHourRows = (T) => {   // מבנה עלות השעה: כל רכיב ברוטו לשעת עבודה, ועלויות המעביד מעל הברוטו
   const rows = BUCKETS.map(([k,n])=>({k, n, v: T.h ? (T.comp?.[k]||0)/T.h : NaN})).filter(r=>r.k!=='other' || r.v);
-  rows.push({k:'oncost', n:'עלויות מעביד (ב"ל, פנסיה, פיצויים, השתלמות)', v: T.h ? (T.cost-(T.gross||0))/T.h : NaN});
+  rows.push({k:'oncost', n:'ביטוח לאומי, פנסיה, פיצויים והשתלמות', v: T.h ? (T.cost-(T.gross||0))/T.h : NaN});
   return rows;
 };
 // סיכום של סניף אחד בתקופה, כולל רכיבי שכר: מהאתרים של הסניף בכל חודש (לעלות מעביד לשעה ולמבנה העלות)
