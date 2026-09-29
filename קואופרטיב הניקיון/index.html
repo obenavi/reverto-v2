@@ -941,8 +941,13 @@ function branchActual(ym, branch){
   return {ym, h:b.h, revenue:b.rev, payroll:b.cost, mat, clo, manual:man, manTotal, manEntered, tc, gm:b.rev-tc, workers};
 }
 function planFor(branches, yms){
-  const P = {hours:0, revenue:0, tc:0, gm:0, workers:0, costs:{}};
+  const P = {hours:0, revenue:0, tc:0, gm:0, workers:0, costs:{}, payProxy:0};
   for(const br of branches){ let w=0, n=0;
+    if(!plans[br]?.months){   // סניף בלי תכנית (בחתך כל הארגון): התכנון = הביצוע
+      for(const m of yms){ const a = branchActual(m, br); if(!a) continue; n++;
+        P.hours+=a.h; P.revenue+=a.revenue; P.tc+=a.tc; P.gm+=a.gm; w+=a.workers||0; P.payProxy+=a.payroll+a.mat;
+        if(a.clo) P.costs[CLO] = (P.costs[CLO]||0) + a.clo; }
+      P.workers += n ? w/n : 0; continue; }
     for(const m of yms){ const x = plans[br]?.months?.[m]; if(!x) continue; n++;
       for(const k of ['hours','revenue','tc','gm']) P[k] += +x[k]||0; w += +x.workers||0;
       for(const [l,v] of Object.entries(x.costs||{})) P.costs[l] = (P.costs[l]||0) + (+v||0); }
@@ -965,28 +970,31 @@ function renderPlan(v){
   const brs = Object.keys(plans).filter(b=>plans[b]?.months).sort();
   if(!brs.length){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין לא נקלטה תכנית עסקית</h2><p>יש להעלות את קובץ התכנית בלשונית "קליטת נתונים". נקרא גיליון רווח והפסד עם שורת חודשים 1–12 ושורות שעות, עובדות, הכנסות, עלויות ו-GM.</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
   if(ui.planBranch!=='__all' && !brs.includes(ui.planBranch)) ui.planBranch = brs[0];
-  const sel = ui.planBranch==='__all' ? brs : [ui.planBranch], single = sel.length===1 ? plans[sel[0]] : null;
-  const per = period(), all = per.all.filter(m=>sel.some(b=>plans[b].months[m]));
+  // כל הארגון: כל הסניפים; לסניף בלי תכנית (למשל נגב) התכנון = הביצוע, כדי שהסה״כ ישקף את הארגון כולו
+  const proxy = ui.planBranch==='__all' ? branchNames().filter(b=>b!==NO_BRANCH && !brs.includes(b)) : [];
+  const sel = ui.planBranch==='__all' ? [...brs, ...proxy] : [ui.planBranch], single = sel.length===1 ? plans[sel[0]] : null;
+  const per = period(), all = per.all.filter(m=>brs.some(b=>sel.includes(b) && plans[b].months[m]));
   const act = all.filter(m=>months[m]);
   const P = planFor(sel, act), PA = planFor(sel, all), A = actualFor(sel, act);
-  const missingManual = act.filter(m=>sel.some(b=>!branchActual(m, b).manEntered));
+  const missingManual = act.filter(m=>sel.some(b=>!proxy.includes(b) && !branchActual(m, b).manEntered));
   const gap = (a,p,kind) => { if(a==null || !p) return '—'; const d=a-p, q=d/Math.abs(p); const cls = kind==='neutral' ? 'info' : (d>=0?'good':'bad');
     return `<span class="pill ${Math.abs(q)<0.02?'info':cls}">${d>=0?'▲':'▼'} ${pct(Math.abs(q))}</span>`; };
   const card = (label, a, p, fmt, kind, sub) => `<div class="kpi"><span class="label">${label}</span><span class="value num">${a==null?'—':fmt(a)}</span>
     <span class="sub">תכנון ${fmt(p)} ${gap(a,p,kind)}${sub?` · ${sub}`:''}</span></div>`;
   const gmP = P.revenue? P.gm/P.revenue : NaN, gmA = A.revenue? A.gm/A.revenue : NaN;
   const cell = (a,p,fmt,kind) => `<td class="n">${p==null?'—':fmt(p)}</td><td class="n">${a==null?'—':fmt(a)}</td><td class="n">${a==null||p==null?'—':gap(a,p,kind)}</td>`;
-  const monthRow = m => { const pp = planFor(sel,[m]), aa = months[m] ? actualFor(sel,[m]) : null, noMan = aa && sel.some(b=>!branchActual(m,b).manEntered);
+  const monthRow = m => { const pp = planFor(sel,[m]), aa = months[m] ? actualFor(sel,[m]) : null, noMan = aa && sel.some(b=>!proxy.includes(b) && !branchActual(m,b).manEntered);
     return `<tr><td class="first">${monthName(m)}${noMan?' <span class="pill warn">ללא עלויות ידניות</span>':''}</td>${cell(aa?.h,pp.hours,hrs,'up')}${cell(aa?.revenue,pp.revenue,money,'up')}${cell(aa?.workers,pp.workers,x=>ltr(nf0.format(x)),'neutral')}${cell(aa?.gm,pp.gm,money,'up')}
       <td class="n">${pct(pp.revenue?pp.gm/pp.revenue:NaN)}</td><td class="n">${aa?marginPill(aa.revenue?aa.gm/aa.revenue:NaN, aa.revenue):'—'}</td></tr>`; };
   // עלות המכר: שורות שכר (לפי כל תכנית) מול עלות המעביד, ושורות ידניות
   const payLinesAll = [...new Set(sel.flatMap(b=>payrollLinesOf(plans[b])))], manLinesAll = [...new Set(sel.flatMap(b=>manualLinesOf(plans[b])))];
-  const noneAll = [...new Set(sel.flatMap(b=>plans[b].costLines.filter(l=>plans[b].lineSource?.[l]==='none')))];
-  const planPay = sel.reduce((a,b)=>a+payrollLinesOf(plans[b]).reduce((x,l)=>x+act.reduce((y,m)=>y+(+plans[b].months[m]?.costs?.[l]||0),0),0),0);
-  const inPlanCost = l => sel.some(b=>plans[b].costLines.includes(l));
+  const noneAll = [...new Set([...sel.flatMap(b=>(plans[b]?.costLines||[]).filter(l=>plans[b].lineSource?.[l]==='none')), ...(P.costs[CLO] && !manLinesAll.includes(CLO) ? [CLO] : [])])];
+  const planPay = P.payProxy + sel.reduce((a,b)=>a+payrollLinesOf(plans[b]).reduce((x,l)=>x+act.reduce((y,m)=>y+(+plans[b].months[m]?.costs?.[l]||0),0),0),0);
+  const inPlanCost = l => sel.some(b=>plans[b]?.costLines.includes(l));
   v.innerHTML = `<div class="stack">
     <div class="panel" style="background:var(--accent-soft);border-color:transparent">
-      <div class="actions"><label class="small"><b>תכנית</b> <select id="plan-view">${brs.map(b=>`<option value="${esc(b)}" ${sel.length===1&&sel[0]===b?'selected':''}>${esc(b)}</option>`).join('')}${brs.length>1?`<option value="__all" ${ui.planBranch==='__all'?'selected':''}>כל הסניפים עם תכנית (${brs.length})</option>`:''}</select></label>
+      <div class="actions"><label class="small"><b>תכנית</b> <select id="plan-view">${brs.map(b=>`<option value="${esc(b)}" ${sel.length===1&&sel[0]===b?'selected':''}>${esc(b)}</option>`).join('')}${brs.length>1?`<option value="__all" ${ui.planBranch==='__all'?'selected':''}>כל הארגון</option>`:''}</select></label>
+      ${proxy.length?`<span class="small muted">ל${esc(proxy.join(' ול'))} אין תכנית, ולכן התכנון שלו בחתך הארגון שווה לביצוע (פער 0).</span>`:''}
       ${single?`<span class="small muted">תכנית ${single.year} מהגיליון "${esc(single.sheet)}" בקובץ ${esc(single.file)}.</span>
         <details class="small"><summary>שינוי שיוך התכנית לסניף</summary>
           <span class="actions" style="margin-top:6px">העברת התכנית של ${esc(sel[0])} ל: <select id="plan-branch">${branchNames().filter(b=>b!==sel[0] && b!==NO_BRANCH && !plans[b]).map(b=>`<option>${esc(b)}</option>`).join('')}</select>
