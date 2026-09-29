@@ -1124,6 +1124,9 @@ function renderOverview(v){
   // שכר הנהלה לכל סניף בטבלה; מה שלא הוקצה לאף סניף מוצג בשורת "הנהלה כללית"
   const bOh = b => br ? T.overhead : branchOverhead(R, b.name);
   const genOh = br ? 0 : T.overhead - brs.reduce((a,b)=>a+bOh(b),0);
+  // הכנסות ועלויות שלא שויכו לאף סניף (לקוחות שעדיין לא הותאמו): שורה משלהן, כדי שהשורות יסתכמו לסה״כ
+  const unm = br ? null : ['rev','h','cost','mat','clo','gp'].reduce((o,k)=>(o[k]=(T[k]||0)-brs.reduce((a,b)=>a+(b[k]||0),0),o),{});
+  const hasUnm = unm && (Math.abs(unm.rev)>0.5 || Math.abs(unm.cost)>0.5);
   const hasMat = T.mat>0, hasClo = T.clo>0;
   // הנהלה וכלליות, והסה״כ אחרי שכר הנהלה והנהלה וכלליות ושיעורו
   const gc = (g, op, rev) => `<td class="n">${g}</td><td class="n">${op}</td><td class="n">${rev}</td>`;
@@ -1150,6 +1153,7 @@ function renderOverview(v){
               return `<tr class="clickable" data-branch-go="${esc(b.name)}"><td class="first">${chartMonths.length>1?`<span class="legend" style="margin:0;display:inline"><i style="background:var(${color(b.name)})"></i></span>`:''}${esc(b.name)}</td><td class="n">${money(b.rev)}</td><td class="n">${hrs(b.h)}</td><td class="n">${money(b.cost)}</td>${mc(money(b.mat||0), money(b.clo||0))}<td class="n">${money(b.gp)}</td><td class="n">${marginPill(b.margin, b.rev)}</td>
               <td class="n">${money(o)}</td>${gc(money(g), money(op), marginPill(b.rev?op/b.rev:NaN, b.rev))}<td class="n">${perH(b.revH)}</td><td class="n">${perH(b.costH)}</td>
               ${P?`<td class="n">${pb&&isFinite(pb.margin)&&isFinite(b.margin)?`<span class="delta ${b.margin>=pb.margin?'good':'bad'}">${ltr((b.margin>=pb.margin?'+':'−')+Math.abs((b.margin-pb.margin)*100).toFixed(1)+' נק׳')}</span>`:'—'}</td>`:''}</tr>`;}).join('')}
+            ${hasUnm?`<tr class="clickable" data-tab="match"><td class="first muted">לקוחות שלא הותאמו <span class="pill warn">להתאמה</span></td><td class="n">${money(unm.rev)}</td><td class="n">${hrs(unm.h)}</td><td class="n">${money(unm.cost)}</td>${mc(money(unm.mat), money(unm.clo))}<td class="n">${money(unm.gp)}</td><td></td><td></td>${gc(money(0), money(unm.gp), '')}<td></td><td></td>${P?'<td></td>':''}</tr>`:''}
             ${genOh>0.5 || T.gaOrg>0?`<tr><td class="first muted">כללי (לא משויך)</td><td></td><td></td><td></td>${mc('')}<td></td><td></td><td class="n">${money(genOh)}</td>${gc(money(T.gaOrg||0), money(-genOh-(T.gaOrg||0)), '')}<td></td><td></td>${P?'<td></td>':''}</tr>`:''}
             <tr class="total"><td class="first">סה״כ</td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td>${mc(money(T.mat), money(T.clo))}<td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${money(T.overhead)}</td>${gc(money(T.ga), money(T.op), pct(T.opMargin))}<td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td>${P?'<td></td>':''}</tr>
             </tbody></table></div>
