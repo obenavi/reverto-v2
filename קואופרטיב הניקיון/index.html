@@ -1061,7 +1061,7 @@ function renderOverview(v){
       ${per.months.length>1
         ? kpi('שעות עבודה לחודש (ממוצע)', hrs(T.h/per.months.length), `סה״כ ${hrs(T.h)} שעות ב-${per.months.length} חודשים ${d(T.h/per.months.length, P ? P.tot.h/per.prev.months.length : null)}`)
         : kpi('שעות עבודה בחודש', hrs(T.h), d(T.h, P?.tot.h))}
-      ${kpi(br ? ohLabel : 'שכר הנהלה', moneyC(T.overhead), `${pct(T.rev?T.overhead/T.rev:NaN)} מההכנסות${!br && R.oh?.exact ? ` · סניפים ${moneyC(T.overhead-R.oh.general)}, כללית ${moneyC(R.oh.general)}` : ''} ${d(T.overhead, P?.tot.overhead, 'down')}`)}
+      ${kpi(br ? ohLabel : 'שכר הנהלה', moneyC(T.overhead), '')}
     </div>
     <div class="stack">
         <section class="panel">
