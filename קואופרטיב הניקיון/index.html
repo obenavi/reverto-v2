@@ -233,6 +233,7 @@ let manual = {};                 // settings/manual: עלויות ידניות �
 // billByMonth: ym -> קבוצה -> חיוב ללקוח על חומרים (כלול בחשבונית ללקוח, ולכן כבר בהכנסות)
 // fixedBill: לקוחות בחיוב חודשי קבוע על חומרים (קבוצה -> ₪). markup: תקורה על חשבונית הספק בחיוב ללקוח (ברירת מחדל 15%)
 let materials = {byMonth:{}, billByMonth:{}, fixedBill:{}, markup:0.15};
+const LEASE = 'ליסינג';   // ליסינג: עלות ישירה של הסניף כמו ביגוד, manual[סניף][חודש]['ליסינג']
 const CLO = 'ביגוד';   // עלות ביגוד לסניף בחודש: manual[סניף][חודש]['ביגוד'], נכנסת לרווח הגולמי של הסניף
 // settings/ga: הנהלה וכלליות (ביטוח, הנהלת חשבונות, משרדיות...). byMonth: ym -> יחידה (סניף או כללי) -> שורה -> ₪.
 // נכנס אחרי שכר ההנהלה, ומוריד מהרווח התפעולי. החלק הכללי לא מוקצה לסניפים.
@@ -799,18 +800,19 @@ function compute(ym){
   for(const s of Object.values(unSites)){ const x=B(s.branch); x.h+=s.h; x.cost+=s.cost; }
   // ביגוד: עלות ישירה של הסניף (הזנה חודשית), נכנסת לרווח הגולמי של הסניף והארגון
   let clo = 0; for(const b of Object.keys(manual)){ const v = +(manual[b]?.[ym]?.[CLO]||0); if(v){ B(b).clo = v; clo += v; } }
+  let lease = 0; for(const b of Object.keys(manual)){ const v = +(manual[b]?.[ym]?.[LEASE]||0); if(v){ B(b).lease = v; lease += v; } }
   // הנהלה וכלליות: של סניף → לסניף; כללי → רק ברמת הארגון
   const gaOrg = gaFor(ym, GA_ORG); let gaT = gaOrg;
   for(const u of Object.keys(ga.byMonth[ym]||{})) if(u!==GA_ORG){ const v = gaFor(ym, u); if(v){ B(u).ga = v; gaT += v; } }
-  Object.values(branches).forEach(b=>{ b.clo ||= 0; b.gp=b.rev-b.cost-b.mat-b.clo; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
+  Object.values(branches).forEach(b=>{ b.clo ||= 0; b.lease ||= 0; b.gp=b.rev-b.cost-b.mat-b.clo-b.lease; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
   const list = Object.values(G);
   const oh = allocOverhead(ym, overhead);
   oh.credit = 0; for(const [b,v] of Object.entries(ohCredit)){ oh.byBranch[b] = (oh.byBranch[b]||0) - v; oh.credit += v; }   // קיזוז משכר ההנהלה של הסניף
   oh.creditBy = ohCredit; oh.total -= oh.credit; overhead = oh.total;
   const tot = {rev:list.reduce((a,r)=>a+r.rev,0)+Object.values(unClients).reduce((a,c)=>a+c.rev,0),
                cost:list.reduce((a,r)=>a+r.cost,0)+Object.values(unSites).reduce((a,s)=>a+s.cost,0),
-               h:list.reduce((a,r)=>a+r.h,0)+Object.values(unSites).reduce((a,s)=>a+s.h,0), overhead, mat:list.reduce((a,r)=>a+r.mat,0), clo, ga:gaT, gaOrg};
-  tot.gp = tot.rev - tot.cost - tot.mat - tot.clo; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp - overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
+               h:list.reduce((a,r)=>a+r.h,0)+Object.values(unSites).reduce((a,s)=>a+s.h,0), overhead, mat:list.reduce((a,r)=>a+r.mat,0), clo, lease, ga:gaT, gaOrg};
+  tot.gp = tot.rev - tot.cost - tot.mat - tot.clo - tot.lease; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp - overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.op = tot.net - tot.ga; tot.opMargin = tot.rev ? tot.op/tot.rev : NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
   tot.gross = list.reduce((a,r)=>a+(r.gross||0),0) + Object.values(unSites).reduce((a,s)=>a+s.gross,0);
@@ -898,7 +900,7 @@ function computePeriod(yms){
       for(const [c,a] of Object.entries(g.clients)) x.clients[c]=(x.clients[c]||0)+a;
       for(const [b,w] of Object.entries(g.branchShare)) x.weight[b]=(x.weight[b]||0)+w*(g.rev+g.h+1);
     }
-    for(const b of Object.values(R.branches)){ const y = branches[b.name] ||= {name:b.name, rev:0, h:0, cost:0, mat:0, clo:0, ga:0}; y.rev+=b.rev; y.h+=b.h; y.cost+=b.cost; y.mat+=b.mat||0; y.clo+=b.clo||0; y.ga+=b.ga||0; }
+    for(const b of Object.values(R.branches)){ const y = branches[b.name] ||= {name:b.name, rev:0, h:0, cost:0, mat:0, clo:0, lease:0, ga:0}; y.rev+=b.rev; y.h+=b.h; y.cost+=b.cost; y.mat+=b.mat||0; y.clo+=b.clo||0; y.lease+=b.lease||0; y.ga+=b.ga||0; }
     for(const st of Object.values(R.unSites)){ const y = unSites[st.code] ||= {...st, h:0, cost:0}; y.h+=st.h; y.cost+=st.cost; }
     for(const c of Object.values(R.unClients)){ const y = unClients[c.name] ||= {name:c.name, rev:0}; y.rev+=c.rev; }
   }
@@ -909,9 +911,9 @@ function computePeriod(yms){
     r.branchList = w.map(x=>x[0]); r.branch = w[0][0];
     r.gp = r.rev-r.cost-r.mat; r.margin = r.rev? r.gp/r.rev : NaN; r.revH = r.h? r.rev/r.h : NaN; r.costH = r.h? r.cost/r.h : NaN; r.flags = flagsOf(r); finishComp(r);
   }
-  Object.values(branches).forEach(b=>{ b.gp=b.rev-b.cost-b.mat-b.clo; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
-  const tot = ['rev','cost','h','overhead','mat','clo','ga','gaOrg'].reduce((o,k)=>(o[k]=parts.reduce((a,R)=>a+(R.tot[k]||0),0),o),{});
-  tot.gp = tot.rev-tot.cost-tot.mat-tot.clo; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-tot.overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
+  Object.values(branches).forEach(b=>{ b.gp=b.rev-b.cost-b.mat-b.clo-b.lease; b.margin=b.rev?b.gp/b.rev:NaN; b.revH=b.h?b.rev/b.h:NaN; b.costH=b.h?b.cost/b.h:NaN; });
+  const tot = ['rev','cost','h','overhead','mat','clo','lease','ga','gaOrg'].reduce((o,k)=>(o[k]=parts.reduce((a,R)=>a+(R.tot[k]||0),0),o),{});
+  tot.gp = tot.rev-tot.cost-tot.mat-tot.clo-tot.lease; tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-tot.overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.op = tot.net - tot.ga; tot.opMargin = tot.rev ? tot.op/tot.rev : NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
   tot.gross = parts.reduce((a,R)=>a+(R.tot.gross||0),0); tot.comp = parts.reduce((a,R)=>addComp(a,R.tot.comp),{}); tot.ohComp = parts.reduce((a,R)=>addComp(a,R.tot.ohComp),{}); finishComp(tot);
@@ -944,8 +946,8 @@ function branchActual(ym, branch){
   const man = manual[branch]?.[ym] || {}, manLines = manualLinesOf(P);
   const manTotal = manLines.reduce((a,l)=>a+(+man[l]||0),0), manEntered = manLines.some(l=>man[l]!=null && man[l]!=='');
   // חומרי ניקיון: סכום הלקוחות של הסניף. ביגוד: מההזנה החודשית (אם הוא לא כבר בשורות הידניות)
-  const mat = b.mat || 0, clo = manLines.includes(CLO) ? 0 : +(man[CLO]||0), tc = b.cost + manTotal + mat + clo;
-  return {ym, h:b.h, revenue:b.rev, payroll:b.cost, mat, clo, manual:man, manTotal, manEntered, tc, gm:b.rev-tc, workers};
+  const mat = b.mat || 0, clo = manLines.includes(CLO) ? 0 : +(man[CLO]||0), lease = manLines.includes(LEASE) ? 0 : +(man[LEASE]||0), tc = b.cost + manTotal + mat + clo + lease;
+  return {ym, h:b.h, revenue:b.rev, payroll:b.cost, mat, clo, lease, manual:man, manTotal, manEntered, tc, gm:b.rev-tc, workers};
 }
 function planFor(branches, yms){
   const P = {hours:0, revenue:0, tc:0, gm:0, workers:0, costs:{}, payProxy:0};
@@ -953,7 +955,8 @@ function planFor(branches, yms){
     if(!plans[br]?.months){   // סניף בלי תכנית (בחתך כל הארגון): התכנון = הביצוע
       for(const m of yms){ const a = branchActual(m, br); if(!a) continue; n++;
         P.hours+=a.h; P.revenue+=a.revenue; P.tc+=a.tc; P.gm+=a.gm; w+=a.workers||0; P.payProxy+=a.payroll+a.mat;
-        if(a.clo) P.costs[CLO] = (P.costs[CLO]||0) + a.clo; }
+        if(a.clo) P.costs[CLO] = (P.costs[CLO]||0) + a.clo;
+        if(a.lease) P.costs[LEASE] = (P.costs[LEASE]||0) + a.lease; }
       P.workers += n ? w/n : 0; continue; }
     for(const m of yms){ const x = plans[br]?.months?.[m]; if(!x) continue; n++;
       for(const k of ['hours','revenue','tc','gm']) P[k] += +x[k]||0; w += +x.workers||0;
@@ -962,11 +965,11 @@ function planFor(branches, yms){
   return P;
 }
 function actualFor(branches, yms){
-  const A = {h:0, revenue:0, payroll:0, mat:0, clo:0, manTotal:0, tc:0, gm:0, workers:null, manual:{}};
+  const A = {h:0, revenue:0, payroll:0, mat:0, clo:0, lease:0, manTotal:0, tc:0, gm:0, workers:null, manual:{}};
   let wSum = 0, wAny = false;
   for(const br of branches){
     const rows = yms.map(m=>branchActual(m, br)).filter(Boolean);
-    for(const r of rows){ A.h+=r.h; A.revenue+=r.revenue; A.payroll+=r.payroll; A.mat+=r.mat; A.clo+=r.clo; A.manTotal+=r.manTotal; A.tc+=r.tc; A.gm+=r.gm;
+    for(const r of rows){ A.h+=r.h; A.revenue+=r.revenue; A.payroll+=r.payroll; A.mat+=r.mat; A.clo+=r.clo; A.lease+=r.lease; A.manTotal+=r.manTotal; A.tc+=r.tc; A.gm+=r.gm;
       for(const [l,v] of Object.entries(r.manual)) A.manual[l]=(A.manual[l]||0)+(+v||0); }
     const w = rows.filter(r=>r.workers!=null); if(w.length){ wAny = true; wSum += w.reduce((a,r)=>a+r.workers,0)/w.length; }
   }
@@ -995,7 +998,7 @@ function renderPlan(v){
       <td class="n">${pct(pp.revenue?pp.gm/pp.revenue:NaN)}</td><td class="n">${aa?marginPill(aa.revenue?aa.gm/aa.revenue:NaN, aa.revenue):'—'}</td></tr>`; };
   // עלות המכר: שורות שכר (לפי כל תכנית) מול עלות המעביד, ושורות ידניות
   const payLinesAll = [...new Set(sel.flatMap(b=>payrollLinesOf(plans[b])))], manLinesAll = [...new Set(sel.flatMap(b=>manualLinesOf(plans[b])))];
-  const noneAll = [...new Set([...sel.flatMap(b=>(plans[b]?.costLines||[]).filter(l=>plans[b].lineSource?.[l]==='none')), ...(P.costs[CLO] && !manLinesAll.includes(CLO) ? [CLO] : [])])];
+  const noneAll = [...new Set([...sel.flatMap(b=>(plans[b]?.costLines||[]).filter(l=>plans[b].lineSource?.[l]==='none')), ...(P.costs[CLO] && !manLinesAll.includes(CLO) ? [CLO] : []), ...((A.lease || P.costs[LEASE]) && !manLinesAll.includes(LEASE) ? [LEASE] : [])])];
   const planPay = P.payProxy + sel.reduce((a,b)=>a+payrollLinesOf(plans[b]).reduce((x,l)=>x+act.reduce((y,m)=>y+(+plans[b].months[m]?.costs?.[l]||0),0),0),0);
   const inPlanCost = l => sel.some(b=>plans[b]?.costLines.includes(l));
   v.innerHTML = `<div class="stack">
@@ -1032,8 +1035,8 @@ function renderPlan(v){
       ${act.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">שורה</th><th class="n">תכנון</th><th class="n">ביצוע</th><th class="n">פער</th><th>מקור הביצוע</th></tr></thead><tbody>
         <tr><td class="first">עלות מעביד: ${esc(payLinesAll.join(', '))}${A.mat?` <span class="muted small">(כולל חומרי ניקיון ${money(A.mat)})</span>`:''}</td><td class="n">${money(planPay)}</td><td class="n">${money(A.payroll+A.mat)}</td><td class="n">${money(A.payroll+A.mat-planPay)}</td><td class="small muted">דוח השכר${A.mat?' + חשבוניות חומרים':''}</td></tr>
         ${manLinesAll.filter(l=>l!=='חומרי ניקיון').map(l=>`<tr><td class="first">${esc(l)}${inPlanCost(l)?'':' <span class="muted small">(לא בעלות המכר של התכנית)</span>'}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">${money(A.manual[l]||0)}</td><td class="n">${money((A.manual[l]||0)-(P.costs[l]||0))}</td><td class="small muted">הזנה ידנית</td></tr>`).join('')}
-        ${noneAll.map(l=>l===CLO
-          ? `<tr><td class="first">${esc(l)}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">${money(A.clo)}</td><td class="n">${money(A.clo-(P.costs[l]||0))}</td><td class="small muted">הזנה בקליטת נתונים</td></tr>`
+        ${noneAll.map(l=>l===CLO||l===LEASE
+          ? `<tr><td class="first">${esc(l)}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">${money(l===CLO?A.clo:A.lease)}</td><td class="n">${money((l===CLO?A.clo:A.lease)-(P.costs[l]||0))}</td><td class="small muted">הזנה בקליטת נתונים</td></tr>`
           : `<tr><td class="first">${esc(l)}</td><td class="n">${money(P.costs[l]||0)}</td><td class="n">—</td><td class="n">—</td><td class="small muted">לא נמדד בביצוע</td></tr>`).join('')}
         <tr class="total"><td class="first">סה״כ עלות המכר</td><td class="n">${money(P.tc)}</td><td class="n">${money(A.tc)}</td><td class="n">${money(A.tc-P.tc)}</td><td></td></tr>
       </tbody></table></div>`:'<p class="muted">אין עדיין ביצוע לתקופה.</p>'}
@@ -1106,7 +1109,7 @@ function scopeR(R, br){
   if(!R || !br) return R;
   const b = R.branches[br] || {name:br, rev:0, h:0, cost:0};
   const share = R.tot.rev ? b.rev/R.tot.rev : 0, overhead = branchOverhead(R, br);
-  const tot = {rev:b.rev, h:b.h, cost:b.cost, mat:b.mat||0, clo:b.clo||0, gp:b.rev-b.cost-(b.mat||0)-(b.clo||0), overhead, overheadShare:share, ohExact:(R.parts||[R]).every(P=>P.oh.exact), ohGeneral:R.oh.general};
+  const tot = {rev:b.rev, h:b.h, cost:b.cost, mat:b.mat||0, clo:b.clo||0, lease:b.lease||0, gp:b.rev-b.cost-(b.mat||0)-(b.clo||0)-(b.lease||0), overhead, overheadShare:share, ohExact:(R.parts||[R]).every(P=>P.oh.exact), ohGeneral:R.oh.general};
   tot.margin = tot.rev?tot.gp/tot.rev:NaN; tot.net = tot.gp-overhead; tot.netMargin = tot.rev?tot.net/tot.rev:NaN;
   tot.ga = b.ga||0; tot.gaOrg = 0; tot.op = tot.net - tot.ga; tot.opMargin = tot.rev ? tot.op/tot.rev : NaN;
   tot.revH = tot.h?tot.rev/tot.h:NaN; tot.costH = tot.h?tot.cost/tot.h:NaN;
@@ -1132,12 +1135,12 @@ function renderOverview(v){
   const bOh = b => br ? T.overhead : branchOverhead(R, b.name);
   const genOh = br ? 0 : T.overhead - brs.reduce((a,b)=>a+bOh(b),0);
   // הכנסות ועלויות שלא שויכו לאף סניף (לקוחות שעדיין לא הותאמו): שורה משלהן, כדי שהשורות יסתכמו לסה״כ
-  const unm = br ? null : ['rev','h','cost','mat','clo','gp'].reduce((o,k)=>(o[k]=(T[k]||0)-brs.reduce((a,b)=>a+(b[k]||0),0),o),{});
+  const unm = br ? null : ['rev','h','cost','mat','clo','lease','gp'].reduce((o,k)=>(o[k]=(T[k]||0)-brs.reduce((a,b)=>a+(b[k]||0),0),o),{});
   const hasUnm = unm && (Math.abs(unm.rev)>0.5 || Math.abs(unm.cost)>0.5);
-  const hasMat = T.mat>0, hasClo = T.clo>0;
+  const hasMat = T.mat>0, hasClo = T.clo>0, hasLease = T.lease>0;
   // הנהלה וכלליות, והסה״כ אחרי שכר הנהלה והנהלה וכלליות ושיעורו
   const gc = (g, op, rev) => `<td class="n">${g}</td><td class="n">${op}</td><td class="n">${rev}</td>`;
-  const mc = (v, c) => (hasMat ? `<td class="n">${v}</td>` : '') + (hasClo ? `<td class="n">${c??''}</td>` : '');   // חומרי ניקיון, ביגוד
+  const mc = (v, c, l) => (hasMat ? `<td class="n">${v}</td>` : '') + (hasClo ? `<td class="n">${c??''}</td>` : '') + (hasLease ? `<td class="n">${l??''}</td>` : '');   // חומרי ניקיון, ביגוד, ליסינג
   const chartMonths = per.months.length>1 ? per.months : monthList();
   v.innerHTML = `<div class="stack">
     ${gaps.length?`<div class="panel" style="background:var(--warn-soft);border-color:transparent"><b>החישוב ל${per.label} חלקי.</b> ${gaps.join(' · ')}.</div>`:''}
@@ -1155,14 +1158,14 @@ function renderOverview(v){
         <section class="panel">
           <div class="panel-head"><h2>${br?`רווחיות ${esc(br)}`:'רווחיות לפי סניף'}</h2><span class="small muted">${per.label}</span></div>
           <div class="tbl-wrap"><table class="compact">
-            <thead><tr><th class="first">סניף</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th>${hasMat?'<th class="n">חומרי ניקיון</th>':''}${hasClo?'<th class="n">ביגוד</th>':''}<th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">${br?esc(ohLabel):'שכר הנהלה'}</th><th class="n">הנהלה וכלליות</th><th class="n">אחרי הנהלה וכלליות</th><th class="n">שיעור</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th>${P?'<th class="n">שינוי בשיעור</th>':''}</tr></thead>
+            <thead><tr><th class="first">סניף</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th>${hasMat?'<th class="n">חומרי ניקיון</th>':''}${hasClo?'<th class="n">ביגוד</th>':''}${hasLease?'<th class="n">ליסינג</th>':''}<th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">${br?esc(ohLabel):'שכר הנהלה'}</th><th class="n">הנהלה וכלליות</th><th class="n">אחרי הנהלה וכלליות</th><th class="n">שיעור</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th>${P?'<th class="n">שינוי בשיעור</th>':''}</tr></thead>
             <tbody>${brs.map(b=>{ const pb = P?.branches[b.name], o = bOh(b), net = b.gp-o, g = br ? T.ga : (b.ga||0), op = net-g;
-              return `<tr class="clickable" data-branch-go="${esc(b.name)}"><td class="first">${chartMonths.length>1?`<span class="legend" style="margin:0;display:inline"><i style="background:var(${color(b.name)})"></i></span>`:''}${esc(b.name)}</td><td class="n">${money(b.rev)}</td><td class="n">${hrs(b.h)}</td><td class="n">${money(b.cost)}</td>${mc(money(b.mat||0), money(b.clo||0))}<td class="n">${money(b.gp)}</td><td class="n">${marginPill(b.margin, b.rev)}</td>
+              return `<tr class="clickable" data-branch-go="${esc(b.name)}"><td class="first">${chartMonths.length>1?`<span class="legend" style="margin:0;display:inline"><i style="background:var(${color(b.name)})"></i></span>`:''}${esc(b.name)}</td><td class="n">${money(b.rev)}</td><td class="n">${hrs(b.h)}</td><td class="n">${money(b.cost)}</td>${mc(money(b.mat||0), money(b.clo||0), money(b.lease||0))}<td class="n">${money(b.gp)}</td><td class="n">${marginPill(b.margin, b.rev)}</td>
               <td class="n">${money(o)}</td>${gc(money(g), money(op), marginPill(b.rev?op/b.rev:NaN, b.rev))}<td class="n">${perH(b.revH)}</td><td class="n">${perH(b.costH)}</td>
               ${P?`<td class="n">${pb&&isFinite(pb.margin)&&isFinite(b.margin)?`<span class="delta ${b.margin>=pb.margin?'good':'bad'}">${ltr((b.margin>=pb.margin?'+':'−')+Math.abs((b.margin-pb.margin)*100).toFixed(1)+' נק׳')}</span>`:'—'}</td>`:''}</tr>`;}).join('')}
-            ${hasUnm?`<tr class="clickable" data-tab="match"><td class="first muted">לקוחות שלא הותאמו <span class="pill warn">להתאמה</span></td><td class="n">${money(unm.rev)}</td><td class="n">${hrs(unm.h)}</td><td class="n">${money(unm.cost)}</td>${mc(money(unm.mat), money(unm.clo))}<td class="n">${money(unm.gp)}</td><td></td><td></td>${gc(money(0), money(unm.gp), '')}<td></td><td></td>${P?'<td></td>':''}</tr>`:''}
+            ${hasUnm?`<tr class="clickable" data-tab="match"><td class="first muted">לקוחות שלא הותאמו <span class="pill warn">להתאמה</span></td><td class="n">${money(unm.rev)}</td><td class="n">${hrs(unm.h)}</td><td class="n">${money(unm.cost)}</td>${mc(money(unm.mat), money(unm.clo), money(unm.lease))}<td class="n">${money(unm.gp)}</td><td></td><td></td>${gc(money(0), money(unm.gp), '')}<td></td><td></td>${P?'<td></td>':''}</tr>`:''}
             ${genOh>0.5 || T.gaOrg>0?`<tr><td class="first muted">כללי (לא משויך)</td><td></td><td></td><td></td>${mc('')}<td></td><td></td><td class="n">${money(genOh)}</td>${gc(money(T.gaOrg||0), money(-genOh-(T.gaOrg||0)), '')}<td></td><td></td>${P?'<td></td>':''}</tr>`:''}
-            <tr class="total"><td class="first">סה״כ</td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td>${mc(money(T.mat), money(T.clo))}<td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${money(T.overhead)}</td>${gc(money(T.ga), money(T.op), pct(T.opMargin))}<td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td>${P?'<td></td>':''}</tr>
+            <tr class="total"><td class="first">סה״כ</td><td class="n">${money(T.rev)}</td><td class="n">${hrs(T.h)}</td><td class="n">${money(T.cost)}</td>${mc(money(T.mat), money(T.clo), money(T.lease))}<td class="n">${money(T.gp)}</td><td class="n">${pct(T.margin)}</td><td class="n">${money(T.overhead)}</td>${gc(money(T.ga), money(T.op), pct(T.opMargin))}<td class="n">${perH(T.revH)}</td><td class="n">${perH(T.costH)}</td>${P?'<td></td>':''}</tr>
             </tbody></table></div>
           <p class="hint" style="margin-top:8px">לחיצה על ${br?'הסניף':'סניף'} פותחת את רשימת הלקוחות שלו.</p>
         </section>
@@ -1307,7 +1310,7 @@ function workerSet(ctx, ym, br){
 }
 function branchMonth(ctx, ym, br){
   const R = ctx.C(ym), b = br ? (R.branches[br] || {rev:0,h:0,cost:0}) : R.tot, w = workerSet(ctx, ym, br);
-  const rev = b.rev, h = b.h, cost = b.cost, gp = rev-cost-(b.mat||0)-(b.clo||0);
+  const rev = b.rev, h = b.h, cost = b.cost, gp = rev-cost-(b.mat||0)-(b.clo||0)-(b.lease||0);
   return {ym, rev, h, cost, mat:b.mat||0, gp, margin:rev?gp/rev:NaN, revH:h?rev/h:NaN, costH:h?cost/h:NaN, workers:w?w.size:null, wset:w, overhead:br?0:R.tot.overhead};
 }
 const hasPlan = br => !!plans[br]?.months;
@@ -1727,7 +1730,7 @@ const perHourRows = (T) => {   // מבנה עלות השעה: כל רכיב בר
 function branchTot(R, br){
   const parts = R.parts || [R], b = R.branches[br] || {rev:0, mat:0};
   const x = parts.map(P=>branchSlice(P, br)).reduce((a,y)=>({h:a.h+y.h, cost:a.cost+y.cost, gross:a.gross+y.gross, comp:addComp(a.comp, y.comp)}), {h:0, cost:0, gross:0, comp:{}});
-  const T = {...x, rev:b.rev, mat:b.mat||0, clo:b.clo||0}; T.gp = T.rev-T.cost-T.mat-T.clo; T.margin = T.rev ? T.gp/T.rev : NaN; T.revH = T.h ? T.rev/T.h : NaN; T.costH = T.h ? T.cost/T.h : NaN;
+  const T = {...x, rev:b.rev, mat:b.mat||0, clo:b.clo||0, lease:b.lease||0}; T.gp = T.rev-T.cost-T.mat-T.clo-T.lease; T.margin = T.rev ? T.gp/T.rev : NaN; T.revH = T.h ? T.rev/T.h : NaN; T.costH = T.h ? T.cost/T.h : NaN;
   return finishComp(T);
 }
 function renderCost(v){
@@ -2021,8 +2024,8 @@ function clothingPanel(){
   const ms = monthList(); if(!ms.length) return '';
   const ym = ui.matYm || ms[ms.length-1], brs = branchNames().filter(b=>b!==NO_BRANCH);
   return `<section class="panel">
-    <div class="panel-head"><h2>ביגוד</h2><span class="small muted">${monthName(ym)} · עלות ישירה של הסניף, יורדת מהרווח הגולמי שלו</span></div>
-    <div class="actions">${brs.map(b=>`<label class="small">${esc(b)} <input type="text" inputmode="decimal" data-clo="${esc(b)}" value="${manual[b]?.[ym]?.[CLO]?nf0.format(manual[b][ym][CLO]):''}" aria-label="ביגוד ${esc(b)} ${monthName(ym)}" style="width:100px;text-align:left;direction:ltr"> ₪</label>`).join('')}</div>
+    <div class="panel-head"><h2>ביגוד וליסינג</h2><span class="small muted">${monthName(ym)} · עלויות ישירות של הסניף, יורדות מהרווח הגולמי שלו</span></div>
+    ${[[CLO,'clo'],[LEASE,'lease']].map(([k,a])=>`<div class="actions" style="margin-bottom:6px"><b class="small" style="min-width:52px">${k}</b>${brs.map(b=>`<label class="small">${esc(b)} <input type="text" inputmode="decimal" data-${a}="${esc(b)}" value="${manual[b]?.[ym]?.[k]?nf0.format(manual[b][ym][k]):''}" aria-label="${k} ${esc(b)} ${monthName(ym)}" style="width:100px;text-align:left;direction:ltr"> ₪</label>`).join('')}</div>`).join('')}
     <p class="hint" style="margin-top:8px">החודש נבחר בפאנל חומרי הניקיון שמעל. מקלידים סכום ויוצאים מהתא, והוא נשמר. תא ריק = אין.</p>
   </section>`;
 }
@@ -2071,11 +2074,11 @@ async function saveGAPanelNow(){
   const ok = await store.saveGA(ym); render();
   if(ok) toast(bad ? `נשמר, חוץ מ-${bad} תאים שאינם מספר` : `נשמר: ${n} סכומים ל${monthName(ym)}`);
 }
-async function setClothing(br, raw){
+async function setClothing(br, raw, key=CLO){
   const v = String(raw).replace(/[,₪\s]/g,''), n = v==='' ? null : +v, ym = ui.matYm || monthList().pop();
   if(v!=='' && !isFinite(n)){ toast('יש להזין מספר'); render(); return; }
   const m = ((manual[br] ||= {})[ym] ||= {});
-  if(n==null) delete m[CLO]; else m[CLO] = n;
+  if(n==null) delete m[key]; else m[key] = n;
   renderSoon(); await store.saveManual();
 }
 async function setMaterial(kind, id, raw){
@@ -2392,6 +2395,7 @@ document.addEventListener('change', async e=>{
   else if(d.matcost){ await setMaterial('cost', d.matcost, t.value); }
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
   else if(d.clo){ await setClothing(d.clo, t.value); }
+  else if(d.lease){ await setClothing(d.lease, t.value, LEASE); }
   else if(d.ga){ await setGA(d.ga, t.value); }
   else if(t.id==='ga-addline'){ const n = normName(t.value); if(n && !ga.lines.includes(n)){ ga.lines = [...ga.lines, n]; render(); await store.saveGA(); toast(`נוספה שורה: ${n}`); } }
 
