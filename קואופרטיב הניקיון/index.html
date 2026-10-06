@@ -2063,6 +2063,7 @@ function renderData(v){
       <span class="muted small">דוח הכנסות מהנהלת החשבונות · דוח משימות מ-TimeWatch · דוח שכר עם פיצול לפי אתר · אופציונלי: רכיבי שכר, טבלת תעריפים ללקוח, תכנית עסקית, שכר שעתי לפי עובד. סוג הדוח והחודש מזוהים אוטומטית. במאגר המשותף נשמרים רק סיכומים לפי לקוח ואתר; שמות עובדים ושכר נשמרים באזור הפרטי שלך בלבד.</span>
       <input type="file" id="file-in" accept=".xlsx,.xls,.html,.htm" multiple hidden>
     </label>
+    ${entryMonthBar()}
     ${materialsPanel()}
     ${clothingPanel()}
     ${breaksPanel()}
@@ -2071,6 +2072,14 @@ function renderData(v){
     ${backupPanel()}
     ${ms.length?`<div class="months">${ms.map(monthCard).join('')}</div>`:'<div class="panel empty">עדיין לא נקלטו חודשים.</div>'}
   </div>`;
+}
+// בחירת החודש להזנות הידניות (חומרים, ביגוד וליסינג, הפסקות, הנהלה וכלליות): אחת לכל הלשונית
+function entryMonthBar(){
+  const ms = monthList(); if(!ms.length) return '';
+  if(!ms.includes(ui.matYm)) ui.matYm = ms[ms.length-1];
+  return `<div class="panel" style="background:var(--accent-soft);border-color:transparent">
+    <div class="actions"><label><b>חודש להזנה</b> <select id="mat-ym">${ms.slice().reverse().map(m=>`<option value="${m}" ${m===ui.matYm?'selected':''}>${monthName(m)}</option>`).join('')}</select></label>
+    <span class="small muted">חל על כל הפאנלים שמתחת: חומרי ניקיון, ביגוד וליסינג, הפסקות, הנהלה וכלליות. חודש מופיע ברשימה אחרי שנקלט לו לפחות דוח אחד.</span></div></div>`;
 }
 /* ---------- חומרי ניקיון לפי לקוח ----------
    טופס קצר: בכל חודש רק הלקוחות שקיבלו חומרים (2–3 בחודש). לכל אחד: חיוב ללקוח ועלות חשבונית.
@@ -2084,8 +2093,7 @@ function materialsPanel(){
   const inp = (attr, v, label, ph='') => `<input type="text" inputmode="decimal" ${attr} value="${v!=null&&v!==''?nf0.format(v):''}" placeholder="${ph}" aria-label="${esc(label)}" style="width:100px;text-align:left;direction:ltr">`;
   const fixed = Object.entries(materials.fixedBill).filter(([,v])=>v).map(([id,v])=>`${esc(gname(id))} ${money(v)}`);
   return `<section class="panel">
-    <div class="panel-head"><h2>חומרי ניקיון</h2>
-      <label class="small">חודש <select id="mat-ym">${ms.slice().reverse().map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthName(m)}</option>`).join('')}</select></label></div>
+    <div class="panel-head"><h2>חומרי ניקיון</h2><span class="small muted">${monthName(ym)}</span></div>
     <div class="tbl-wrap"><table><thead><tr><th class="first">לקוח</th><th class="n">חיוב ללקוח</th><th class="n">עלות חשבונית</th><th></th></tr></thead><tbody>
       ${ids.map(id=>{ const bl = materials.billByMonth[ym]?.[id], c = materials.byMonth[ym]?.[id], auto = matBillAuto(id, ym);
         return `<tr><td class="first">${esc(gname(id))}</td>
@@ -2107,7 +2115,7 @@ function clothingPanel(){
   return `<section class="panel">
     <div class="panel-head"><h2>ביגוד וליסינג</h2><span class="small muted">${monthName(ym)} · עלויות ישירות של הסניף, יורדות מהרווח הגולמי שלו</span></div>
     ${[[CLO,'clo'],[LEASE,'lease']].map(([k,a])=>`<div class="actions" style="margin-bottom:6px"><b class="small" style="min-width:52px">${k}</b>${brs.map(b=>`<label class="small">${esc(b)} <input type="text" inputmode="decimal" data-${a}="${esc(b)}" value="${manual[b]?.[ym]?.[k]?nf0.format(manual[b][ym][k]):''}" aria-label="${k} ${esc(b)} ${monthName(ym)}" style="width:100px;text-align:left;direction:ltr"> ₪</label>`).join('')}</div>`).join('')}
-    <p class="hint" style="margin-top:8px">החודש נבחר בפאנל חומרי הניקיון שמעל. מקלידים סכום ויוצאים מהתא, והוא נשמר. תא ריק = אין.</p>
+    <p class="hint" style="margin-top:8px">החודש נבחר ב"חודש להזנה" בראש הלשונית. מקלידים סכום ויוצאים מהתא, והוא נשמר. תא ריק = אין.</p>
   </section>`;
 }
 // הנהלה וכלליות: שורות (ביטוח, הנהלת חשבונות, משרדיות...) × יחידות (כל סניף, וכללי), לחודש שנבחר בפאנל חומרי הניקיון
@@ -2127,7 +2135,7 @@ function gaPanel(){
       ${prev?`<button class="btn sm" type="button" id="ga-copy">העתקה מ${monthName(prev)} (לתאים הריקים)</button>`:''}
       <label class="small">שורה נוספת <input type="text" id="ga-addline" placeholder="למשל: תוכנה" style="width:130px"></label>
     </div>
-    <p class="hint" style="margin-top:8px">הוצאה של סניף מזינים בעמודת הסניף, והיא יורדת מהרווח התפעולי שלו. הוצאה של הארגון כולו מזינים בעמודה "${GA_ORG}"; היא מופיעה רק בסה״כ הארגון. החודש נבחר בפאנל חומרי הניקיון.</p>
+    <p class="hint" style="margin-top:8px">הוצאה של סניף מזינים בעמודת הסניף, והיא יורדת מהרווח התפעולי שלו. הוצאה של הארגון כולו מזינים בעמודה "${GA_ORG}"; היא מופיעה רק בסה״כ הארגון. החודש נבחר ב"חודש להזנה" בראש הלשונית.</p>
   </section>`;
 }
 async function setGA(key, raw){
@@ -2167,7 +2175,7 @@ function breaksPanel(){
     <div class="panel-head"><h2>הפסקות שלא מחויבות</h2><span class="small muted">${monthName(ym)} · שעות הפסקה שיורדות משעות TimeWatch של הלקוח</span></div>
     ${gs.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">לקוח</th><th class="n">שעות TimeWatch</th><th class="n">משמרות</th><th class="n">שעות הפסקה</th><th class="n">שעות לחיוב</th><th></th></tr></thead><tbody>${gs.map(row).join('')}</tbody></table></div>
     <div class="actions" style="margin-top:10px">${add}</div>
-    <p class="hint" style="margin-top:8px">החודש נבחר בפאנל חומרי הניקיון. מקלידים את סך שעות ההפסקה של הלקוח בחודש ויוצאים מהתא, והוא נשמר. תא ריק = לא הורדו הפסקות. לקוח חדש מוסיפים ברשימה שמתחת לטבלה. "הסרה" מחזירה את הלקוח לחישוב רגיל; השעות שהוזנו לו נשמרות.</p>`
+    <p class="hint" style="margin-top:8px">החודש נבחר ב"חודש להזנה" בראש הלשונית. מקלידים את סך שעות ההפסקה של הלקוח בחודש ויוצאים מהתא, והוא נשמר. תא ריק = לא הורדו הפסקות. לקוח חדש מוסיפים ברשימה שמתחת לטבלה. "הסרה" מחזירה את הלקוח לחישוב רגיל; השעות שהוזנו לו נשמרות.</p>`
       : `<p class="muted">אין לקוחות שסומנו "לא מחויב על הפסקות".</p><div class="actions" style="margin-top:10px">${add}</div>`}
   </section>`;
 }
