@@ -1597,7 +1597,9 @@ function renderDash(v){
   const brs = branchNames().filter(b=>b!==NO_BRANCH && (R.branches[b]?.rev || R.branches[b]?.cost));
   if(ui.dashWho!=='ceo' && !brs.includes(ui.dashWho)) ui.dashWho = 'ceo';
   const pages = ui.dashWho==='ceo' ? ceoReport(ctx) : branchReport(ctx, ui.dashWho);
+  const partial = monthList().filter(m=>!complete(m) && m>ms[ms.length-1]);
   v.innerHTML = `<div class="stack">
+    ${partial.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">${partial.map(m=>`<b>${monthName(m)}</b> עדיין לא זמין לדשבורד: חסר דוח ${missingReports(m).join(' ו')}`).join(' · ')}. הדשבורד נפתח לחודש אחרי שנקלטים בו שלושת הדוחות (הכנסות, שעות ושכר).</div>`:''}
     <div class="panel"><div class="actions" style="justify-content:space-between">
       <div class="actions">
         <label class="small">חודש <select id="dash-ym">${ms.slice().reverse().map(m=>`<option value="${m}" ${m===ui.dashYm?'selected':''}>${monthName(m)}</option>`).join('')}</select></label>
