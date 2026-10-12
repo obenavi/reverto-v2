@@ -1494,6 +1494,20 @@ function branchReport(ctx, br){
       ${chunk.length?clientTable(chunk):'<p class="note">אין לקוחות לסניף בחודש הזה.</p>'}
       ${last?`<p class="note">${ltr(rows.length)} לקוחות, ממוינים לפי הכנסות. לקוח שעובד ביותר מסניף אחד מופיע בסניף שבו רוב הפעילות שלו. "בחודש הקודם" ו"מתחילת השנה" הם שיעור הרווח הגולמי.</p>`:''}`));
   }
+  // רווחיות לקוחות מצטברת מתחילת השנה (כל הלקוחות של הסניף בתקופה, גם כאלה שלא פעלו החודש)
+  const Y = computePeriod(ctx.ytd), yrows = Y.groups.filter(g=>g.branch===br && (g.rev>0 || g.h>0 || g.cost>0)).sort((a,b)=>b.rev-a.rev);
+  const active = Object.fromEntries(yrows.map(g=>[g.id, ctx.ytd.filter(m=>ctx.C(m).groups.some(x=>x.id===g.id && (x.rev>0 || x.h>0))).length]));
+  const yt = yrows.reduce((a,g)=>({rev:a.rev+g.rev, h:a.h+g.h, cost:a.cost+g.cost, gp:a.gp+g.gp}), {rev:0,h:0,cost:0,gp:0});
+  const ylabel = `${MONTHS[+ctx.ytd[0].slice(5)-1]}–${MONTHS[+ym.slice(5)-1]}`;
+  for(let i=0; i<yrows.length || i===0; i+=per){
+    const chunk = yrows.slice(i, i+per), last = i+per>=yrows.length;
+    pages.push(rPage(`רווחיות לקוחות מתחילת השנה${yrows.length>per?` (${ltr(Math.floor(i/per)+1)})`:''}`, who, ym, `
+      ${chunk.length?`<div class="tbl-wrap"><table><thead><tr><th class="first">לקוח</th><th class="n">הכנסות</th><th class="n">שעות</th><th class="n">עלות מעביד</th><th class="n">רווח גולמי</th><th class="n">שיעור</th><th class="n">הכנסה לשעה</th><th class="n">עלות לשעה</th><th class="n">חודשי פעילות</th></tr></thead><tbody>
+        ${chunk.map(g=>`<tr><td class="first">${esc(g.name)}</td><td class="n">${money(g.rev)}</td><td class="n">${hrs(g.h)}</td><td class="n">${money(g.cost)}</td><td class="n">${money(g.gp)}</td><td class="n">${marginPill(g.margin, g.rev)}</td><td class="n">${perH(g.revH)}</td><td class="n">${perH(g.costH)}</td><td class="n">${ltr(active[g.id]+'/'+ctx.ytd.length)}</td></tr>`).join('')}
+        ${last?`<tr class="total"><td class="first">סה״כ לקוחות</td><td class="n">${money(yt.rev)}</td><td class="n">${hrs(yt.h)}</td><td class="n">${money(yt.cost)}</td><td class="n">${money(yt.gp)}</td><td class="n">${pct(yt.rev?yt.gp/yt.rev:NaN)}</td><td class="n">${perH(yt.h?yt.rev/yt.h:NaN)}</td><td class="n">${perH(yt.h?yt.cost/yt.h:NaN)}</td><td></td></tr>`:''}
+      </tbody></table></div>`:'<p class="note">אין לקוחות לסניף מתחילת השנה.</p>'}
+      ${last?`<p class="note">מצטבר ${ylabel} ${ym.slice(0,4)}. ${ltr(yrows.length)} לקוחות, ממוינים לפי הכנסות, כולל לקוחות שלא פעלו בחודש האחרון. הרווח הגולמי כולל חומרי ניקיון. "חודשי פעילות" = חודשים עם הכנסה או שעות.</p>`:''}`));
+  }
   return pages;
 }
 function ceoReport(ctx){
