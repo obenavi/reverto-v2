@@ -220,7 +220,7 @@ body.pdf-mode #view .grid2{grid-template-columns:minmax(0,1fr)}
    ============================================================ */
 const REV_H = [60, 90];     // הכנסה לשעה מחוץ לטווח = חשד להתאמה שגויה
 const COST_H_HIGH = 85;     // עלות מעביד לשעה חריגה
-const LOW_MARGIN = 0.10;
+const LOW_MARGIN = 0.12;   // מתחת לזה: "רווח נמוך"
 const NO_BRANCH = 'ללא סניף';
 const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const monthName = ym => `${MONTHS[+ym.slice(5)-1]} ${ym.slice(0,4)}`;
