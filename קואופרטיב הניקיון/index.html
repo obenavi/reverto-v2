@@ -2004,11 +2004,17 @@ function slipNoRecup(ym){ return slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWo
 // (קטינים, ללא ת.ז. ישראלית): "קרן השתלמות בתשלום" = 7.5%. בשכר גלובלי הבסיס כולל גם את רכיב "משכורת"
 const KH_BASE = ['שעות רגילות','ימי חג/ שעות','חופשה שעות','מחלה שעות','תוספת ותק','הבראה שעתי','הבראה','משכורת','שעות נוספות גלובליות'], KH_EMP = 0.025, KH_ER = 0.075, KH_TOL = 1;
 function slipKh(ym){
-  const out = {none:[], off:[], ok:0};
+  const out = {none:[], off:[], ok:0, mis:[], salList:[]}, marked = priv['pslip-settings']?.khSal || {};
   for(const x of slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x))){
     const base = round2(KH_BASE.reduce((a,d)=>a+(x.p.p[d]||0),0)), emp = x.p.h?.['קרן השתלמות']||0, er = x.p.c?.['קרן השתלמות']||0, sal = x.p.p['קרן השתלמות בתשלום']||0;
     const r = {...x, base, emp, er, sal, xEmp:round2(base*KH_EMP), xEr:round2(base*KH_ER)};
-    if(!emp && !er && !sal){ out.none.push(r); continue; }
+    r.marked = !!marked[x.e || x.pe];
+    if(sal || r.marked) out.salList.push(r);
+    // התאמה לרשימת הקטינים / ללא ת.ז. ישראלית: הם מקבלים את הקרן בתשלום לשכר, וכל השאר מפקידים לקרן
+    if(r.marked && (emp || er)) out.mis.push({...r, why:'מסומן כקטין / ללא ת.ז. ישראלית, אבל מפקידים לו לקרן'});
+    else if(r.marked && !sal) out.mis.push({...r, why:'מסומן כקטין / ללא ת.ז. ישראלית, ואין לו קרן השתלמות בתשלום'});
+    else if(!r.marked && sal) out.mis.push({...r, why:'מקבל קרן השתלמות בתשלום לשכר, ולא מסומן ברשימה'});
+    if(!emp && !er && !sal){ if(!r.marked) out.none.push(r); continue; }
     r.kind = sal && !emp && !er ? 'sal' : 'fund';
     r.dEmp = r.kind==='sal' ? 0 : round2(emp - r.xEmp); r.dEr = round2((r.kind==='sal' ? sal : er) - r.xEr);
     if(Math.abs(r.dEmp) > KH_TOL || Math.abs(r.dEr) > KH_TOL) out.off.push(r); else out.ok++;
@@ -2083,6 +2089,7 @@ function renderSlip(v){
         :'<p class="muted">לכל העובדים שעבדו יש תשלום הבראה בתלוש.</p>'}
       <p class="hint" style="margin-top:8px">הבראה מגיעה מהיום הראשון לעבודה. נבדקים עובדים עם תלוש שעבדו בחודש (ימי עבודה ב-TimeWatch, שעות רגילות או משכורת). הסניף לפי TimeWatch.</p>
     </section>`; };
+  const khBox = x => `<label class="small"><input type="checkbox" data-khsal="${esc(x.e||x.pe)}" ${x.marked?'checked':''}> קטין / ללא ת.ז. ישראלית</label>`;
   const khPanel = () => {
     if(!(pd.v>=2)) return `<section class="panel"><div class="panel-head"><h2>קרן השתלמות</h2></div><p class="muted">כדי לבדוק את קרן ההשתלמות יש להעלות מחדש את דוח רכיבי השכר של ${monthName(ym)}. הגרסה שנקלטה לא כוללת את הניכויים וההפרשות.</p></section>`;
     const k = slipKh(ym), sgn = v => ltr((v>0?'+':v<0?'−':'')+money(Math.abs(v)).replace('-',''));
@@ -2091,12 +2098,19 @@ function renderSlip(v){
       <h3 style="margin:4px 0 6px">בלי קרן השתלמות בתלוש (${k.none.length})</h3>
       ${k.none.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th class="n">שכר לקרן</th><th class="n">צפוי: עובד</th><th class="n">צפוי: מעביד</th></tr></thead><tbody>
         ${k.none.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td class="n">${money(x.base)}</td><td class="n">${money(x.xEmp)}</td><td class="n">${money(x.xEr)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">לכל העובדים שעבדו יש קרן השתלמות.</p>'}
+      <h3 style="margin:14px 0 6px">לא תואם לרשימת הקטינים / ללא ת.ז. ישראלית (${k.mis.length})</h3>
+      ${k.mis.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>מה לא תואם</th><th></th></tr></thead><tbody>
+        ${k.mis.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td><span class="pill warn">${esc(x.why)}</span></td><td>${khBox(x)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">הכול תואם לרשימה.</p>'}
+      <details style="margin-top:10px"><summary class="small">רשימת הקטינים / ללא ת.ז. ישראלית ומקבלי הקרן בתשלום החודש (${k.salList.length})</summary>
+        <div class="tbl-wrap" style="margin-top:6px"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th class="n">קרן בתשלום</th><th></th></tr></thead><tbody>
+        ${k.salList.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td class="n">${x.sal?money(x.sal):'—'}</td><td>${khBox(x)}</td></tr>`).join('')}</tbody></table></div>
+        ${k.salList.some(x=>!x.marked && x.sal)?'<button class="btn sm" type="button" id="kh-mark-all" style="margin-top:6px">לסמן את כל מי שמקבל קרן בתשלום החודש</button>':''}</details>
       <h3 style="margin:14px 0 6px">הפרשה שלא בשיעור הנכון (${k.off.length})</h3>
       ${k.off.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>אופן</th><th class="n">שכר לקרן</th><th class="n">עובד בפועל</th><th class="n">צפוי 2.5%</th><th class="n">מעביד בפועל</th><th class="n">צפוי 7.5%</th><th class="n">הפרש מעביד</th></tr></thead><tbody>
         ${k.off.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${x.kind==='sal'?'בתשלום לשכר':'לקרן'}</td><td class="n">${money(x.base)}</td>
           <td class="n">${x.kind==='sal'?'—':money(x.emp)}</td><td class="n">${x.kind==='sal'?'—':money(x.xEmp)}</td><td class="n">${money(x.kind==='sal'?x.sal:x.er)}</td><td class="n">${money(x.xEr)}</td>
           <td class="n"><span class="pill ${x.dEr<0?'bad':'warn'}">${sgn(x.dEr)}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל ההפרשות בשיעור הנכון.</p>'}
-      <p class="hint" style="margin-top:8px">שכר לקרן = ${KH_BASE.join(', ')}. הפרש של עד ${money(KH_TOL)} לא מסומן. עובד שמקבל את הקרן בתשלום לשכר (קטינים, ללא ת.ז. ישראלית) נבדק מול 7.5%.</p>
+      <p class="hint" style="margin-top:8px">שכר לקרן = ${KH_BASE.join(', ')}. הפרש של עד ${money(KH_TOL)} לא מסומן. עובד שמקבל את הקרן בתשלום לשכר (קטינים, ללא ת.ז. ישראלית) נבדק מול 7.5%. הסימון "קטין / ללא ת.ז. ישראלית" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך.</p>
     </section>`; };
   const amtPanel = (stage, title, sub) => { const rows = slipAmtDiffs(ym, stage), sum = rows.reduce((a,x)=>a+x.d,0);
     return `<section class="panel">
@@ -2166,6 +2180,7 @@ function slipXlsx(which){
     slipNoRecup(ym).map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'לא ידוע', x.t?.days||0, x.p.u?.['19']||0, round2(slipPaid(x)), notes(x)]), [10,22,14,10,12,12,30]);
   sheets.kh = () => { const k = slipKh(ym);
     add('בלי קרן השתלמות', ["מס' עובד",'שם','סניף','שכר לקרן','צפוי עובד','צפוי מעביד','הערה'], k.none.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', x.base, x.xEmp, x.xEr, notes(x)]), [10,22,14,11,10,10,30]);
+    add('לא תואם לרשימה', ["מס' עובד",'שם','סניף','מה לא תואם','הערה'], k.mis.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', x.why, notes(x)]), [10,22,14,50,30]);
     add('שיעור לא נכון', ["מס' עובד",'שם','סניף','אופן','שכר לקרן','עובד בפועל','צפוי 2.5%','מעביד בפועל','צפוי 7.5%','הפרש עובד','הפרש מעביד','הערה'],
       k.off.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', x.kind==='sal'?'בתשלום לשכר':'לקרן', x.base, x.kind==='sal'?'':x.emp, x.kind==='sal'?'':x.xEmp, x.kind==='sal'?x.sal:x.er, x.xEr, x.dEmp, x.dEr, notes(x)]), [10,22,14,12,11,10,10,11,10,10,10,30]); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
@@ -2795,6 +2810,9 @@ document.addEventListener('click', async e=>{
   if(t.id==='bk-cancel'){ pendingRestore = null; render(); return; }
   if(d.unrule){ const r = {...mapping.clientRules}; delete r[d.unrule]; mapping.clientRules = r; await store.saveMapping(); render(); toast(`${d.unrule} חזר לרשימת ההתאמה`); return; }
   if(d.slipx){ slipXlsx(d.slipx); return; }
+  if(t.id==='kh-mark-all'){ const cur = priv['pslip-settings'] || {}, m = {...(cur.khSal||{})}; let n = 0;
+    for(const x of slipKh(ui.slipYm).salList) if(x.sal && !m[x.e||x.pe]){ m[x.e||x.pe] = true; n++; }
+    await store.savePrivate('pslip-settings', {...cur, khSal:m}); render(); toast(`סומנו ${n} עובדים`); return; }
   if(t.id==='ga-save'){ if(Date.now()-gaDown > 1000) await saveGAPanel(); return; }
   if(t.id==='ga-copy'){   // העתקת הסכומים מהחודש הקודם לתאים הריקים בחודש הנוכחי
     const ym = ui.matYm || monthList().pop(), prev = monthList().filter(m=>m<ym).pop(), src = ga.byMonth[prev] || {};
@@ -2878,6 +2896,8 @@ document.addEventListener('change', async e=>{
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
   else if(d.clo){ await setClothing(d.clo, t.value); }
   else if(t.id==='bk-file' && t.files[0]){ const f = t.files[0]; t.value=''; await readBackup(f); }
+  else if(d.khsal){ const cur = priv['pslip-settings'] || {}, m = {...(cur.khSal||{})}; if(t.checked) m[d.khsal] = true; else delete m[d.khsal];
+    await store.savePrivate('pslip-settings', {...cur, khSal:m}); render(); toast(t.checked?'סומן: קטין / ללא ת.ז. ישראלית':'הסימון הוסר'); }
   else if(d.shuttle){ const cur = priv['pslip-settings'] || {}, sh = {...(cur.shuttle||{})}; if(t.checked) sh[d.shuttle] = true; else delete sh[d.shuttle];
     await store.savePrivate('pslip-settings', {...cur, shuttle:sh}); render(); toast(t.checked?'סומן: יש הסעה':'הסימון הוסר'); }
   else if(t.id==='slip-ym'){ ui.slipYm = t.value; render(); }
