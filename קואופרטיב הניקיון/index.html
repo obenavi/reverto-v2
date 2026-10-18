@@ -267,6 +267,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nf0 = new Intl.NumberFormat('he-IL',{maximumFractionDigits:0});
 const nf1 = new Intl.NumberFormat('he-IL',{minimumFractionDigits:1,maximumFractionDigits:1});
+const nf2 = new Intl.NumberFormat('he-IL',{minimumFractionDigits:2,maximumFractionDigits:2});
 const nfc = new Intl.NumberFormat('he-IL',{notation:'compact',maximumSignificantDigits:3});
 // בטקסט עברי המינוס "קופץ" לצד הלא נכון, לכן כל מספר עטוף בבידוד LTR
 const ltr = s => '⁦' + s + '⁩';
@@ -410,6 +411,7 @@ function detectType(wb){
   for(const aoa of Object.values(wb.sheets)){
     const flat = aoa.slice(0,30).flat().map(normName);
     if(flat.includes('סוג נתון') && flat.includes('תאור סמל')) return 'components';
+    if(flat.includes("מס' עובד") && flat.includes('משכורת בסיס') && flat.includes('קוד רכיב')) return 'twpay';
     const rows = aoa.filter(r=>normName(r[0]));
     // קובץ תעריפים: בעמודה הראשונה אתר עם קוד בסוגריים, ובשאר העמודות רק מספרים, "פיקס" או ריק
     const rateCell = c => normName(c)==='' || num(c)!=null || /פיקס|קבוע/.test(normName(c));
@@ -678,6 +680,60 @@ function parseComponents(wb, fileName){
     for(const x of Object.values(sites)) for(const k in x) x[k] = round2(x[k]);
     for(const x of Object.values(symbols)) x.total = round2(x.total);
     out.push({ym, data:{v:4, file:fileName, uploadedAt:new Date().toISOString(), sites, symbols, total:round2(total), unallocated:round2(unallocated), employees:emps.size}});
+  }
+  return out;
+}
+
+/* --- בדיקת תלושים: נתונים לפי עובד, לאזור הפרטי בלבד ---
+   twpay = "דוחות למייצג" מ-TimeWatch (העברת נתוני שכר): לכל עובד שעות בסיס, הפסקות, נוספות, נסיעות, בונוס, מפרעה ועוד.
+   pslip-pay = מדוח רכיבי השכר: יחידות (שעות) ותשלומים לכל רכיב, וניכויי רשות.
+   תעודת זהות משמשת רק להתאמה בין שני הקבצים כשמספר העובד שונה, ונשמרת רק כטביעה מקוצרת (hash), לא המספר עצמו. */
+async function idKey(v){
+  const s = String(v??'').replace(/\D/g,''); if(s.length<5) return null;
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('coop-payslip|'+s));
+  return [...new Uint8Array(b)].slice(0,8).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+const TW_COLS = {base:'משכורת בסיס', brk:'שעות הפסקה / השלמת שעות', ot125:'שעות נוספות 125.00%', ot150:'שעות נוספות 150.00%', ot175:'שעות נוספות 175.00%', ot200:'שעות נוספות 200.00%',
+  travel:'נסיעות', bonus:'בונוס', adv:'מפרעה', car:'אחזקת רכב', vac:'חופש', sickP:'מחלה בתשלום חלקי', sickF:'מחלה בתשלום מלא', days:'ימי עבודה בפועל'};
+async function parseTwPay(wb, fileName){
+  const aoa = Object.values(wb.sheets).find(a=>findHeader(a, r=>r.includes("מס' עובד") && r.includes('משכורת בסיס'))>=0);
+  const hi = findHeader(aoa, r=>r.includes("מס' עובד") && r.includes('משכורת בסיס')), H = aoa[hi].map(normName);
+  const col = n => H.indexOf(n), iE = col("מס' עובד"), iF = col('שם פרטי'), iL = col('שם משפחה'), iId = col('ת.ז.'), iBr = col('סניף');
+  const iNote = H.map((h,i)=>h.startsWith('הערה לשכר')?i:-1).filter(i=>i>=0);
+  const title = aoa.slice(0,hi).flat().map(normName).join(' '), tm = title.match(/(\d{1,2})\/(\d{4})/);
+  const ym = tm ? ymOf(tm[2], +tm[1]) : null, emps = {};
+  for(const r of aoa.slice(hi+1)){
+    const e = num(r[iE]); if(e==null) continue;
+    const x = {n:[normName(r[iF]), normName(r[iL]).replace(/\s*\*$/,'')].filter(Boolean).join(' '), b:normName(r[iBr])};
+    for(const [k,h] of Object.entries(TW_COLS)){ const i = col(h); const v = i>=0 ? num(r[i]) : null; if(v) x[k] = v; }
+    const note = iNote.map(i=>normName(r[i])).filter(Boolean).join(' · '); if(note) x.note = note;
+    const k = iId>=0 ? await idKey(r[iId]) : null; if(k) x.k = k;
+    emps[String(e)] = x;
+  }
+  return {ym, data:{file:fileName, uploadedAt:new Date().toISOString(), emps}};
+}
+async function parseComponentsEmp(wb, fileName){
+  const aoa = Object.values(wb.sheets).find(a=>findHeader(a, r=>r.includes('סוג נתון') && r.includes('תאור סמל'))>=0);
+  const hi = findHeader(aoa, r=>r.includes('סוג נתון') && r.includes('תאור סמל')), H = aoa[hi].map(normName);
+  const iE=H.indexOf('מספר עובד'), iT=H.indexOf('סוג נתון'), iS=H.indexOf('סמל'), iD=H.indexOf('תאור סמל'), iL=H.indexOf('שם משפחה'), iF=H.indexOf('שם פרטי'), iId=H.indexOf('מ.זהוי נוסף');
+  const out = [];
+  for(const [col, mNum] of H.map((h,i)=>[i, monthFromHeader(h)]).filter(([i,m])=>i>iD && m)){
+    const rows = aoa.slice(hi+1).filter(r=>!normName(r[0]) && num(r[iE])!=null);
+    if(!rows.some(r=>num(r[col]))) continue;   // עמודת חודש ריקה
+    const cand = monthList().filter(x=>+x.slice(5)===mNum).sort((a,b)=>b.localeCompare(a));
+    const ym = cand[0] || ymOf(new Date().getFullYear(), mNum), paySyms = new Set(rows.filter(r=>normName(r[iT])==='תשלומים').map(r=>normName(r[iS]))), emps = {};
+    for(const r of rows){
+      const e = String(num(r[iE])), x = emps[e] ||= {n:[normName(r[iF]), normName(r[iL])].filter(Boolean).join(' '), u:{}, p:{}, d:{}};
+      if(!x.k && iId>=0){ const k = await idKey(r[iId]); if(k) x.k = k; }
+      if(!x.k2 && e.length>=8){ const k = await idKey(e); if(k && k!==x.k) x.k2 = k; }   // מספר העובד בשכר הוא עצמו ת.ז.
+      const v = num(r[col]); if(!v) continue;
+      const t = normName(r[iT]), sym = normName(r[iS]), desc = normName(r[iD]);
+      if(t==='תשלומים') x.p[desc] = round2((x.p[desc]||0) + v);
+      else if(t==='יחידות' && paySyms.has(sym)) x.u[sym] = round2((x.u[sym]||0) + v);
+      else if(t==='נכויי רשות') x.d[desc] = round2((x.d[desc]||0) + v);
+    }
+    for(const x of Object.values(emps)){ for(const k of ['u','p','d']) if(!Object.keys(x[k]).length) delete x[k]; }
+    out.push({ym, data:{file:fileName, uploadedAt:new Date().toISOString(), emps}});
   }
   return out;
 }
@@ -1094,7 +1150,7 @@ function manualPanel(br){
 }
 
 /* ============================================================ רינדור */
-const TABS = [['overview','סקירה ותובנות'],['dash','דשבורדים חודשיים'],['plan','תכנון מול ביצוע'],['clients','רווחיות לקוחות'],['cost','עלות שעה והתייעלות'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים']];
+const TABS = [['overview','סקירה ותובנות'],['dash','דשבורדים חודשיים'],['plan','תכנון מול ביצוע'],['clients','רווחיות לקוחות'],['cost','עלות שעה והתייעלות'],['slip','בדיקת תלושים'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים']];
 // ציור מחדש בלי לאבד את התא שבו מקלידים: עדכון מהמאגר או שמירה של תא קודם לא מוחקים את מה שכבר הוקלד ולא מזיזים את הסמן
 function focusKey(el){
   if(!el || !['INPUT','TEXTAREA','SELECT'].includes(el.tagName) || el.type==='file' || !$('#view')?.contains(el)) return null;
@@ -1132,8 +1188,8 @@ function renderNow(){
   } else $('#filters').innerHTML='';
   Object.values(charts).forEach(c=>c.destroy()); for(const k in charts) delete charts[k];
   const v = $('#view');
-  if(!ms.length && ui.tab!=='data' && ui.tab!=='match'){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין אין נתונים</h2><p>יש להעלות את שלושת הדוחות החודשיים בלשונית "קליטת נתונים".</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
-  ({overview:renderOverview, dash:renderDash, plan:renderPlan, clients:renderClients, cost:renderCost, client:renderClient, match:renderMatch, data:renderData})[ui.tab](v);
+  if(!ms.length && ui.tab!=='data' && ui.tab!=='match' && ui.tab!=='slip'){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין אין נתונים</h2><p>יש להעלות את שלושת הדוחות החודשיים בלשונית "קליטת נתונים".</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
+  ({slip:renderSlip, overview:renderOverview, dash:renderDash, plan:renderPlan, clients:renderClients, cost:renderCost, client:renderClient, match:renderMatch, data:renderData})[ui.tab](v);
 }
 
 /* ---------- סקירה ---------- */
@@ -1909,6 +1965,85 @@ function renderCost(v){
   </div>`;
 }
 
+/* ---------- בדיקת תלושים ----------
+   השוואה לפי עובד בין העברת נתוני השכר מ-TimeWatch ("דוחות למייצג") לבין דוח רכיבי השכר של אותו חודש.
+   שלב 1: יחידות (שעות רגילות, ש"נ 125%, ש"נ 150%). כל הפרש מסומן, חוץ מהפרש עיגול של עד 0.01. */
+const SLIP_UNITS = [['base','שעות רגילות','19'],['ot125','ש"נ 125%','41'],['ot150','ש"נ 150%','42']];
+function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
+function slipPairs(ym){
+  const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
+  const pairs = [], usedP = new Set(), byK = {};
+  for(const [e,x] of Object.entries(pay)){ if(x.k) byK[x.k] = e; if(x.k2) byK[x.k2] = e; }
+  for(const [e,t] of Object.entries(tw)){
+    let pe = pay[e] ? e : null, viaId = false;
+    if(!pe && t.k && byK[t.k] && !tw[byK[t.k]]){ pe = byK[t.k]; viaId = true; }   // אותו עובד במספר אחר בשכר
+    if(pe) usedP.add(pe);
+    pairs.push({e, pe, t, p:pe?pay[pe]:null, viaId});
+  }
+  for(const [e,x] of Object.entries(pay)) if(!usedP.has(e)) pairs.push({e:null, pe:e, t:null, p:x, viaId:false});
+  return pairs;
+}
+function slipUnitDiffs(ym){
+  const out = [];
+  for(const pr of slipPairs(ym)){
+    for(const [k, label, sym] of SLIP_UNITS){
+      const a = round2(+(pr.t?.[k]||0)), b = round2(+(pr.p?.u?.[sym]||0)), d = round2(b-a);
+      if(Math.abs(d) <= 0.011) continue;   // עיגול
+      out.push({...pr, k, label, tw:a, pay:b, d});
+    }
+  }
+  return out.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d));
+}
+function renderSlip(v){
+  if(!store.hasPrivate){ v.innerHTML = '<div class="panel empty">בדיקת התלושים עובדת רק באזור הפרטי שלך, ואזור כזה לא זמין בתצוגה הזו.</div>'; return; }
+  const ms = slipMonths();
+  if(!ms.includes(ui.slipYm)) ui.slipYm = ms[ms.length-1] || null;
+  const ym = ui.slipYm, twd = ym && priv['pslip-tw-'+ym], pd = ym && priv['pslip-pay-'+ym];
+  const upload = `<label class="btn primary" for="slip-file">העלאת קבצים…</label><input type="file" id="slip-file" accept=".xlsx,.xls" multiple hidden>`;
+  const head = `<section class="panel">
+    <div class="panel-head"><h2>בדיקת תלושים</h2><span class="small muted">העברת נתוני השכר מ-TimeWatch מול דוח רכיבי השכר, לפי עובד. הנתונים נשמרים באזור הפרטי שלך בלבד</span></div>
+    <div class="actions">${ms.length?`<label><b>חודש</b> <select id="slip-ym">${ms.slice().reverse().map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthName(m)}</option>`).join('')}</select></label>`:''}${upload}
+      ${ym?`<span class="small">${twd?`TimeWatch: <b>${esc(twd.file)}</b>`:'<span class="pill warn">חסר קובץ העברת נתוני שכר מ-TimeWatch</span>'} · ${pd?`רכיבי שכר: <b>${esc(pd.file)}</b>`:'<span class="pill warn">חסר דוח רכיבי שכר</span>'}</span>`:''}</div>
+    <p class="hint" style="margin-top:8px">מעלים את שני הקבצים של החודש (אפשר גם יחד): "דוחות למייצג" (העברת נתוני שכר) מ-TimeWatch, ודוח רכיבי השכר. דוח רכיבי שכר שהועלה בלשונית "קליטת נתונים" נקלט גם כאן.</p>
+  </section>`;
+  if(!ym || !twd || !pd){ v.innerHTML = `<div class="stack">${head}</div>`; return; }
+  const all = slipUnitDiffs(ym), shown = all;
+  const pairs = slipPairs(ym), hasH = x => SLIP_UNITS.some(([k,,sym])=>(x.t?.[k]||0) || (x.p?.u?.[sym]||0));
+  const onlyTw = pairs.filter(x=>x.t && !x.p && hasH(x)), onlyPay = pairs.filter(x=>x.p && !x.t && hasH(x)), viaId = pairs.filter(x=>x.viaId);
+  const nm = x => esc(x.t?.n || x.p?.n || ''), num_ = x => x.e && x.pe && x.e!==x.pe ? `${esc(x.e)} <span class="muted small">(בשכר: ${x.pe.length>=9?'מספר ארוך':esc(x.pe)})</span>` : esc(x.e || (x.pe.length>=9?'מספר ארוך':x.pe));
+  const emps = new Set(all.map(x=>x.e||x.pe)).size;
+  v.innerHTML = `<div class="stack">${head}
+    <div class="kpis">
+      <div class="kpi"><span class="label">עובדים עם שעות</span><span class="value num">${ltr(nf0.format(pairs.filter(hasH).length))}</span><span class="sub">TimeWatch ${ltr(nf0.format(pairs.filter(x=>x.t&&SLIP_UNITS.some(([k])=>x.t[k])).length))} · שכר ${ltr(nf0.format(pairs.filter(x=>x.p&&SLIP_UNITS.some(([,,s])=>x.p.u?.[s])).length))}</span></div>
+      <div class="kpi"><span class="label">הפרשים בשעות</span><span class="value num">${ltr(nf0.format(all.length))}</span><span class="sub">${ltr(nf0.format(emps))} עובדים · בלי הפרשי עיגול של 0.01</span></div>
+      <div class="kpi"><span class="label">סך ההפרש בשעות רגילות</span><span class="value num">${ltr(nf1.format(all.filter(x=>x.k==='base').reduce((a,x)=>a+x.d,0)))}</span><span class="sub">שכר פחות TimeWatch</span></div>
+      <div class="kpi"><span class="label">סך ההפרש בשעות נוספות</span><span class="value num">${ltr(nf1.format(all.filter(x=>x.k!=='base').reduce((a,x)=>a+x.d,0)))}</span><span class="sub">125% ו-150%</span></div>
+    </div>
+    <section class="panel">
+      <div class="panel-head"><h2>שלב 1: שעות רגילות, ש"נ 125%, ש"נ 150%</h2><span class="small muted">${monthName(ym)} · הפרש = שכר פחות TimeWatch</span>
+        <button class="btn sm" type="button" id="slip-xlsx">ייצוא לאקסל</button></div>
+      ${shown.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>רכיב</th><th class="n">TimeWatch</th><th class="n">שכר</th><th class="n">הפרש</th><th>הערה</th></tr></thead><tbody>
+        ${shown.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${esc(x.label)}</td><td class="n">${x.t?ltr(nf2.format(x.tw)):'<span class="muted">לא בקובץ</span>'}</td><td class="n">${x.p?ltr(nf2.format(x.pay)):'<span class="muted">לא בקובץ</span>'}</td>
+          <td class="n"><span class="pill bad">${ltr((x.d>0?'+':'')+nf2.format(x.d))}</span></td><td class="small">${[x.viaId?'הותאם לפי ת.ז.':'', x.t?.note?esc(x.t.note):''].filter(Boolean).join(' · ')}</td></tr>`).join('')}
+      </tbody></table></div>`:'<p class="muted">אין הפרשים בשעות. כל העובדים תואמים.</p>'}
+      ${onlyTw.length||onlyPay.length||viaId.length?`<p class="hint" style="margin-top:8px">${[
+        onlyTw.length?`${onlyTw.length} עובדים עם שעות ב-TimeWatch שלא נמצאו בדוח רכיבי השכר: ${onlyTw.map(x=>esc(x.e)).join(', ')}`:'',
+        onlyPay.length?`${onlyPay.length} עובדים עם שעות בשכר שלא נמצאו ב-TimeWatch: ${onlyPay.map(x=>x.pe.length>=9?'מספר ארוך':esc(x.pe)).join(', ')}`:'',
+        viaId.length?`${viaId.length} עובדים מופיעים במספר עובד שונה בשני הקבצים והותאמו לפי תעודת זהות: ${viaId.map(x=>esc(x.e)).join(', ')}`:''].filter(Boolean).join('. ')}.</p>`:''}
+    </section>
+    <section class="panel"><div class="panel-head"><h2>השלבים הבאים</h2></div>
+      <p class="muted">שלב 2: נסיעות, אחזקת רכב ובונוסים. שלב 3: ניכויי רשות (מפרעות). הנתונים כבר נשמרים מהקבצים, והבדיקות ייבנו לפי הקריטריונים שתגדירי.</p></section>
+  </div>`;
+}
+function slipXlsx(){
+  const ym = ui.slipYm, rows = slipUnitDiffs(ym), wb = XLSX.utils.book_new(); wb.Workbook = {Views:[{RTL:true}]};
+  const ws = XLSX.utils.aoa_to_sheet([["מס' עובד",'מס\' עובד בשכר','שם','סניף','רכיב','TimeWatch','שכר','הפרש','הערה'],
+    ...rows.map(x=>[x.e||'', x.pe && x.pe!==x.e ? (x.pe.length>=9?'מספר ארוך':x.pe) : '', x.t?.n||x.p?.n||'', x.t?.b||'', x.label, x.tw, x.pay, x.d, [x.viaId?'הותאם לפי ת.ז.':'', x.t?.note||''].filter(Boolean).join(' · ')])]);
+  ws['!cols'] = [{wch:10},{wch:12},{wch:22},{wch:14},{wch:12},{wch:10},{wch:10},{wch:9},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws, 'שעות');
+  saveXlsx(wb, `בדיקת תלושים ${ym}.xlsx`);
+}
+
 /* ---------- כרטיס לקוח: התפלגות חודשית מתחילת השנה ---------- */
 function renderClient(v){
   const ms = monthList(); const y = (ui.ym||ms[ms.length-1]).slice(0,4);
@@ -2352,7 +2487,7 @@ function monthCard(ym){
       return c; })}
   </article>`;
 }
-const TYPE_LABEL = {materials:'קובץ חומרי הניקיון', wages:'קובץ השכר השעתי', plan:'התכנית העסקית', revenue:'דוח ההכנסות', hours:'דוח השעות', payroll:'דוח השכר', components:'דוח רכיבי השכר'};
+const TYPE_LABEL = {twpay:'העברת נתוני השכר מ-TimeWatch', materials:'קובץ חומרי הניקיון', wages:'קובץ השכר השעתי', plan:'התכנית העסקית', revenue:'דוח ההכנסות', hours:'דוח השעות', payroll:'דוח השכר', components:'דוח רכיבי השכר'};
 // טבלת תעריפים: אתר (עם הקוד בסוגריים) ותעריף לשעה, בעמודה אחת או יותר. כותרת עמודה עם תאריך
 // (למשל 01/04/2026) = החודש שממנו התעריף בתוקף. "פיקס" = סכום קבוע. תא ריק = אין תעריף.
 function parseRates(wb, fileName){
@@ -2394,7 +2529,7 @@ async function handleFiles(files){
       if(!type){ toast(`לא זוהה סוג הדוח בקובץ ${f.name}`); continue; } items.push({f, wb, type}); }
     catch(err){ toast(`לא הצלחנו לקרוא את ${f.name}`); }
   }
-  const order = {materials:-4, wages:-3, plan:-2, rates:-1, revenue:0, hours:1, payroll:2, components:3};
+  const order = {materials:-4, wages:-3, plan:-2, rates:-1, revenue:0, hours:1, payroll:2, components:3, twpay:4};
   items.sort((a,b)=>order[a.type]-order[b.type]);
   for(const {f, wb, type} of items){
     try{
@@ -2412,6 +2547,12 @@ async function handleFiles(files){
         const w = parseWages(wb, f.name); await store.savePrivate('wages', w);
         const n = Object.values(w.emps); toast(`נקלט שכר שעתי ל-${n.length} עובדים (${n.filter(x=>x.r>0).length} עם תעריף). נשמר באזור הפרטי שלך בלבד`); continue;
       }
+      if(type==='twpay'){
+        if(!store.hasPrivate){ toast('אין אזור פרטי בתצוגה הזו, ולכן קובץ העברת נתוני השכר לא נשמר'); continue; }
+        const {ym, data} = await parseTwPay(wb, f.name); if(!ym){ toast(`לא זוהה החודש בקובץ ${f.name}`); continue; }
+        await store.savePrivate('pslip-tw-'+ym, data); ui.slipYm = ym;
+        toast(`נקלטה העברת נתוני שכר מ-TimeWatch ל${monthName(ym)}: ${Object.keys(data.emps).length} עובדים. נשמר באזור הפרטי שלך בלבד`); continue;
+      }
       if(type==='plan'){
         const p = parsePlan(wb, f.name);
         p.branch = guessPlanBranch(wb) || branchNames().find(b=>!plans[b]) || branchNames()[0] || '';
@@ -2425,6 +2566,9 @@ async function handleFiles(files){
         mapping.rateTables = (mapping.rateTables||[]).filter(x=>!ts.some(t=>t.from===x.from)).concat(ts); await store.saveMapping();
         toast(ts.every(t=>t.fromFile) ? `נקלטו תעריפים בתוקף מ: ${ts.map(t=>monthName(t.from)).join(', ')}` : `נקלטו ${Object.keys(ts[0].rates).length} תעריפים. יש לבחור מאיזה חודש הם בתוקף בלשונית "התאמת לקוחות"`);
         ui.tab='match'; continue;
+      }
+      if(type==='components' && store.hasPrivate){   // לבדיקת התלושים: נתונים לפי עובד, לאזור הפרטי
+        try{ for(const {ym, data} of await parseComponentsEmp(wb, f.name)){ await store.savePrivate('pslip-pay-'+ym, data); ui.slipYm = ym; } }catch(e){ console.error(e); }
       }
       const res = ({revenue:parseRevenue, hours:parseHours, payroll:parsePayroll, components:parseComponents})[type](wb, f.name);
       for(const {ym, data, staff} of [].concat(res)){
@@ -2520,6 +2664,7 @@ document.addEventListener('click', async e=>{
   if(t.id==='bk-restore'){ await doRestore(); return; }
   if(t.id==='bk-cancel'){ pendingRestore = null; render(); return; }
   if(d.unrule){ const r = {...mapping.clientRules}; delete r[d.unrule]; mapping.clientRules = r; await store.saveMapping(); render(); toast(`${d.unrule} חזר לרשימת ההתאמה`); return; }
+  if(t.id==='slip-xlsx'){ slipXlsx(); return; }
   if(t.id==='ga-save'){ if(Date.now()-gaDown > 1000) await saveGAPanel(); return; }
   if(t.id==='ga-copy'){   // העתקת הסכומים מהחודש הקודם לתאים הריקים בחודש הנוכחי
     const ym = ui.matYm || monthList().pop(), prev = monthList().filter(m=>m<ym).pop(), src = ga.byMonth[prev] || {};
@@ -2603,6 +2748,8 @@ document.addEventListener('change', async e=>{
   else if(d.matbill){ await setMaterial('bill', d.matbill, t.value); }
   else if(d.clo){ await setClothing(d.clo, t.value); }
   else if(t.id==='bk-file' && t.files[0]){ const f = t.files[0]; t.value=''; await readBackup(f); }
+  else if(t.id==='slip-ym'){ ui.slipYm = t.value; render(); }
+  else if(t.id==='slip-file' && t.files.length){ const f=[...t.files]; t.value=''; await handleFiles(f); ui.tab='slip'; render(); }
   else if(t.id==='comp-sel'){ ui.compSel = t.value; render(); }
   else if(d.brk){ await setBreak(d.brk, t.value); }
   else if(t.id==='brk-add' && t.value){ const g=mapping.groups.find(x=>x.id===t.value); if(g){ g.noBreakBill=true; await store.saveMapping(); render(); toast(`${g.name} נוסף. אפשר להזין לו שעות הפסקה`); } }
