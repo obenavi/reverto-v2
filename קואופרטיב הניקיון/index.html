@@ -2005,7 +2005,9 @@ function slipNoRecup(ym){ return slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWo
 const KH_BASE = ['שעות רגילות','ימי חג/ שעות','חופשה שעות','מחלה שעות','תוספת ותק','הבראה שעתי','הבראה','משכורת','שעות נוספות גלובליות'], KH_EMP = 0.025, KH_ER = 0.075, KH_TOL = 1;
 // רכיב שעתי (סמל בדוח רכיבי השכר): בשכר מעל שכר המינימום, השכר הקובע לקרן הוא שכר מינימום × השעות
 const MIN_WAGE_H = 39.11, KH_HOURLY = {'שעות רגילות':'19', 'ימי חג/ שעות':'26', 'חופשה שעות':'18', 'מחלה שעות':'21'};
-const khBaseOf = x => round2(KH_BASE.reduce((a,d)=>{ const v = x.p.p[d]||0, u = KH_HOURLY[d] ? (x.p.u?.[KH_HOURLY[d]]||0) : 0; return a + (u ? Math.min(v, MIN_WAGE_H*u) : v); }, 0));
+const KH_RETRO = /^הפרשי שכר/;   // הפרשי שכר רטרו נכנסים לבסיס
+const khBaseOf = x => round2(KH_BASE.reduce((a,d)=>{ const v = x.p.p[d]||0, u = KH_HOURLY[d] ? (x.p.u?.[KH_HOURLY[d]]||0) : 0; return a + (u ? Math.min(v, MIN_WAGE_H*u) : v); }, 0)
+  + Object.entries(x.p.p).filter(([d])=>KH_RETRO.test(d)).reduce((a,[,v])=>a+v,0));
 function slipKh(ym){
   const out = {none:[], off:[], ok:0, mis:[], salList:[]}, marked = priv['pslip-settings']?.khSal || {};
   for(const x of slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x))){
@@ -2113,7 +2115,7 @@ function renderSlip(v){
         ${k.off.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${x.kind==='sal'?'בתשלום לשכר':'לקרן'}</td><td class="n">${money(x.base)}</td>
           <td class="n">${x.kind==='sal'?'—':money(x.emp)}</td><td class="n">${x.kind==='sal'?'—':money(x.xEmp)}</td><td class="n">${money(x.kind==='sal'?x.sal:x.er)}</td><td class="n">${money(x.xEr)}</td>
           <td class="n"><span class="pill ${x.dEr<0?'bad':'warn'}">${sgn(x.dEr)}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל ההפרשות בשיעור הנכון.</p>'}
-      <p class="hint" style="margin-top:8px">שכר לקרן = ${KH_BASE.join(', ')}. ברכיבים השעתיים (${Object.keys(KH_HOURLY).join(', ')}), כשהתעריף גבוה משכר המינימום (${ltr('₪'+nf2.format(MIN_WAGE_H))} לשעה), נלקח שכר מינימום × מספר השעות. הפרש של עד ${money(KH_TOL)} לא מסומן. עובד שמקבל את הקרן בתשלום לשכר (קטינים, ללא ת.ז. ישראלית) נבדק מול 7.5%. הסימון "קטין / ללא ת.ז. ישראלית" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך.</p>
+      <p class="hint" style="margin-top:8px">שכר לקרן = ${KH_BASE.join(', ')} והפרשי שכר רטרו. ברכיבים השעתיים (${Object.keys(KH_HOURLY).join(', ')}), כשהתעריף גבוה משכר המינימום (${ltr('₪'+nf2.format(MIN_WAGE_H))} לשעה), נלקח שכר מינימום × מספר השעות. הפרש של עד ${money(KH_TOL)} לא מסומן. עובד שמקבל את הקרן בתשלום לשכר (קטינים, ללא ת.ז. ישראלית) נבדק מול 7.5%. הסימון "קטין / ללא ת.ז. ישראלית" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך.</p>
     </section>`; };
   const amtPanel = (stage, title, sub) => { const rows = slipAmtDiffs(ym, stage), sum = rows.reduce((a,x)=>a+x.d,0);
     return `<section class="panel">
