@@ -1995,6 +1995,9 @@ const slipWorked = x => (x.t?.days||0) > 0 || (x.p?.u?.['19']||0) > 0 || (x.p?.p
 function slipOneSided(ym){ const pairs = slipPairs(ym); return {noSlip:pairs.filter(x=>slipHasTw(x) && !(slipPaid(x)>0)), noTwData:pairs.filter(x=>slipPaid(x)>0 && !slipHasTw(x)).sort((a,b)=>slipPaid(b)-slipPaid(a))}; }
 function slipNoTravel(ym){ const shuttle = priv['pslip-settings']?.shuttle || {}; const list = slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x) && !SLIP_TR.some(d=>x.p.p[d]));
   const id = x => x.e || x.pe; return {open:list.filter(x=>!shuttle[id(x)]), done:list.filter(x=>shuttle[id(x)]), shuttle, id}; }
+// הבראה: כל רכיב תשלום שבשמו "הבראה" (הבראה שעתי, הבראה), חוץ מהפחתת הבראה
+const slipRecup = x => Object.entries(x.p?.p||{}).filter(([d,v])=>/הבראה/.test(d) && !/הפחתת/.test(d) && v>0).reduce((a,[,v])=>a+v,0);
+function slipNoRecup(ym){ return slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x) && !(slipRecup(x)>0)).sort((a,b)=>(a.t?.b||'').localeCompare(b.t?.b||'','he') || (b.t?.days||0)-(a.t?.days||0)); }
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2053,6 +2056,14 @@ function renderSlip(v){
       ${done.length?`<details style="margin-top:10px"><summary class="small">${done.length} עובדים מסומנים "יש הסעה" ולא נספרים</summary><div class="tbl-wrap" style="margin-top:6px"><table class="compact">${thead}<tbody>${done.map(row).join('')}</tbody></table></div></details>`:''}
       <p class="hint" style="margin-top:8px">אחזקת רכב נחשבת רכיב נסיעות. סימון "יש הסעה" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך. הסניף לפי TimeWatch.</p>
     </section>`; };
+  const recupPanel = () => { const list = slipNoRecup(ym), byBr = {}; list.forEach(x=>(byBr[x.t?.b||'לא ידוע'] ||= []).push(x));
+    return `<section class="panel">
+      <div class="panel-head"><h2>עובדים בלי הבראה בתלוש</h2><span class="small muted">${monthName(ym)} · עובדים שעבדו בחודש ואין להם תשלום הבראה (הבראה שעתי או הבראה) · ${list.length} עובדים</span><button class="btn sm" type="button" data-slipx="recup">ייצוא לאקסל</button></div>
+      ${list.length?Object.entries(byBr).map(([br, xs])=>`<h3 style="margin:10px 0 6px">${esc(br)} (${xs.length})</h3><div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">ימי עבודה</th><th class="n">שעות רגילות</th><th class="n">סה״כ תשלומים</th></tr></thead><tbody>
+        ${xs.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${x.t?.days?ltr(nf0.format(x.t.days)):'—'}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td><td class="n">${money(slipPaid(x))}</td></tr>`).join('')}</tbody></table></div>`).join('')
+        :'<p class="muted">לכל העובדים שעבדו יש תשלום הבראה בתלוש.</p>'}
+      <p class="hint" style="margin-top:8px">הבראה מגיעה מהיום הראשון לעבודה. נבדקים עובדים עם תלוש שעבדו בחודש (ימי עבודה ב-TimeWatch, שעות רגילות או משכורת). הסניף לפי TimeWatch.</p>
+    </section>`; };
   const amtPanel = (stage, title, sub) => { const rows = slipAmtDiffs(ym, stage), sum = rows.reduce((a,x)=>a+x.d,0);
     return `<section class="panel">
       <div class="panel-head"><h2>${title}</h2><span class="small muted">${monthName(ym)} · ${sub} · הפרש = שכר פחות TimeWatch</span><button class="btn sm" type="button" data-slipx="${stage}">ייצוא לאקסל</button></div>
@@ -2092,6 +2103,7 @@ function renderSlip(v){
       <p class="hint" style="margin-top:8px">ההשוואות בשלבים 1–3 כוללות רק עובדים שיש להם גם נתונים ב-TimeWatch וגם תלוש. "תלוש" = תשלום כלשהו בדוח רכיבי השכר.</p>
     </section>
     ${travelPanel()}
+    ${recupPanel()}
     ${amtPanel(2, 'שלב 2: נסיעות, אחזקת רכב ובונוסים', 'תשלומים בשכר מול TimeWatch. בונוסים בשכר = בונוס, מענק, מענק מצויינות ובונוס נטו')}
     ${amtPanel(3, 'שלב 3: מפרעות', '"מפרעה" ב-TimeWatch מול "מקדמה" בניכויי הרשות בשכר')}
   </div>`;
@@ -2115,8 +2127,10 @@ function slipXlsx(which){
   };
   const amt = (st, title) => add(title, ["מס' עובד","מס' עובד בשכר",'שם','סניף','רכיב','TimeWatch','שכר','הפרש','פירוט בשכר','הערה'],
     slipAmtDiffs(ym, st).map(x=>[x.e||'', pe(x), name(x), x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), notes(x)]), [10,12,22,14,12,10,10,9,28,30]);
+  sheets.recup = () => add('בלי הבראה', ["מס' עובד",'שם','סניף','ימי עבודה','שעות רגילות','סה"כ תשלומים','הערה'],
+    slipNoRecup(ym).map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'לא ידוע', x.t?.days||0, x.p.u?.['19']||0, round2(slipPaid(x)), notes(x)]), [10,22,14,10,12,12,30]);
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
