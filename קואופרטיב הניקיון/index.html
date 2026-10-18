@@ -2028,6 +2028,50 @@ function slipKh(ym){
   out.none.sort((a,b)=>br(a).localeCompare(br(b),'he')); out.off.sort((a,b)=>Math.abs(b.dEr)+Math.abs(b.dEmp)-Math.abs(a.dEr)-Math.abs(a.dEmp));
   return out;
 }
+/* פנסיה: קופה ראשית (7% עובד, 7.5% מעביד, 8.33% פיצויים) מרכיבי השכר וחלף השכר בשכר בפועל; קופת נסיעות (5%/5%) מרכיבי
+   הנסיעות (בלי אחזקת רכב); קופת שעות נוספות (7%/7.5%, פיצויים 6%) מרכיבי השעות הנוספות. אותיות הקופות (א/ב/ג) משתנות בין
+   עובדים, ולכן כל קופה משויכת לסוג שהסכומים שלה הכי קרובים אליו. "גמל בתשלום" = הפנסיה משולמת בשכר (קטינים, ללא ת.ז. ישראלית). */
+const PEN_ROLES = {main:{n:'פנסיה',r:[0.07,0.075,0.0833]}, travel:{n:'קופת נסיעות',r:[0.05,0.05,0]}, ot:{n:'קופת שעות נוספות',r:[0.07,0.075,0.06]}};
+const PEN_TRV = ['נסיעות חודשי','נסיעות','הוצאות נסיעה'], PEN_OT = /^(ש"נ|ש\.שבת|שבת תוספת|שעות חג 150)/, PEN_FUND = /ק(?:\.|"ג)?\s*גמל\s*([אבג])|ק"ג\s*([אבג])-/;
+function penFunds(x){
+  const F = {};
+  for(const [src, m] of [['h', x.p.h||{}], ['c', x.p.c||{}]]) for(const [d,v] of Object.entries(m)){
+    const g = d.match(PEN_FUND); if(!g) continue; const f = F[g[1]||g[2]] ||= [0,0,0];
+    if(src==='h') f[0] += v; else if(/פיצויים/.test(d)) f[2] += v; else f[1] += v;
+  }
+  return F;
+}
+const perms = (arr, k) => k===0 ? [[]] : arr.flatMap((a,i)=>perms([...arr.slice(0,i), ...arr.slice(i+1)], k-1).map(p=>[a,...p]));
+function slipPension(ym){
+  const out = {missing:[], off:[], sal:[], ok:{main:0, travel:0, ot:0}}, marked = priv['pslip-settings']?.khSal || {};
+  for(const x of slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x))){
+    const P = x.p.p, bases = {main: round2(KH_BASE.reduce((a,d)=>a+(P[d]||0),0) + Object.entries(P).filter(([d])=>KH_RETRO.test(d)).reduce((a,[,v])=>a+v,0)),
+      travel: round2(PEN_TRV.reduce((a,d)=>a+(P[d]||0),0)), ot: round2(Object.entries(P).filter(([d])=>PEN_OT.test(d)).reduce((a,[,v])=>a+v,0))};
+    const sal = P['גמל בתשלום']||0, F = penFunds(x), mk = !!marked[x.e||x.pe];
+    // קופה עם הפקדת מעביד בלבד (בלי ניכוי עובד ובלי פיצויים) לא משויכת לסוג; מוצגת בנפרד
+    const erOnly = Object.keys(F).filter(f=>!F[f][0] && !F[f][2] && F[f][1]>KH_TOL), funds = Object.keys(F).filter(f=>!erOnly.includes(f) && F[f].some(v=>v));
+    erOnly.forEach(f=>out.off.push({...x, role:'other', base:bases.main, fund:f, act:F[f].map(round2), xp:[0,0,0], d:F[f].map(round2), erOnly:true}));
+    if(sal || mk){ out.sal.push({...x, sal, base:bases.main, marked:mk, hasFund:funds.length>0}); if(!funds.length) continue; }
+    const need = Object.keys(PEN_ROLES).filter(r=>bases[r] > 0);
+    let best = null;   // שיוך קופות לסוגים: הצירוף עם הסטייה הכוללת הקטנה ביותר
+    for(const pm of perms([...need, ...funds.map(()=>null)], funds.length)){
+      let err = 0; funds.forEach((f,i)=>{ const r = pm[i]; if(!r){ err += (F[f][0]+F[f][1]+F[f][2])*10; return; } PEN_ROLES[r].r.forEach((q,j)=>err += Math.abs(F[f][j]-q*bases[r])); });
+      if(!best || err < best.err) best = {err, pm};
+    }
+    for(const r of need){
+      const i = best ? best.pm.indexOf(r) : -1, xp = PEN_ROLES[r].r.map(q=>round2(q*bases[r]));
+      if(i<0){ if(xp[0] > KH_TOL) out.missing.push({...x, role:r, base:bases[r], xp}); continue; }
+      const f = funds[i], act = F[f].map(round2), d = act.map((v,j)=>round2(v-xp[j]));
+      if(d.some(v=>Math.abs(v)>KH_TOL)) out.off.push({...x, role:r, base:bases[r], fund:f, act, xp, d, erOnly: !act[0] && !act[2]});
+      else out.ok[r]++;
+    }
+    // קופה שלא שויכה לשום סוג (למשל הפקדת מעביד בלבד)
+    if(best) funds.forEach((f,i)=>{ if(!best.pm[i] && F[f].reduce((a,v)=>a+v,0) > 3*KH_TOL) out.off.push({...x, role:'other', base:bases.main, fund:f, act:F[f].map(round2), xp:[0,0,0], d:F[f].map(round2), erOnly:false}); });
+  }
+  const br = x => x.t?.b || 'לא ידוע';
+  out.missing.sort((a,b)=>br(a).localeCompare(br(b),'he')); out.off.sort((a,b)=>Math.abs(b.d[1])-Math.abs(a.d[1]));
+  return out;
+}
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2117,6 +2161,27 @@ function renderSlip(v){
           <td class="n"><span class="pill ${x.dEr<0?'bad':'warn'}">${sgn(x.dEr)}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל ההפרשות בשיעור הנכון.</p>'}
       <p class="hint" style="margin-top:8px">שכר לקרן = ${KH_BASE.join(', ')} והפרשי שכר רטרו. ברכיבים השעתיים (${Object.keys(KH_HOURLY).join(', ')}), כשהתעריף גבוה משכר המינימום (${ltr('₪'+nf2.format(MIN_WAGE_H))} לשעה), נלקח שכר מינימום × מספר השעות. הפרש של עד ${money(KH_TOL)} לא מסומן. עובד שמקבל את הקרן בתשלום לשכר (קטינים, ללא ת.ז. ישראלית) נבדק מול 7.5%. הסימון "קטין / ללא ת.ז. ישראלית" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך.</p>
     </section>`; };
+  const penPanel = () => {
+    if(!(pd.v>=2)) return `<section class="panel"><div class="panel-head"><h2>פנסיה ופיצויים</h2></div><p class="muted">כדי לבדוק את ההפרשות לפנסיה יש להעלות מחדש את דוח רכיבי השכר של ${monthName(ym)}.</p></section>`;
+    const k = slipPension(ym), sgn = v => ltr((v>0?'+':v<0?'−':'')+money(Math.abs(v)).replace('-','')), rn = r => r==='other' ? 'קופה נוספת' : PEN_ROLES[r].n;
+    const misSal = k.sal.filter(x=>(x.marked && !x.sal) || (x.marked && x.hasFund) || (!x.marked && x.sal));
+    return `<section class="panel">
+      <div class="panel-head"><h2>פנסיה, פיצויים, קופת נסיעות וקופת שעות נוספות</h2><span class="small muted">${monthName(ym)} · תקינים: פנסיה ${k.ok.main} · נסיעות ${k.ok.travel} · שעות נוספות ${k.ok.ot}</span><button class="btn sm" type="button" data-slipx="pen">ייצוא לאקסל</button></div>
+      <h3 style="margin:4px 0 6px">חסרה הפרשה (${k.missing.length})</h3>
+      ${k.missing.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>קופה</th><th class="n">שכר לקופה</th><th class="n">צפוי עובד</th><th class="n">צפוי מעביד</th><th class="n">צפוי פיצויים</th></tr></thead><tbody>
+        ${k.missing.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td><span class="pill bad">${rn(x.role)}</span></td><td class="n">${money(x.base)}</td><td class="n">${money(x.xp[0])}</td><td class="n">${money(x.xp[1])}</td><td class="n">${x.xp[2]?money(x.xp[2]):'—'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">לכל העובדים יש את כל הקופות הנדרשות.</p>'}
+      <h3 style="margin:14px 0 6px">הפרשה שלא בשיעור הנכון (${k.off.length})</h3>
+      ${k.off.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>קופה</th><th class="n">שכר לקופה</th><th class="n">עובד</th><th class="n">מעביד</th><th class="n">פיצויים</th><th class="n">הפרש עובד</th><th class="n">הפרש מעביד</th><th class="n">הפרש פיצויים</th><th>הערה</th></tr></thead><tbody>
+        ${k.off.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${rn(x.role)} <span class="muted small">(${x.fund})</span></td><td class="n">${money(x.base)}</td><td class="n">${money(x.act[0])}</td><td class="n">${money(x.act[1])}</td><td class="n">${money(x.act[2])}</td>
+          ${x.role==='other'?'<td></td><td></td><td></td>':x.d.map(v=>`<td class="n">${Math.abs(v)>KH_TOL?`<span class="pill ${v<0?'bad':'warn'}">${sgn(v)}</span>`:'<span class="muted">תקין</span>'}</td>`).join('')}
+          <td class="small">${x.erOnly&&x.base?`הפקדת מעביד בלבד, ${pct(x.act[1]/x.base,1)} מהשכר`:''}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל ההפרשות בשיעור הנכון.</p>'}
+      <h3 style="margin:14px 0 6px">פנסיה בתשלום לשכר (${k.sal.length})</h3>
+      ${k.sal.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">שכר</th><th class="n">גמל בתשלום</th><th class="n">אחוז מהשכר</th><th>הערה</th></tr></thead><tbody>
+        ${k.sal.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${money(x.base)}</td><td class="n">${x.sal?money(x.sal):'—'}</td><td class="n">${x.sal&&x.base?pct(x.sal/x.base,1):'—'}</td>
+          <td class="small">${[x.marked?'מסומן קטין / ללא ת.ז. ישראלית':'<span class="pill warn">לא מסומן ברשימה</span>', x.marked&&!x.sal?'<span class="pill bad">אין גמל בתשלום</span>':'', x.hasFund?'יש גם הפקדה לקופה':''].filter(Boolean).join(' · ')}</td></tr>`).join('')}</tbody></table></div>
+        ${misSal.length?`<p class="small" style="margin-top:6px">${misSal.length} לא תואמים לרשימת הקטינים / ללא ת.ז. ישראלית (הרשימה מתעדכנת בפאנל קרן השתלמות).</p>`:''}`:'<p class="muted">אין עובדים עם פנסיה בתשלום לשכר.</p>'}
+      <p class="hint" style="margin-top:8px">פנסיה: 7% עובד, 7.5% מעביד ו-8.33% פיצויים מ: ${KH_BASE.join(', ')} והפרשי שכר רטרו (בשכר בפועל). קופת נסיעות: 5% עובד ו-5% מעביד מ: ${PEN_TRV.join(', ')} (בלי אחזקת רכב). קופת שעות נוספות: 7% עובד, 7.5% מעביד ו-6% פיצויים מהשעות הנוספות (ש"נ, שבת וחג 150%). הפרש של עד ${money(KH_TOL)} לא מסומן.</p>
+    </section>`; };
   const amtPanel = (stage, title, sub) => { const rows = slipAmtDiffs(ym, stage), sum = rows.reduce((a,x)=>a+x.d,0);
     return `<section class="panel">
       <div class="panel-head"><h2>${title}</h2><span class="small muted">${monthName(ym)} · ${sub} · הפרש = שכר פחות TimeWatch</span><button class="btn sm" type="button" data-slipx="${stage}">ייצוא לאקסל</button></div>
@@ -2158,6 +2223,7 @@ function renderSlip(v){
     ${travelPanel()}
     ${recupPanel()}
     ${khPanel()}
+    ${penPanel()}
     ${amtPanel(2, 'שלב 2: נסיעות, אחזקת רכב ובונוסים', 'תשלומים בשכר מול TimeWatch. בונוסים בשכר = בונוס, מענק, מענק מצויינות ובונוס נטו')}
     ${amtPanel(3, 'שלב 3: מפרעות', '"מפרעה" ב-TimeWatch מול "מקדמה" בניכויי הרשות בשכר')}
   </div>`;
@@ -2188,8 +2254,13 @@ function slipXlsx(which){
     add('לא תואם לרשימה', ["מס' עובד",'שם','סניף','מה לא תואם','הערה'], k.mis.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', x.why, notes(x)]), [10,22,14,50,30]);
     add('שיעור לא נכון', ["מס' עובד",'שם','סניף','אופן','שכר לקרן','עובד בפועל','צפוי 2.5%','מעביד בפועל','צפוי 7.5%','הפרש עובד','הפרש מעביד','הערה'],
       k.off.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', x.kind==='sal'?'בתשלום לשכר':'לקרן', x.base, x.kind==='sal'?'':x.emp, x.kind==='sal'?'':x.xEmp, x.kind==='sal'?x.sal:x.er, x.xEr, x.dEmp, x.dEr, notes(x)]), [10,22,14,12,11,10,10,11,10,10,10,30]); };
+  sheets.pen = () => { const k = slipPension(ym), rn = r => r==='other' ? 'קופה נוספת' : PEN_ROLES[r].n;
+    add('חסרה הפרשה', ["מס' עובד",'שם','סניף','קופה','שכר לקופה','צפוי עובד','צפוי מעביד','צפוי פיצויים','הערה'], k.missing.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', rn(x.role), x.base, ...x.xp, notes(x)]), [10,22,14,16,11,10,10,11,30]);
+    add('שיעור לא נכון', ["מס' עובד",'שם','סניף','קופה','אות','שכר לקופה','עובד','מעביד','פיצויים','הפרש עובד','הפרש מעביד','הפרש פיצויים','הערה'],
+      k.off.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', rn(x.role), x.fund, x.base, ...x.act, ...(x.role==='other'?['','','']:x.d), [x.erOnly&&x.base?`הפקדת מעביד בלבד ${round2(x.act[1]/x.base*100)}%`:'', notes(x)].filter(Boolean).join(' · ')]), [10,22,14,16,5,11,9,9,9,10,10,10,30]);
+    add('גמל בתשלום', ["מס' עובד",'שם','שכר','גמל בתשלום','אחוז','מסומן ברשימה','יש גם קופה'], k.sal.map(x=>[x.e||pe(x)||x.pe, name(x), x.base, x.sal, x.base?round2(x.sal/x.base*100):'', x.marked?'כן':'', x.hasFund?'כן':'']), [10,22,11,11,8,12,10]); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
