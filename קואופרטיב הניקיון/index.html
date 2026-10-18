@@ -2051,7 +2051,7 @@ function slipPension(ym){
     // קופה עם הפקדת מעביד בלבד (בלי ניכוי עובד ובלי פיצויים) לא משויכת לסוג; מוצגת בנפרד
     const erOnly = Object.keys(F).filter(f=>!F[f][0] && !F[f][2] && F[f][1]>KH_TOL), funds = Object.keys(F).filter(f=>!erOnly.includes(f) && F[f].some(v=>v));
     erOnly.forEach(f=>out.off.push({...x, role:'other', base:bases.main, fund:f, act:F[f].map(round2), xp:[0,0,0], d:F[f].map(round2), erOnly:true}));
-    if(sal || mk){ const xs = round2(['main','travel','ot'].reduce((t,r)=>t+bases[r]*(PEN_ROLES[r].r[1]+PEN_ROLES[r].r[2]),0)); out.sal.push({...x, sal, base:bases.main, bt:bases.travel, bo:bases.ot, xs, ds:round2(sal-xs), marked:mk, hasFund:funds.length>0}); if(!funds.length) continue; }
+    if(sal){ const xs = round2(['main','travel','ot'].reduce((t,r)=>t+bases[r]*(PEN_ROLES[r].r[1]+PEN_ROLES[r].r[2]),0)); out.sal.push({...x, sal, base:bases.main, bt:bases.travel, bo:bases.ot, xs, ds:round2(sal-xs), marked:mk, hasFund:funds.length>0}); if(!funds.length) continue; }
     const need = Object.keys(PEN_ROLES).filter(r=>bases[r] > 0);
     let best = null;   // שיוך קופות לסוגים: הצירוף עם הסטייה הכוללת הקטנה ביותר
     for(const pm of perms([...need, ...funds.map(()=>null)], funds.length)){
