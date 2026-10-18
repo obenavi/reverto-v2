@@ -1974,7 +1974,7 @@ const SLIP_AMTS = [['travel','נסיעות',['נסיעות חודשי','נסיע
   ['bonus','בונוסים',['בונוס','מענק','מענק מצויינות','בונוס נטו'],'p',2],['adv','מפרעה',['מקדמה'],'d',3]];
 function slipAmtDiffs(ym, stage){
   const out = [];
-  for(const pr of slipPairs(ym)){
+  for(const pr of slipPairs(ym).filter(slipBoth)){
     for(const [k, label, descs, src, st] of SLIP_AMTS){
       if(st!==stage) continue;
       const parts = descs.map(d=>[d, +(pr.p?.[src]?.[d]||0)]).filter(([,v])=>v), a = round2(+(pr.t?.[k]||0)), b = round2(parts.reduce((x,[,v])=>x+v,0)), d = round2(b-a);
@@ -1984,6 +1984,10 @@ function slipAmtDiffs(ym, stage){
   }
   return out.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d));
 }
+// עובד עם נתונים ב-TimeWatch / עם תלוש (תשלום כלשהו בשכר). ההשוואות בשלבים נעשות רק כשיש את שניהם
+const slipHasTw = x => !!x.t && Object.keys(TW_COLS).some(k=>x.t[k]);
+const slipPaid = x => x.p?.p ? Object.values(x.p.p).reduce((a,v)=>a+v,0) : 0;
+const slipBoth = x => slipHasTw(x) && slipPaid(x) > 0;
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2000,7 +2004,7 @@ function slipPairs(ym){
 }
 function slipUnitDiffs(ym){
   const out = [];
-  for(const pr of slipPairs(ym)){
+  for(const pr of slipPairs(ym).filter(slipBoth)){
     for(const [k, label, sym] of SLIP_UNITS){
       const a = round2(+(pr.t?.[k]||0)), b = round2(+(pr.p?.u?.[sym]||0)), d = round2(b-a);
       if(Math.abs(d) <= 0.011) continue;   // עיגול
@@ -2024,7 +2028,7 @@ function renderSlip(v){
   if(!ym || !twd || !pd){ v.innerHTML = `<div class="stack">${head}</div>`; return; }
   const all = slipUnitDiffs(ym), shown = all;
   const pairs = slipPairs(ym), hasH = x => SLIP_UNITS.some(([k,,sym])=>(x.t?.[k]||0) || (x.p?.u?.[sym]||0));
-  const onlyTw = pairs.filter(x=>x.t && !x.p && hasH(x)), onlyPay = pairs.filter(x=>x.p && !x.t && hasH(x)), viaId = pairs.filter(x=>x.viaId);
+  const noSlip = pairs.filter(x=>slipHasTw(x) && !(slipPaid(x)>0)), noTwData = pairs.filter(x=>slipPaid(x)>0 && !slipHasTw(x)), viaId = pairs.filter(x=>x.viaId);
   const nm = x => esc(x.t?.n || x.p?.n || ''), num_ = x => x.e && x.pe && x.e!==x.pe ? `${esc(x.e)} <span class="muted small">(בשכר: ${x.pe.length>=9?'מספר ארוך':esc(x.pe)})</span>` : esc(x.e || (x.pe.length>=9?'מספר ארוך':x.pe));
   const emps = new Set(all.map(x=>x.e||x.pe)).size;
   const noTw = x => !x.t || !Object.keys(TW_COLS).some(k=>x.t[k]);   // עובד שלא מחתים ב-TimeWatch (למשל הנהלה)
@@ -2034,7 +2038,7 @@ function renderSlip(v){
       ${rows.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>רכיב</th><th class="n">TimeWatch</th><th class="n">שכר</th><th class="n">הפרש</th><th>הערה</th></tr></thead><tbody>
         ${rows.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${esc(x.label)}</td><td class="n">${x.t?money(x.tw):'<span class="muted">לא בקובץ</span>'}</td><td class="n">${x.p?money(x.pay):'<span class="muted">לא בקובץ</span>'}</td>
           <td class="n"><span class="pill bad">${ltr((x.d>0?'+':'−')+money(Math.abs(x.d)).replace('-',''))}</span></td>
-          <td class="small">${[x.parts.length>1?x.parts.map(([d,v])=>`${esc(d)} ${money(v)}`).join(' + '):(x.parts.length&&x.parts[0][0]!==x.label?esc(x.parts[0][0]):''), noTw(x)&&x.p?'אין לעובד נתונים ב-TimeWatch':'', x.viaId?'הותאם לפי ת.ז.':'', x.t?.note?esc(x.t.note):''].filter(Boolean).join(' · ')}</td></tr>`).join('')}
+          <td class="small">${[x.parts.length>1?x.parts.map(([d,v])=>`${esc(d)} ${money(v)}`).join(' + '):(x.parts.length&&x.parts[0][0]!==x.label?esc(x.parts[0][0]):''),  x.viaId?'הותאם לפי ת.ז.':'', x.t?.note?esc(x.t.note):''].filter(Boolean).join(' · ')}</td></tr>`).join('')}
         <tr class="total"><td class="first">סה״כ</td><td></td><td></td><td></td><td></td><td></td><td class="n">${ltr((sum>0?'+':'−')+money(Math.abs(sum)).replace('-',''))}</td><td></td></tr>
       </tbody></table></div>`:'<p class="muted">אין הפרשים. כל הסכומים תואמים.</p>'}
     </section>`; };
@@ -2052,10 +2056,19 @@ function renderSlip(v){
         ${shown.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${esc(x.label)}</td><td class="n">${x.t?ltr(nf2.format(x.tw)):'<span class="muted">לא בקובץ</span>'}</td><td class="n">${x.p?ltr(nf2.format(x.pay)):'<span class="muted">לא בקובץ</span>'}</td>
           <td class="n"><span class="pill bad">${ltr((x.d>0?'+':'')+nf2.format(x.d))}</span></td><td class="small">${[x.viaId?'הותאם לפי ת.ז.':'', x.t?.note?esc(x.t.note):''].filter(Boolean).join(' · ')}</td></tr>`).join('')}
       </tbody></table></div>`:'<p class="muted">אין הפרשים בשעות. כל העובדים תואמים.</p>'}
-      ${onlyTw.length||onlyPay.length||viaId.length?`<p class="hint" style="margin-top:8px">${[
-        onlyTw.length?`${onlyTw.length} עובדים עם שעות ב-TimeWatch שלא נמצאו בדוח רכיבי השכר: ${onlyTw.map(x=>esc(x.e)).join(', ')}`:'',
-        onlyPay.length?`${onlyPay.length} עובדים עם שעות בשכר שלא נמצאו ב-TimeWatch: ${onlyPay.map(x=>x.pe.length>=9?'מספר ארוך':esc(x.pe)).join(', ')}`:'',
-        viaId.length?`${viaId.length} עובדים מופיעים במספר עובד שונה בשני הקבצים והותאמו לפי תעודת זהות: ${viaId.map(x=>esc(x.e)).join(', ')}`:''].filter(Boolean).join('. ')}.</p>`:''}
+      ${viaId.length?`<p class="hint" style="margin-top:8px">${viaId.length} עובדים מופיעים במספר עובד שונה בשני הקבצים והותאמו לפי תעודת זהות: ${viaId.map(x=>esc(x.e)).join(', ')}.</p>`:''}
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>עובדים שמופיעים רק באחד הקבצים</h2><span class="small muted">${monthName(ym)}</span></div>
+      <h3 style="margin:4px 0 6px">יש נתונים ב-TimeWatch ולא יצא תלוש (${noSlip.length})</h3>
+      ${noSlip.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th class="n">ימי עבודה</th><th class="n">שעות בסיס</th><th class="n">נוספות</th><th class="n">נסיעות</th><th>הערה</th></tr></thead><tbody>
+        ${noSlip.map(x=>`<tr><td class="first">${esc(x.e)}</td><td>${nm(x)}</td><td>${esc(x.t.b||'')}</td><td class="n">${x.t.days?ltr(nf0.format(x.t.days)):'—'}</td><td class="n">${x.t.base?ltr(nf2.format(x.t.base)):'—'}</td><td class="n">${(x.t.ot125||0)+(x.t.ot150||0)+(x.t.ot175||0)+(x.t.ot200||0)?ltr(nf2.format((x.t.ot125||0)+(x.t.ot150||0)+(x.t.ot175||0)+(x.t.ot200||0))):'—'}</td><td class="n">${x.t.travel?money(x.t.travel):'—'}</td><td class="small">${[x.p?'מופיע בשכר בלי תשלומים':'לא מופיע בדוח רכיבי השכר', x.t.note?esc(x.t.note):''].filter(Boolean).join(' · ')}</td></tr>`).join('')}
+      </tbody></table></div>`:'<p class="muted">לכל העובדים עם נתונים ב-TimeWatch יצא תלוש.</p>'}
+      <h3 style="margin:14px 0 6px">יצא תלוש ואין נתונים ב-TimeWatch (${noTwData.length})</h3>
+      ${noTwData.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">סה״כ תשלומים</th><th class="n">שעות רגילות בשכר</th><th>רכיבים עיקריים</th></tr></thead><tbody>
+        ${noTwData.sort((a,b)=>slipPaid(b)-slipPaid(a)).map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${money(slipPaid(x))}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td><td class="small">${Object.entries(x.p.p).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([d,v])=>`${esc(d)} ${money(v)}`).join(' · ')}${x.t?' · מופיע ב-TimeWatch בלי נתונים':''}</td></tr>`).join('')}
+      </tbody></table></div>`:'<p class="muted">לכל העובדים שיצא להם תלוש יש נתונים ב-TimeWatch.</p>'}
+      <p class="hint" style="margin-top:8px">ההשוואות בשלבים 1–3 כוללות רק עובדים שיש להם גם נתונים ב-TimeWatch וגם תלוש. "תלוש" = תשלום כלשהו בדוח רכיבי השכר.</p>
     </section>
     ${amtPanel(2, 'שלב 2: נסיעות, אחזקת רכב ובונוסים', 'תשלומים בשכר מול TimeWatch. בונוסים בשכר = בונוס, מענק, מענק מצויינות ובונוס נטו')}
     ${amtPanel(3, 'שלב 3: מפרעות', '"מפרעה" ב-TimeWatch מול "מקדמה" בניכויי הרשות בשכר')}
