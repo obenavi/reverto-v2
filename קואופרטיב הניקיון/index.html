@@ -2036,21 +2036,20 @@ function renderSlip(v){
   const noTw = x => !x.t || !Object.keys(TW_COLS).some(k=>x.t[k]);   // עובד שלא מחתים ב-TimeWatch (למשל הנהלה)
   // עובדים שעבדו בחודש ואין להם רכיב נסיעות בתלוש (לפי סניף). עובד שהמעסיק מסיע מסומן "יש הסעה" ולא נחשב חריג
   const travelPanel = () => {
-    const TR = ['נסיעות חודשי','נסיעות','הוצאות נסיעה'], shuttle = priv['pslip-settings']?.shuttle || {};
+    const TR = ['נסיעות חודשי','נסיעות','הוצאות נסיעה','אחזקת רכב'], shuttle = priv['pslip-settings']?.shuttle || {};
     const worked = x => (x.t?.days||0) > 0 || (x.p?.u?.['19']||0) > 0 || (x.p?.p?.['שעות רגילות']||0) > 0 || (x.p?.p?.['משכורת']||0) > 0;
     const list = pairs.filter(x=>slipPaid(x)>0 && worked(x) && !TR.some(d=>x.p.p[d]));
     const id = x => x.e || x.pe, open = list.filter(x=>!shuttle[id(x)]), done = list.filter(x=>shuttle[id(x)]);
     const byBr = {}; open.forEach(x=>(byBr[x.t?.b||'לא ידוע'] ||= []).push(x));
-    const row = x => { const car = x.p.p['אחזקת רכב']||0; return `<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${x.t?.days?ltr(nf0.format(x.t.days)):'—'}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td><td class="n">${car?money(car):'—'}</td>
-      <td>${car?'<span class="pill warn">מקבל אחזקת רכב</span>':'<span class="pill bad">אין נסיעות</span>'}</td><td><label class="small"><input type="checkbox" data-shuttle="${esc(id(x))}" ${shuttle[id(x)]?'checked':''}> יש הסעה</label></td></tr>`; };
-    const thead = `<thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">ימי עבודה</th><th class="n">שעות רגילות</th><th class="n">אחזקת רכב</th><th>מצב</th><th></th></tr></thead>`;
+    const row = x => `<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${x.t?.days?ltr(nf0.format(x.t.days)):'—'}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td><td><label class="small"><input type="checkbox" data-shuttle="${esc(id(x))}" ${shuttle[id(x)]?'checked':''}> יש הסעה</label></td></tr>`;
+    const thead = `<thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">ימי עבודה</th><th class="n">שעות רגילות</th><th></th></tr></thead>`;
     return `<section class="panel">
-      <div class="panel-head"><h2>עובדים בלי רכיב נסיעות בתלוש</h2><span class="small muted">${monthName(ym)} · עובדים שעבדו בחודש ואין להם נסיעות חודשי, נסיעות או הוצאות נסיעה · ${open.length} עובדים</span></div>
-      ${open.length?Object.entries(byBr).sort((a,b)=>b[1].length-a[1].length).map(([br, xs])=>`<h3 style="margin:10px 0 6px">${esc(br)} (${xs.length}) <span class="small muted">${xs.filter(x=>!(x.p.p['אחזקת רכב']>0)).length} בלי נסיעות ובלי אחזקת רכב</span></h3>
-        <div class="tbl-wrap"><table class="compact">${thead}<tbody>${xs.sort((a,b)=>(a.p.p['אחזקת רכב']>0)-(b.p.p['אחזקת רכב']>0) || (b.t?.days||0)-(a.t?.days||0)).map(row).join('')}</tbody></table></div>`).join('')
+      <div class="panel-head"><h2>עובדים בלי רכיב נסיעות בתלוש</h2><span class="small muted">${monthName(ym)} · עובדים שעבדו בחודש ואין להם נסיעות חודשי, נסיעות, הוצאות נסיעה או אחזקת רכב · ${open.length} עובדים</span></div>
+      ${open.length?Object.entries(byBr).sort((a,b)=>b[1].length-a[1].length).map(([br, xs])=>`<h3 style="margin:10px 0 6px">${esc(br)} (${xs.length})</h3>
+        <div class="tbl-wrap"><table class="compact">${thead}<tbody>${xs.sort((a,b)=>(b.t?.days||0)-(a.t?.days||0)).map(row).join('')}</tbody></table></div>`).join('')
         :'<p class="muted">לכל העובדים שעבדו יש רכיב נסיעות בתלוש.</p>'}
       ${done.length?`<details style="margin-top:10px"><summary class="small">${done.length} עובדים מסומנים "יש הסעה" ולא נספרים</summary><div class="tbl-wrap" style="margin-top:6px"><table class="compact">${thead}<tbody>${done.map(row).join('')}</tbody></table></div></details>`:''}
-      <p class="hint" style="margin-top:8px">"מקבל אחזקת רכב" = אין רכיב נסיעות אבל יש תשלום אחזקת רכב; כדאי לוודא שזה במקום נסיעות. סימון "יש הסעה" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך. הסניף לפי TimeWatch.</p>
+      <p class="hint" style="margin-top:8px">אחזקת רכב נחשבת רכיב נסיעות. סימון "יש הסעה" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך. הסניף לפי TimeWatch.</p>
     </section>`; };
   const amtPanel = (stage, title, sub) => { const rows = slipAmtDiffs(ym, stage), sum = rows.reduce((a,x)=>a+x.d,0);
     return `<section class="panel">
