@@ -1969,6 +1969,21 @@ function renderCost(v){
    השוואה לפי עובד בין העברת נתוני השכר מ-TimeWatch ("דוחות למייצג") לבין דוח רכיבי השכר של אותו חודש.
    שלב 1: יחידות (שעות רגילות, ש"נ 125%, ש"נ 150%). כל הפרש מסומן, חוץ מהפרש עיגול של עד 0.01. */
 const SLIP_UNITS = [['base','שעות רגילות','19'],['ot125','ש"נ 125%','41'],['ot150','ש"נ 150%','42']];
+// שלב 2 (תשלומים) ושלב 3 (ניכויי רשות): סכום ב-TimeWatch מול סכום הרכיבים המתאימים בשכר
+const SLIP_AMTS = [['travel','נסיעות',['נסיעות חודשי','נסיעות','הוצאות נסיעה'],'p',2],['car','אחזקת רכב',['אחזקת רכב'],'p',2],
+  ['bonus','בונוסים',['בונוס','מענק','מענק מצויינות','בונוס נטו'],'p',2],['adv','מפרעה',['מקדמה'],'d',3]];
+function slipAmtDiffs(ym, stage){
+  const out = [];
+  for(const pr of slipPairs(ym)){
+    for(const [k, label, descs, src, st] of SLIP_AMTS){
+      if(st!==stage) continue;
+      const parts = descs.map(d=>[d, +(pr.p?.[src]?.[d]||0)]).filter(([,v])=>v), a = round2(+(pr.t?.[k]||0)), b = round2(parts.reduce((x,[,v])=>x+v,0)), d = round2(b-a);
+      if(Math.abs(d) < 0.5) continue;
+      out.push({...pr, k, label, tw:a, pay:b, d, parts});
+    }
+  }
+  return out.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d));
+}
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2012,6 +2027,17 @@ function renderSlip(v){
   const onlyTw = pairs.filter(x=>x.t && !x.p && hasH(x)), onlyPay = pairs.filter(x=>x.p && !x.t && hasH(x)), viaId = pairs.filter(x=>x.viaId);
   const nm = x => esc(x.t?.n || x.p?.n || ''), num_ = x => x.e && x.pe && x.e!==x.pe ? `${esc(x.e)} <span class="muted small">(בשכר: ${x.pe.length>=9?'מספר ארוך':esc(x.pe)})</span>` : esc(x.e || (x.pe.length>=9?'מספר ארוך':x.pe));
   const emps = new Set(all.map(x=>x.e||x.pe)).size;
+  const noTw = x => !x.t || !Object.keys(TW_COLS).some(k=>x.t[k]);   // עובד שלא מחתים ב-TimeWatch (למשל הנהלה)
+  const amtPanel = (stage, title, sub) => { const rows = slipAmtDiffs(ym, stage), sum = rows.reduce((a,x)=>a+x.d,0);
+    return `<section class="panel">
+      <div class="panel-head"><h2>${title}</h2><span class="small muted">${monthName(ym)} · ${sub} · הפרש = שכר פחות TimeWatch</span></div>
+      ${rows.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>רכיב</th><th class="n">TimeWatch</th><th class="n">שכר</th><th class="n">הפרש</th><th>הערה</th></tr></thead><tbody>
+        ${rows.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${esc(x.label)}</td><td class="n">${x.t?money(x.tw):'<span class="muted">לא בקובץ</span>'}</td><td class="n">${x.p?money(x.pay):'<span class="muted">לא בקובץ</span>'}</td>
+          <td class="n"><span class="pill bad">${ltr((x.d>0?'+':'−')+money(Math.abs(x.d)).replace('-',''))}</span></td>
+          <td class="small">${[x.parts.length>1?x.parts.map(([d,v])=>`${esc(d)} ${money(v)}`).join(' + '):(x.parts.length&&x.parts[0][0]!==x.label?esc(x.parts[0][0]):''), noTw(x)&&x.p?'אין לעובד נתונים ב-TimeWatch':'', x.viaId?'הותאם לפי ת.ז.':'', x.t?.note?esc(x.t.note):''].filter(Boolean).join(' · ')}</td></tr>`).join('')}
+        <tr class="total"><td class="first">סה״כ</td><td></td><td></td><td></td><td></td><td></td><td class="n">${ltr((sum>0?'+':'−')+money(Math.abs(sum)).replace('-',''))}</td><td></td></tr>
+      </tbody></table></div>`:'<p class="muted">אין הפרשים. כל הסכומים תואמים.</p>'}
+    </section>`; };
   v.innerHTML = `<div class="stack">${head}
     <div class="kpis">
       <div class="kpi"><span class="label">עובדים עם שעות</span><span class="value num">${ltr(nf0.format(pairs.filter(hasH).length))}</span><span class="sub">TimeWatch ${ltr(nf0.format(pairs.filter(x=>x.t&&SLIP_UNITS.some(([k])=>x.t[k])).length))} · שכר ${ltr(nf0.format(pairs.filter(x=>x.p&&SLIP_UNITS.some(([,,s])=>x.p.u?.[s])).length))}</span></div>
@@ -2031,8 +2057,8 @@ function renderSlip(v){
         onlyPay.length?`${onlyPay.length} עובדים עם שעות בשכר שלא נמצאו ב-TimeWatch: ${onlyPay.map(x=>x.pe.length>=9?'מספר ארוך':esc(x.pe)).join(', ')}`:'',
         viaId.length?`${viaId.length} עובדים מופיעים במספר עובד שונה בשני הקבצים והותאמו לפי תעודת זהות: ${viaId.map(x=>esc(x.e)).join(', ')}`:''].filter(Boolean).join('. ')}.</p>`:''}
     </section>
-    <section class="panel"><div class="panel-head"><h2>השלבים הבאים</h2></div>
-      <p class="muted">שלב 2: נסיעות, אחזקת רכב ובונוסים. שלב 3: ניכויי רשות (מפרעות). הנתונים כבר נשמרים מהקבצים, והבדיקות ייבנו לפי הקריטריונים שתגדירי.</p></section>
+    ${amtPanel(2, 'שלב 2: נסיעות, אחזקת רכב ובונוסים', 'תשלומים בשכר מול TimeWatch. בונוסים בשכר = בונוס, מענק, מענק מצויינות ובונוס נטו')}
+    ${amtPanel(3, 'שלב 3: מפרעות', '"מפרעה" ב-TimeWatch מול "מקדמה" בניכויי הרשות בשכר')}
   </div>`;
 }
 function slipXlsx(){
@@ -2041,6 +2067,12 @@ function slipXlsx(){
     ...rows.map(x=>[x.e||'', x.pe && x.pe!==x.e ? (x.pe.length>=9?'מספר ארוך':x.pe) : '', x.t?.n||x.p?.n||'', x.t?.b||'', x.label, x.tw, x.pay, x.d, [x.viaId?'הותאם לפי ת.ז.':'', x.t?.note||''].filter(Boolean).join(' · ')])]);
   ws['!cols'] = [{wch:10},{wch:12},{wch:22},{wch:14},{wch:12},{wch:10},{wch:10},{wch:9},{wch:30}];
   XLSX.utils.book_append_sheet(wb, ws, 'שעות');
+  for(const [st, name] of [[2,'נסיעות רכב ובונוסים'],[3,'מפרעות']]){
+    const r2 = slipAmtDiffs(ym, st), w2 = XLSX.utils.aoa_to_sheet([["מס' עובד",'מס\' עובד בשכר','שם','סניף','רכיב','TimeWatch','שכר','הפרש','פירוט בשכר','הערה'],
+      ...r2.map(x=>[x.e||'', x.pe && x.pe!==x.e ? (x.pe.length>=9?'מספר ארוך':x.pe) : '', x.t?.n||x.p?.n||'', x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), [x.viaId?'הותאם לפי ת.ז.':'', x.t?.note||''].filter(Boolean).join(' · ')])]);
+    w2['!cols'] = [{wch:10},{wch:12},{wch:22},{wch:14},{wch:12},{wch:10},{wch:10},{wch:9},{wch:28},{wch:30}];
+    XLSX.utils.book_append_sheet(wb, w2, name);
+  }
   saveXlsx(wb, `בדיקת תלושים ${ym}.xlsx`);
 }
 
