@@ -723,7 +723,7 @@ async function parseComponentsEmp(wb, fileName){
     const cand = monthList().filter(x=>+x.slice(5)===mNum).sort((a,b)=>b.localeCompare(a));
     const ym = cand[0] || ymOf(new Date().getFullYear(), mNum), paySyms = new Set(rows.filter(r=>normName(r[iT])==='תשלומים').map(r=>normName(r[iS]))), emps = {};
     for(const r of rows){
-      const e = String(num(r[iE])), x = emps[e] ||= {n:[normName(r[iF]), normName(r[iL])].filter(Boolean).join(' '), u:{}, p:{}, d:{}};
+      const e = String(num(r[iE])), x = emps[e] ||= {n:[normName(r[iF]), normName(r[iL])].filter(Boolean).join(' '), u:{}, p:{}, d:{}, h:{}, c:{}};
       if(!x.k && iId>=0){ const k = await idKey(r[iId]); if(k) x.k = k; }
       if(!x.k2 && e.length>=8){ const k = await idKey(e); if(k && k!==x.k) x.k2 = k; }   // מספר העובד בשכר הוא עצמו ת.ז.
       const v = num(r[col]); if(!v) continue;
@@ -731,9 +731,11 @@ async function parseComponentsEmp(wb, fileName){
       if(t==='תשלומים') x.p[desc] = round2((x.p[desc]||0) + v);
       else if(t==='יחידות' && paySyms.has(sym)) x.u[sym] = round2((x.u[sym]||0) + v);
       else if(t==='נכויי רשות') x.d[desc] = round2((x.d[desc]||0) + v);
+      else if(t==='נכויי חובה') x.h[desc] = round2((x.h[desc]||0) + v);
+      else if(t==='השתתפות') x.c[desc] = round2((x.c[desc]||0) + v);
     }
-    for(const x of Object.values(emps)){ for(const k of ['u','p','d']) if(!Object.keys(x[k]).length) delete x[k]; }
-    out.push({ym, data:{file:fileName, uploadedAt:new Date().toISOString(), emps}});
+    for(const x of Object.values(emps)){ for(const k of ['u','p','d','h','c']) if(!Object.keys(x[k]).length) delete x[k]; }
+    out.push({ym, data:{v:2, file:fileName, uploadedAt:new Date().toISOString(), emps}});
   }
   return out;
 }
@@ -1998,6 +2000,23 @@ function slipNoTravel(ym){ const shuttle = priv['pslip-settings']?.shuttle || {}
 // הבראה: כל רכיב תשלום שבשמו "הבראה" (הבראה שעתי, הבראה), חוץ מהפחתת הבראה
 const slipRecup = x => Object.entries(x.p?.p||{}).filter(([d,v])=>/הבראה/.test(d) && !/הפחתת/.test(d) && v>0).reduce((a,[,v])=>a+v,0);
 function slipNoRecup(ym){ return slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x) && !(slipRecup(x)>0)).sort((a,b)=>(a.t?.b||'').localeCompare(b.t?.b||'','he') || (b.t?.days||0)-(a.t?.days||0)); }
+// קרן השתלמות: 2.5% עובד (ניכוי חובה) ו-7.5% מעביד (השתתפות) מרכיבי השכר וחלף השכר. עובד שמקבל את הקרן כתשלום בשכר
+// (קטינים, ללא ת.ז. ישראלית): "קרן השתלמות בתשלום" = 7.5%. בשכר גלובלי הבסיס כולל גם את רכיב "משכורת"
+const KH_BASE = ['שעות רגילות','ימי חג/ שעות','חופשה שעות','מחלה שעות','תוספת ותק','הבראה שעתי','הבראה','משכורת','שעות נוספות גלובליות'], KH_EMP = 0.025, KH_ER = 0.075, KH_TOL = 1;
+function slipKh(ym){
+  const out = {none:[], off:[], ok:0};
+  for(const x of slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x))){
+    const base = round2(KH_BASE.reduce((a,d)=>a+(x.p.p[d]||0),0)), emp = x.p.h?.['קרן השתלמות']||0, er = x.p.c?.['קרן השתלמות']||0, sal = x.p.p['קרן השתלמות בתשלום']||0;
+    const r = {...x, base, emp, er, sal, xEmp:round2(base*KH_EMP), xEr:round2(base*KH_ER)};
+    if(!emp && !er && !sal){ out.none.push(r); continue; }
+    r.kind = sal && !emp && !er ? 'sal' : 'fund';
+    r.dEmp = r.kind==='sal' ? 0 : round2(emp - r.xEmp); r.dEr = round2((r.kind==='sal' ? sal : er) - r.xEr);
+    if(Math.abs(r.dEmp) > KH_TOL || Math.abs(r.dEr) > KH_TOL) out.off.push(r); else out.ok++;
+  }
+  const br = x => x.t?.b || 'לא ידוע';
+  out.none.sort((a,b)=>br(a).localeCompare(br(b),'he')); out.off.sort((a,b)=>Math.abs(b.dEr)+Math.abs(b.dEmp)-Math.abs(a.dEr)-Math.abs(a.dEmp));
+  return out;
+}
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2064,6 +2083,21 @@ function renderSlip(v){
         :'<p class="muted">לכל העובדים שעבדו יש תשלום הבראה בתלוש.</p>'}
       <p class="hint" style="margin-top:8px">הבראה מגיעה מהיום הראשון לעבודה. נבדקים עובדים עם תלוש שעבדו בחודש (ימי עבודה ב-TimeWatch, שעות רגילות או משכורת). הסניף לפי TimeWatch.</p>
     </section>`; };
+  const khPanel = () => {
+    if(!(pd.v>=2)) return `<section class="panel"><div class="panel-head"><h2>קרן השתלמות</h2></div><p class="muted">כדי לבדוק את קרן ההשתלמות יש להעלות מחדש את דוח רכיבי השכר של ${monthName(ym)}. הגרסה שנקלטה לא כוללת את הניכויים וההפרשות.</p></section>`;
+    const k = slipKh(ym), sgn = v => ltr((v>0?'+':v<0?'−':'')+money(Math.abs(v)).replace('-',''));
+    return `<section class="panel">
+      <div class="panel-head"><h2>קרן השתלמות</h2><span class="small muted">${monthName(ym)} · 2.5% עובד ו-7.5% מעביד, או 7.5% בתשלום לשכר · ${k.ok} עובדים תקינים</span><button class="btn sm" type="button" data-slipx="kh">ייצוא לאקסל</button></div>
+      <h3 style="margin:4px 0 6px">בלי קרן השתלמות בתלוש (${k.none.length})</h3>
+      ${k.none.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th class="n">שכר לקרן</th><th class="n">צפוי: עובד</th><th class="n">צפוי: מעביד</th></tr></thead><tbody>
+        ${k.none.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td class="n">${money(x.base)}</td><td class="n">${money(x.xEmp)}</td><td class="n">${money(x.xEr)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">לכל העובדים שעבדו יש קרן השתלמות.</p>'}
+      <h3 style="margin:14px 0 6px">הפרשה שלא בשיעור הנכון (${k.off.length})</h3>
+      ${k.off.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>אופן</th><th class="n">שכר לקרן</th><th class="n">עובד בפועל</th><th class="n">צפוי 2.5%</th><th class="n">מעביד בפועל</th><th class="n">צפוי 7.5%</th><th class="n">הפרש מעביד</th></tr></thead><tbody>
+        ${k.off.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${x.kind==='sal'?'בתשלום לשכר':'לקרן'}</td><td class="n">${money(x.base)}</td>
+          <td class="n">${x.kind==='sal'?'—':money(x.emp)}</td><td class="n">${x.kind==='sal'?'—':money(x.xEmp)}</td><td class="n">${money(x.kind==='sal'?x.sal:x.er)}</td><td class="n">${money(x.xEr)}</td>
+          <td class="n"><span class="pill ${x.dEr<0?'bad':'warn'}">${sgn(x.dEr)}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל ההפרשות בשיעור הנכון.</p>'}
+      <p class="hint" style="margin-top:8px">שכר לקרן = ${KH_BASE.join(', ')}. הפרש של עד ${money(KH_TOL)} לא מסומן. עובד שמקבל את הקרן בתשלום לשכר (קטינים, ללא ת.ז. ישראלית) נבדק מול 7.5%.</p>
+    </section>`; };
   const amtPanel = (stage, title, sub) => { const rows = slipAmtDiffs(ym, stage), sum = rows.reduce((a,x)=>a+x.d,0);
     return `<section class="panel">
       <div class="panel-head"><h2>${title}</h2><span class="small muted">${monthName(ym)} · ${sub} · הפרש = שכר פחות TimeWatch</span><button class="btn sm" type="button" data-slipx="${stage}">ייצוא לאקסל</button></div>
@@ -2104,6 +2138,7 @@ function renderSlip(v){
     </section>
     ${travelPanel()}
     ${recupPanel()}
+    ${khPanel()}
     ${amtPanel(2, 'שלב 2: נסיעות, אחזקת רכב ובונוסים', 'תשלומים בשכר מול TimeWatch. בונוסים בשכר = בונוס, מענק, מענק מצויינות ובונוס נטו')}
     ${amtPanel(3, 'שלב 3: מפרעות', '"מפרעה" ב-TimeWatch מול "מקדמה" בניכויי הרשות בשכר')}
   </div>`;
@@ -2129,8 +2164,12 @@ function slipXlsx(which){
     slipAmtDiffs(ym, st).map(x=>[x.e||'', pe(x), name(x), x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), notes(x)]), [10,12,22,14,12,10,10,9,28,30]);
   sheets.recup = () => add('בלי הבראה', ["מס' עובד",'שם','סניף','ימי עבודה','שעות רגילות','סה"כ תשלומים','הערה'],
     slipNoRecup(ym).map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'לא ידוע', x.t?.days||0, x.p.u?.['19']||0, round2(slipPaid(x)), notes(x)]), [10,22,14,10,12,12,30]);
+  sheets.kh = () => { const k = slipKh(ym);
+    add('בלי קרן השתלמות', ["מס' עובד",'שם','סניף','שכר לקרן','צפוי עובד','צפוי מעביד','הערה'], k.none.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', x.base, x.xEmp, x.xEr, notes(x)]), [10,22,14,11,10,10,30]);
+    add('שיעור לא נכון', ["מס' עובד",'שם','סניף','אופן','שכר לקרן','עובד בפועל','צפוי 2.5%','מעביד בפועל','צפוי 7.5%','הפרש עובד','הפרש מעביד','הערה'],
+      k.off.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', x.kind==='sal'?'בתשלום לשכר':'לקרן', x.base, x.kind==='sal'?'':x.emp, x.kind==='sal'?'':x.xEmp, x.kind==='sal'?x.sal:x.er, x.xEr, x.dEmp, x.dEr, notes(x)]), [10,22,14,12,11,10,10,11,10,10,10,30]); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
