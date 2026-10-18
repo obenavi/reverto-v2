@@ -1990,6 +1990,11 @@ const slipPaid = x => x.p?.p ? Object.values(x.p.p).reduce((a,v)=>a+v,0) : 0;
 const slipBoth = x => slipHasTw(x) && slipPaid(x) > 0;
 const slipGlobal = x => (x.p?.p?.['משכורת']||0) > 0;   // עובד בשכר גלובלי (רכיב "משכורת")
 const GLOBAL_PILL = '<span class="pill info">שכר גלובלי</span>';
+const SLIP_TR = ['נסיעות חודשי','נסיעות','הוצאות נסיעה','אחזקת רכב'];
+const slipWorked = x => (x.t?.days||0) > 0 || (x.p?.u?.['19']||0) > 0 || (x.p?.p?.['שעות רגילות']||0) > 0 || (x.p?.p?.['משכורת']||0) > 0;
+function slipOneSided(ym){ const pairs = slipPairs(ym); return {noSlip:pairs.filter(x=>slipHasTw(x) && !(slipPaid(x)>0)), noTwData:pairs.filter(x=>slipPaid(x)>0 && !slipHasTw(x)).sort((a,b)=>slipPaid(b)-slipPaid(a))}; }
+function slipNoTravel(ym){ const shuttle = priv['pslip-settings']?.shuttle || {}; const list = slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x) && !SLIP_TR.some(d=>x.p.p[d]));
+  const id = x => x.e || x.pe; return {open:list.filter(x=>!shuttle[id(x)]), done:list.filter(x=>shuttle[id(x)]), shuttle, id}; }
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2030,21 +2035,18 @@ function renderSlip(v){
   if(!ym || !twd || !pd){ v.innerHTML = `<div class="stack">${head}</div>`; return; }
   const all = slipUnitDiffs(ym), shown = all;
   const pairs = slipPairs(ym), hasH = x => SLIP_UNITS.some(([k,,sym])=>(x.t?.[k]||0) || (x.p?.u?.[sym]||0));
-  const noSlip = pairs.filter(x=>slipHasTw(x) && !(slipPaid(x)>0)), noTwData = pairs.filter(x=>slipPaid(x)>0 && !slipHasTw(x)), viaId = pairs.filter(x=>x.viaId);
+  const {noSlip, noTwData} = slipOneSided(ym), viaId = pairs.filter(x=>x.viaId);
   const nm = x => esc(x.t?.n || x.p?.n || '') + (slipGlobal(x) ? ' '+GLOBAL_PILL : ''), num_ = x => x.e && x.pe && x.e!==x.pe ? `${esc(x.e)} <span class="muted small">(בשכר: ${x.pe.length>=9?'מספר ארוך':esc(x.pe)})</span>` : esc(x.e || (x.pe.length>=9?'מספר ארוך':x.pe));
   const emps = new Set(all.map(x=>x.e||x.pe)).size;
   const noTw = x => !x.t || !Object.keys(TW_COLS).some(k=>x.t[k]);   // עובד שלא מחתים ב-TimeWatch (למשל הנהלה)
   // עובדים שעבדו בחודש ואין להם רכיב נסיעות בתלוש (לפי סניף). עובד שהמעסיק מסיע מסומן "יש הסעה" ולא נחשב חריג
   const travelPanel = () => {
-    const TR = ['נסיעות חודשי','נסיעות','הוצאות נסיעה','אחזקת רכב'], shuttle = priv['pslip-settings']?.shuttle || {};
-    const worked = x => (x.t?.days||0) > 0 || (x.p?.u?.['19']||0) > 0 || (x.p?.p?.['שעות רגילות']||0) > 0 || (x.p?.p?.['משכורת']||0) > 0;
-    const list = pairs.filter(x=>slipPaid(x)>0 && worked(x) && !TR.some(d=>x.p.p[d]));
-    const id = x => x.e || x.pe, open = list.filter(x=>!shuttle[id(x)]), done = list.filter(x=>shuttle[id(x)]);
+    const {open, done, shuttle, id} = slipNoTravel(ym);
     const byBr = {}; open.forEach(x=>(byBr[x.t?.b||'לא ידוע'] ||= []).push(x));
     const row = x => `<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${x.t?.days?ltr(nf0.format(x.t.days)):'—'}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td><td><label class="small"><input type="checkbox" data-shuttle="${esc(id(x))}" ${shuttle[id(x)]?'checked':''}> יש הסעה</label></td></tr>`;
     const thead = `<thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">ימי עבודה</th><th class="n">שעות רגילות</th><th></th></tr></thead>`;
     return `<section class="panel">
-      <div class="panel-head"><h2>עובדים בלי רכיב נסיעות בתלוש</h2><span class="small muted">${monthName(ym)} · עובדים שעבדו בחודש ואין להם נסיעות חודשי, נסיעות, הוצאות נסיעה או אחזקת רכב · ${open.length} עובדים</span></div>
+      <div class="panel-head"><h2>עובדים בלי רכיב נסיעות בתלוש</h2><span class="small muted">${monthName(ym)} · עובדים שעבדו בחודש ואין להם נסיעות חודשי, נסיעות, הוצאות נסיעה או אחזקת רכב · ${open.length} עובדים</span><button class="btn sm" type="button" data-slipx="travel">ייצוא לאקסל</button></div>
       ${open.length?Object.entries(byBr).sort((a,b)=>b[1].length-a[1].length).map(([br, xs])=>`<h3 style="margin:10px 0 6px">${esc(br)} (${xs.length})</h3>
         <div class="tbl-wrap"><table class="compact">${thead}<tbody>${xs.sort((a,b)=>(b.t?.days||0)-(a.t?.days||0)).map(row).join('')}</tbody></table></div>`).join('')
         :'<p class="muted">לכל העובדים שעבדו יש רכיב נסיעות בתלוש.</p>'}
@@ -2053,7 +2055,7 @@ function renderSlip(v){
     </section>`; };
   const amtPanel = (stage, title, sub) => { const rows = slipAmtDiffs(ym, stage), sum = rows.reduce((a,x)=>a+x.d,0);
     return `<section class="panel">
-      <div class="panel-head"><h2>${title}</h2><span class="small muted">${monthName(ym)} · ${sub} · הפרש = שכר פחות TimeWatch</span></div>
+      <div class="panel-head"><h2>${title}</h2><span class="small muted">${monthName(ym)} · ${sub} · הפרש = שכר פחות TimeWatch</span><button class="btn sm" type="button" data-slipx="${stage}">ייצוא לאקסל</button></div>
       ${rows.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>רכיב</th><th class="n">TimeWatch</th><th class="n">שכר</th><th class="n">הפרש</th><th>הערה</th></tr></thead><tbody>
         ${rows.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${esc(x.label)}</td><td class="n">${x.t?money(x.tw):'<span class="muted">לא בקובץ</span>'}</td><td class="n">${x.p?money(x.pay):'<span class="muted">לא בקובץ</span>'}</td>
           <td class="n"><span class="pill bad">${ltr((x.d>0?'+':'−')+money(Math.abs(x.d)).replace('-',''))}</span></td>
@@ -2070,7 +2072,7 @@ function renderSlip(v){
     </div>
     <section class="panel">
       <div class="panel-head"><h2>שלב 1: שעות רגילות, ש"נ 125%, ש"נ 150%</h2><span class="small muted">${monthName(ym)} · הפרש = שכר פחות TimeWatch</span>
-        <button class="btn sm" type="button" id="slip-xlsx">ייצוא לאקסל</button></div>
+        <button class="btn sm" type="button" data-slipx="units">ייצוא לאקסל</button></div>
       ${shown.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>רכיב</th><th class="n">TimeWatch</th><th class="n">שכר</th><th class="n">הפרש</th><th>הערה</th></tr></thead><tbody>
         ${shown.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${esc(x.label)}</td><td class="n">${x.t?ltr(nf2.format(x.tw)):'<span class="muted">לא בקובץ</span>'}</td><td class="n">${x.p?ltr(nf2.format(x.pay)):'<span class="muted">לא בקובץ</span>'}</td>
           <td class="n"><span class="pill bad">${ltr((x.d>0?'+':'')+nf2.format(x.d))}</span></td><td class="small">${[x.viaId?'הותאם לפי ת.ז.':'', x.t?.note?esc(x.t.note):''].filter(Boolean).join(' · ')}</td></tr>`).join('')}
@@ -2078,14 +2080,14 @@ function renderSlip(v){
       ${viaId.length?`<p class="hint" style="margin-top:8px">${viaId.length} עובדים מופיעים במספר עובד שונה בשני הקבצים והותאמו לפי תעודת זהות: ${viaId.map(x=>esc(x.e)).join(', ')}.</p>`:''}
     </section>
     <section class="panel">
-      <div class="panel-head"><h2>עובדים שמופיעים רק באחד הקבצים</h2><span class="small muted">${monthName(ym)}</span></div>
+      <div class="panel-head"><h2>עובדים שמופיעים רק באחד הקבצים</h2><span class="small muted">${monthName(ym)}</span><button class="btn sm" type="button" data-slipx="onesided">ייצוא לאקסל</button></div>
       <h3 style="margin:4px 0 6px">יש נתונים ב-TimeWatch ולא יצא תלוש (${noSlip.length})</h3>
       ${noSlip.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th class="n">ימי עבודה</th><th class="n">שעות בסיס</th><th class="n">נוספות</th><th class="n">נסיעות</th><th>הערה</th></tr></thead><tbody>
         ${noSlip.map(x=>`<tr><td class="first">${esc(x.e)}</td><td>${nm(x)}</td><td>${esc(x.t.b||'')}</td><td class="n">${x.t.days?ltr(nf0.format(x.t.days)):'—'}</td><td class="n">${x.t.base?ltr(nf2.format(x.t.base)):'—'}</td><td class="n">${(x.t.ot125||0)+(x.t.ot150||0)+(x.t.ot175||0)+(x.t.ot200||0)?ltr(nf2.format((x.t.ot125||0)+(x.t.ot150||0)+(x.t.ot175||0)+(x.t.ot200||0))):'—'}</td><td class="n">${x.t.travel?money(x.t.travel):'—'}</td><td class="small">${[x.p?'מופיע בשכר בלי תשלומים':'לא מופיע בדוח רכיבי השכר', x.t.note?esc(x.t.note):''].filter(Boolean).join(' · ')}</td></tr>`).join('')}
       </tbody></table></div>`:'<p class="muted">לכל העובדים עם נתונים ב-TimeWatch יצא תלוש.</p>'}
       <h3 style="margin:14px 0 6px">יצא תלוש ואין נתונים ב-TimeWatch (${noTwData.length})</h3>
       ${noTwData.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">סה״כ תשלומים</th><th class="n">שעות רגילות בשכר</th><th>רכיבים עיקריים</th></tr></thead><tbody>
-        ${noTwData.sort((a,b)=>slipPaid(b)-slipPaid(a)).map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${money(slipPaid(x))}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td><td class="small">${Object.entries(x.p.p).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([d,v])=>`${esc(d)} ${money(v)}`).join(' · ')}${x.t?' · מופיע ב-TimeWatch בלי נתונים':''}</td></tr>`).join('')}
+        ${noTwData.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${money(slipPaid(x))}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td><td class="small">${Object.entries(x.p.p).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([d,v])=>`${esc(d)} ${money(v)}`).join(' · ')}${x.t?' · מופיע ב-TimeWatch בלי נתונים':''}</td></tr>`).join('')}
       </tbody></table></div>`:'<p class="muted">לכל העובדים שיצא להם תלוש יש נתונים ב-TimeWatch.</p>'}
       <p class="hint" style="margin-top:8px">ההשוואות בשלבים 1–3 כוללות רק עובדים שיש להם גם נתונים ב-TimeWatch וגם תלוש. "תלוש" = תשלום כלשהו בדוח רכיבי השכר.</p>
     </section>
@@ -2094,19 +2096,29 @@ function renderSlip(v){
     ${amtPanel(3, 'שלב 3: מפרעות', '"מפרעה" ב-TimeWatch מול "מקדמה" בניכויי הרשות בשכר')}
   </div>`;
 }
-function slipXlsx(){
-  const ym = ui.slipYm, rows = slipUnitDiffs(ym), wb = XLSX.utils.book_new(); wb.Workbook = {Views:[{RTL:true}]};
-  const ws = XLSX.utils.aoa_to_sheet([["מס' עובד",'מס\' עובד בשכר','שם','סניף','רכיב','TimeWatch','שכר','הפרש','הערה'],
-    ...rows.map(x=>[x.e||'', x.pe && x.pe!==x.e ? (x.pe.length>=9?'מספר ארוך':x.pe) : '', x.t?.n||x.p?.n||'', x.t?.b||'', x.label, x.tw, x.pay, x.d, [slipGlobal(x)?'שכר גלובלי':'', x.viaId?'הותאם לפי ת.ז.':'', x.t?.note||''].filter(Boolean).join(' · ')])]);
-  ws['!cols'] = [{wch:10},{wch:12},{wch:22},{wch:14},{wch:12},{wch:10},{wch:10},{wch:9},{wch:30}];
-  XLSX.utils.book_append_sheet(wb, ws, 'שעות');
-  for(const [st, name] of [[2,'נסיעות רכב ובונוסים'],[3,'מפרעות']]){
-    const r2 = slipAmtDiffs(ym, st), w2 = XLSX.utils.aoa_to_sheet([["מס' עובד",'מס\' עובד בשכר','שם','סניף','רכיב','TimeWatch','שכר','הפרש','פירוט בשכר','הערה'],
-      ...r2.map(x=>[x.e||'', x.pe && x.pe!==x.e ? (x.pe.length>=9?'מספר ארוך':x.pe) : '', x.t?.n||x.p?.n||'', x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), [slipGlobal(x)?'שכר גלובלי':'', x.viaId?'הותאם לפי ת.ז.':'', x.t?.note||''].filter(Boolean).join(' · ')])]);
-    w2['!cols'] = [{wch:10},{wch:12},{wch:22},{wch:14},{wch:12},{wch:10},{wch:10},{wch:9},{wch:28},{wch:30}];
-    XLSX.utils.book_append_sheet(wb, w2, name);
-  }
-  saveXlsx(wb, `בדיקת תלושים ${ym}.xlsx`);
+function slipXlsx(which){
+  const ym = ui.slipYm, wb = XLSX.utils.book_new(); wb.Workbook = {Views:[{RTL:true}]};
+  const pe = x => x.pe && x.pe!==x.e ? (x.pe.length>=9?'מספר ארוך':x.pe) : '', name = x => x.t?.n||x.p?.n||'';
+  const notes = x => [slipGlobal(x)?'שכר גלובלי':'', x.viaId?'הותאם לפי ת.ז.':'', x.t?.note||''].filter(Boolean).join(' · ');
+  const add = (title, head, rows, cols) => { const ws = XLSX.utils.aoa_to_sheet([head, ...rows]); ws['!cols'] = cols.map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb, ws, title); };
+  const sheets = {
+    units: () => add('שעות', ["מס' עובד","מס' עובד בשכר",'שם','סניף','רכיב','TimeWatch','שכר','הפרש','הערה'],
+      slipUnitDiffs(ym).map(x=>[x.e||'', pe(x), name(x), x.t?.b||'', x.label, x.tw, x.pay, x.d, notes(x)]), [10,12,22,14,12,10,10,9,30]),
+    onesided: () => { const {noSlip, noTwData} = slipOneSided(ym);
+      add('TimeWatch בלי תלוש', ["מס' עובד",'שם','סניף','ימי עבודה','שעות בסיס','נוספות','נסיעות','הערה'],
+        noSlip.map(x=>[x.e, name(x), x.t.b||'', x.t.days||0, x.t.base||0, (x.t.ot125||0)+(x.t.ot150||0)+(x.t.ot175||0)+(x.t.ot200||0), x.t.travel||0, [x.p?'מופיע בשכר בלי תשלומים':'לא מופיע בדוח רכיבי השכר', notes(x)].filter(Boolean).join(' · ')]), [10,22,14,10,10,9,9,40]);
+      add('תלוש בלי TimeWatch', ["מס' עובד",'שם','סה"כ תשלומים','שעות רגילות בשכר','רכיבים עיקריים','הערה'],
+        noTwData.map(x=>[x.e||pe(x)||x.pe, name(x), round2(slipPaid(x)), x.p.u?.['19']||0, Object.entries(x.p.p).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([d,v])=>`${d} ${v}`).join(' · '), notes(x)]), [12,22,12,12,40,20]); },
+    travel: () => { const {open, done} = slipNoTravel(ym);
+      add('בלי נסיעות', ["מס' עובד",'שם','סניף','ימי עבודה','שעות רגילות','יש הסעה','הערה'],
+        [...open, ...done].sort((a,b)=>(a.t?.b||'').localeCompare(b.t?.b||'','he') || (b.t?.days||0)-(a.t?.days||0)).map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'לא ידוע', x.t?.days||0, x.p.u?.['19']||0, done.includes(x)?'כן':'', notes(x)]), [10,22,14,10,12,9,30]); },
+  };
+  const amt = (st, title) => add(title, ["מס' עובד","מס' עובד בשכר",'שם','סניף','רכיב','TimeWatch','שכר','הפרש','פירוט בשכר','הערה'],
+    slipAmtDiffs(ym, st).map(x=>[x.e||'', pe(x), name(x), x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), notes(x)]), [10,12,22,14,12,10,10,9,28,30]);
+  sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  sheets[which]();
+  saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
 
 /* ---------- כרטיס לקוח: התפלגות חודשית מתחילת השנה ---------- */
@@ -2729,7 +2741,7 @@ document.addEventListener('click', async e=>{
   if(t.id==='bk-restore'){ await doRestore(); return; }
   if(t.id==='bk-cancel'){ pendingRestore = null; render(); return; }
   if(d.unrule){ const r = {...mapping.clientRules}; delete r[d.unrule]; mapping.clientRules = r; await store.saveMapping(); render(); toast(`${d.unrule} חזר לרשימת ההתאמה`); return; }
-  if(t.id==='slip-xlsx'){ slipXlsx(); return; }
+  if(d.slipx){ slipXlsx(d.slipx); return; }
   if(t.id==='ga-save'){ if(Date.now()-gaDown > 1000) await saveGAPanel(); return; }
   if(t.id==='ga-copy'){   // העתקת הסכומים מהחודש הקודם לתאים הריקים בחודש הנוכחי
     const ym = ui.matYm || monthList().pop(), prev = monthList().filter(m=>m<ym).pop(), src = ga.byMonth[prev] || {};
