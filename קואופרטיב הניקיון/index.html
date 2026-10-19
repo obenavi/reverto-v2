@@ -308,6 +308,7 @@ const store = {
   async init(){
     if(window.claude?.use){ try{ this.db = await window.claude.use('db'); }catch(e){ this.db=null; } }
     this.mode = this.db ? 'db' : 'local';
+    this.noDb = !!window.claude?.use && !this.db;   // בעמוד שפורסם בלי גישה למאגר (למשל צופה שלא מחובר)
     if(this.db){
       // נתוני עובדים (שמות ושכר) נשמרים רק באזור הפרטי של הצופה, שאף אחד אחר לא רואה
       try{ const u = await window.claude.use('user'); this.uid = (await u?.id()) || null; }catch(e){ this.uid = null; }
@@ -1219,6 +1220,7 @@ function renderNow(){
   } else $('#filters').innerHTML='';
   Object.values(charts).forEach(c=>c.destroy()); for(const k in charts) delete charts[k];
   const v = $('#view');
+  if(store.noDb){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">אין גישה לנתונים</h2><p>הנתונים נשמרים במאגר של הדף, ורק מי שמחובר לחשבון Claude יכול לראות אותם. יש להתחבר ל-claude.ai באותו דפדפן ולפתוח את הקישור שוב. בטלפון, אם הקישור נפתח מתוך וואטסאפ או מייל, כדאי לפתוח אותו בדפדפן הרגיל (Chrome או Safari).</p></div>`; $('#store-note').textContent = 'אין חיבור למאגר'; return; }
   if(!ms.length && ui.tab!=='data' && ui.tab!=='match' && ui.tab!=='slip'){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין אין נתונים</h2><p>יש להעלות את שלושת הדוחות החודשיים בלשונית "קליטת נתונים".</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
   ({slip:renderSlip, overview:renderOverview, dash:renderDash, plan:renderPlan, clients:renderClients, cost:renderCost, client:renderClient, match:renderMatch, data:renderData})[ui.tab](v);
 }
