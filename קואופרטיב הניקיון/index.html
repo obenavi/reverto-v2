@@ -287,6 +287,14 @@ function dateYm(v){
   if((m=s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/))) return ymOf(m[3],m[2]);
   return null;
 }
+function dateIso(v){   // תאריך מלא YYYY-MM-DD
+  const p2 = n => String(n).padStart(2,'0');
+  if(v instanceof Date && !isNaN(v)){ const x=new Date(v.getTime()+12*3600e3); return `${x.getFullYear()}-${p2(x.getMonth()+1)}-${p2(x.getDate())}`; }
+  const s = String(v??'').trim(); let m;
+  if((m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return `${m[1]}-${p2(m[2])}-${p2(m[3])}`;
+  if((m=s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/))) return `${m[3]}-${p2(m[2])}-${p2(m[1])}`;
+  return null;
+}
 const majority = arr => { const c={}; arr.filter(Boolean).forEach(x=>c[x]=(c[x]||0)+1); return Object.entries(c).sort((a,b)=>b[1]-a[1])[0]?.[0]||null; };
 let toastT;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,4000); }
@@ -2072,6 +2080,31 @@ function slipPension(ym){
   out.missing.sort((a,b)=>br(a).localeCompare(br(b),'he')); out.off.sort((a,b)=>Math.abs(b.d[1])-Math.abs(a.d[1]));
   return out;
 }
+// תוספת ותק: מעל שנת ותק 0.35 ש"ח לכל שעת עבודה, ומהשנה השישית (5 שנות ותק מלאות) 0.46. הוותק לפי תאריך תחילת העבודה בקובץ השכר השעתי.
+// בתלוש: רכיב "תוספת ותק", והשעות שלו בסמל 29. שעות העבודה = שעות רגילות וש"נ 125%/150% (סמלים 19, 41, 42)
+const SEN_RATES = [[5, 0.46], [1, 0.35]], SEN_SYM = '29', SEN_WORK = ['19','41','42'];
+const senYears = (sd, d) => { const [y,m,dd] = sd.split('-').map(Number); let n = d.getFullYear()-y; if(d.getMonth()+1 < m || (d.getMonth()+1===m && d.getDate() < dd)) n--; return n; };
+const senRate = n => (SEN_RATES.find(([y])=>n>=y)||[0,0])[1];
+function slipSeniority(ym){
+  const out = {missing:[], off:[], early:[], noDate:[], ok:0}, W = priv.wages?.emps || {};
+  const [y, m] = ym.split('-').map(Number), d0 = new Date(y, m-1, 1), d1 = new Date(y, m, 0);
+  for(const x of slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x))){
+    const e = x.e || x.pe, w = W[e] || W[x.pe] || W[x.e], amt = round2(x.p.p['תוספת ותק']||0), u = x.p.u?.[SEN_SYM]||0;
+    const work = round2(SEN_WORK.reduce((a,s)=>a+(x.p.u?.[s]||0),0));
+    if(!w?.sd){ out.noDate.push({...x, amt}); continue; }
+    const n0 = senYears(w.sd, d0), n1 = senYears(w.sd, d1), r0 = senRate(n0), r1 = senRate(n1), r = {...x, sd:w.sd, yrs:n1, rate:r1, amt, u, work, part:r0!==r1};
+    if(!r1){ if(amt) out.early.push(r); continue; }       // פחות משנת ותק
+    const hrs = Math.max(u, work);
+    if(!amt){ r.xp = round2(r1*work); if(!r0 && r.part) continue; out.missing.push(r); continue; }   // בחודש שבו נשלמה השנה הראשונה לא מסמנים
+    r.act = hrs ? round2(amt/hrs) : 0;
+    // בחודש מעבר (השלמת שנה / השנה השישית) מקבלים כל שיעור בין שני השיעורים
+    const lo = round2(Math.min(r0, r1)*hrs), hi = round2(Math.max(r0, r1)*hrs);
+    r.xp = round2(r1*hrs); r.d = amt < lo ? round2(amt-lo) : amt > hi ? round2(amt-hi) : 0;
+    if(Math.abs(r.d) > KH_TOL) out.off.push(r); else out.ok++;
+  }
+  out.missing.sort((a,b)=>b.xp-a.xp); out.off.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d));
+  return out;
+}
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2161,6 +2194,28 @@ function renderSlip(v){
           <td class="n"><span class="pill ${x.dEr<0?'bad':'warn'}">${sgn(x.dEr)}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל ההפרשות בשיעור הנכון.</p>'}
       <p class="hint" style="margin-top:8px">שכר לקרן = ${KH_BASE.join(', ')} והפרשי שכר רטרו. ברכיבים השעתיים (${Object.keys(KH_HOURLY).join(', ')}), כשהתעריף גבוה משכר המינימום (${ltr('₪'+nf2.format(MIN_WAGE_H))} לשעה), נלקח שכר מינימום × מספר השעות. הפרש של עד ${money(KH_TOL)} לא מסומן. עובד שמקבל את הקרן בתשלום לשכר (קטינים, ללא ת.ז. ישראלית) נבדק מול 7.5%. הסימון "קטין / ללא ת.ז. ישראלית" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך.</p>
     </section>`; };
+  const senPanel = () => {
+    if(!priv.wages) return `<section class="panel"><div class="panel-head"><h2>תוספת ותק</h2></div><p class="muted">כדי לבדוק את תוספת הוותק יש להעלות את קובץ השכר השעתי (עם תאריך תחילת עבודה).</p></section>`;
+    const k = slipSeniority(ym), sgn = v => ltr((v>0?'+':v<0?'−':'')+money(Math.abs(v)).replace('-','')), h2 = v => v ? ltr(nf2.format(v)) : '—';
+    const old = !Object.values(priv.wages.emps||{}).some(w=>w.sd);
+    const dt = x => ltr(x.sd.split('-').reverse().join('/')), yrs = x => ltr(nf0.format(x.yrs));
+    return `<section class="panel">
+      <div class="panel-head"><h2>תוספת ותק</h2><span class="small muted">${monthName(ym)} · מעל שנת ותק 0.35 ש"ח לשעת עבודה, מהשנה השישית 0.46 · ${k.ok} עובדים תקינים</span><button class="btn sm" type="button" data-slipx="sen">ייצוא לאקסל</button></div>
+      ${old?'<p class="hint">בקובץ השכר השעתי שהועלה נשמר רק חודש תחילת העבודה. כדי לבדוק את הוותק יש להעלות אותו מחדש.</p>':''}
+      <h3 style="margin:4px 0 6px">בלי תוספת ותק בתלוש (${k.missing.length})</h3>
+      ${k.missing.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>תחילת עבודה</th><th class="n">שנות ותק</th><th class="n">שיעור</th><th class="n">שעות עבודה</th><th class="n">צפוי</th></tr></thead><tbody>
+        ${k.missing.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${dt(x)}</td><td class="n">${yrs(x)}</td><td class="n">${ltr(nf2.format(x.rate))}</td><td class="n">${h2(x.work)}</td><td class="n">${x.xp?money(x.xp):'—'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">לכל העובדים עם ותק של מעל שנה יש תוספת ותק.</p>'}
+      <h3 style="margin:14px 0 6px">תוספת ותק שלא בשיעור הנכון (${k.off.length})</h3>
+      ${k.off.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>תחילת עבודה</th><th class="n">שנות ותק</th><th class="n">שעות עבודה</th><th class="n">שעות בתוספת</th><th class="n">שיעור צפוי</th><th class="n">שיעור בפועל</th><th class="n">תוספת ותק</th><th class="n">צפוי</th><th class="n">הפרש</th></tr></thead><tbody>
+        ${k.off.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${dt(x)}</td><td class="n">${yrs(x)}${x.part?' <span class="small muted">(בחודש זה)</span>':''}</td><td class="n">${h2(x.work)}</td><td class="n">${h2(x.u)}</td><td class="n">${ltr(nf2.format(x.rate))}</td><td class="n">${x.act?ltr(nf2.format(x.act)):'—'}</td><td class="n">${money(x.amt)}</td><td class="n">${money(x.xp)}</td><td class="n"><span class="pill ${x.d<0?'bad':'warn'}">${sgn(x.d)}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל תוספות הוותק בשיעור הנכון.</p>'}
+      ${k.early.length?`<h3 style="margin:14px 0 6px">תוספת ותק לעובד עם פחות משנת ותק (${k.early.length})</h3>
+      <div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>תחילת עבודה</th><th class="n">תוספת ותק</th></tr></thead><tbody>
+        ${k.early.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${dt(x)}</td><td class="n">${money(x.amt)}</td></tr>`).join('')}</tbody></table></div>`:''}
+      ${k.noDate.length?`<h3 style="margin:14px 0 6px">אין תאריך תחילת עבודה בקובץ השכר השעתי (${k.noDate.length})</h3>
+      <div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th class="n">תוספת ותק</th></tr></thead><tbody>
+        ${k.noDate.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td class="n">${x.amt?money(x.amt):'—'}</td></tr>`).join('')}</tbody></table></div>`:''}
+      <p class="hint" style="margin-top:8px">שנות הוותק נספרות מתאריך תחילת העבודה בקובץ השכר השעתי (${esc(priv.wages.file||'')}) עד סוף החודש. שעות עבודה = שעות רגילות וש"נ 125% ו-150% בתלוש. התוספת נבדקת מול השעות שבתלוש לתוספת (סמל ${SEN_SYM}) או שעות העבודה, הגבוה מביניהם, כי מותר לכלול בה גם שעות חופשה. בחודש שבו העובד משלים את השנה הראשונה או נכנס לשנה השישית מתקבל כל שיעור בין שני השיעורים. הפרש של עד ${money(KH_TOL)} לא מסומן.</p>
+    </section>`; };
   const penPanel = () => {
     if(!(pd.v>=2)) return `<section class="panel"><div class="panel-head"><h2>פנסיה ופיצויים</h2></div><p class="muted">כדי לבדוק את ההפרשות לפנסיה יש להעלות מחדש את דוח רכיבי השכר של ${monthName(ym)}.</p></section>`;
     const k = slipPension(ym), sgn = v => ltr((v>0?'+':v<0?'−':'')+money(Math.abs(v)).replace('-','')), rn = r => r==='other' ? 'קופה נוספת' : PEN_ROLES[r].n;
@@ -2224,6 +2279,7 @@ function renderSlip(v){
     ${recupPanel()}
     ${khPanel()}
     ${penPanel()}
+    ${senPanel()}
     ${amtPanel(2, 'שלב 2: נסיעות, אחזקת רכב ובונוסים', 'תשלומים בשכר מול TimeWatch. בונוסים בשכר = בונוס, מענק, מענק מצויינות ובונוס נטו')}
     ${amtPanel(3, 'שלב 3: מפרעות', '"מפרעה" ב-TimeWatch מול "מקדמה" בניכויי הרשות בשכר')}
   </div>`;
@@ -2259,8 +2315,14 @@ function slipXlsx(which){
     add('שיעור לא נכון', ["מס' עובד",'שם','סניף','קופה','אות','שכר לקופה','עובד','מעביד','פיצויים','הפרש עובד','הפרש מעביד','הפרש פיצויים','הערה'],
       k.off.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', rn(x.role), x.fund, x.base, ...x.act, ...(x.role==='other'?['','','']:x.d), [x.erOnly&&x.base?`הפקדת מעביד בלבד ${round2(x.act[1]/x.base*100)}%`:'', notes(x)].filter(Boolean).join(' · ')]), [10,22,14,16,5,11,9,9,9,10,10,10,30]);
     add('גמל בתשלום', ["מס' עובד",'שם','שכר','נסיעות','שעות נוספות','גמל בתשלום','צפוי','הפרש','יש גם קופה'], k.sal.filter(x=>Math.abs(x.ds)>KH_TOL).map(x=>[x.e||pe(x)||x.pe, name(x), x.base, x.bt, x.bo, x.sal, x.xs, x.ds, x.hasFund?'כן':'']), [10,22,11,10,11,11,11,9,10]); };
+  sheets.sen = () => { const k = slipSeniority(ym), dt = x => x.sd.split('-').reverse().join('/');
+    add('בלי תוספת ותק', ["מס' עובד",'שם','סניף','תחילת עבודה','שנות ותק','שיעור','שעות עבודה','צפוי','הערה'], k.missing.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', dt(x), x.yrs, x.rate, x.work, x.xp, notes(x)]), [10,22,14,12,9,7,11,10,30]);
+    add('שיעור לא נכון', ["מס' עובד",'שם','סניף','תחילת עבודה','שנות ותק','שעות עבודה','שעות בתוספת','שיעור צפוי','שיעור בפועל','תוספת ותק','צפוי','הפרש','הערה'],
+      k.off.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', dt(x), x.yrs, x.work, x.u, x.rate, x.act, x.amt, x.xp, x.d, [x.part?'שינוי שיעור בחודש זה':'', notes(x)].filter(Boolean).join(' · ')]), [10,22,14,12,9,11,11,10,10,10,10,9,30]);
+    add('פחות משנה', ["מס' עובד",'שם','סניף','תחילת עבודה','תוספת ותק'], k.early.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', dt(x), x.amt]), [10,22,14,12,10]);
+    add('אין תאריך תחילה', ["מס' עובד",'שם','סניף','תוספת ותק'], k.noDate.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', x.amt]), [10,22,14,10]); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
@@ -2737,7 +2799,7 @@ function parseWages(wb, fileName){
   const emps = {};
   for(const r of aoa.slice(hi+1)){
     const e = num(r[iEmp]); if(e==null) continue;
-    emps[e] = {n: normName([iFirst>=0?r[iFirst]:'', iLast>=0?r[iLast]:''].join(' ')), r: num(r[iRate])||0, s: iStart>=0 ? dateYm(r[iStart]) : null, d: iDept>=0 ? normName(r[iDept]) : ''};
+    emps[e] = {n: normName([iFirst>=0?r[iFirst]:'', iLast>=0?r[iLast]:''].join(' ')), r: num(r[iRate])||0, s: iStart>=0 ? dateYm(r[iStart]) : null, sd: iStart>=0 ? dateIso(r[iStart]) : null, d: iDept>=0 ? normName(r[iDept]) : ''};
   }
   if(!Object.keys(emps).length) throw new Error('לא נמצאו עובדים בקובץ');
   return {file:fileName, uploadedAt:new Date().toISOString(), emps};
