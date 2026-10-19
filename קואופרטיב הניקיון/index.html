@@ -1182,7 +1182,7 @@ function manualPanel(br){
 }
 
 /* ============================================================ רינדור */
-const TABS = [['overview','סקירה ותובנות'],['dash','דשבורדים חודשיים'],['plan','תכנון מול ביצוע'],['clients','רווחיות לקוחות'],['cost','עלות שעה והתייעלות'],['slip','בדיקת תלושים'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים']];
+const TABS = [['overview','סקירה ותובנות'],['dash','דשבורדים חודשיים'],['plan','תכנון מול ביצוע'],['clients','רווחיות לקוחות'],['cost','עלות שעה והתייעלות'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים'],['slip','בדיקת תלושים']];
 // ציור מחדש בלי לאבד את התא שבו מקלידים: עדכון מהמאגר או שמירה של תא קודם לא מוחקים את מה שכבר הוקלד ולא מזיזים את הסמן
 function focusKey(el){
   if(!el || !['INPUT','TEXTAREA','SELECT'].includes(el.tagName) || el.type==='file' || !$('#view')?.contains(el)) return null;
@@ -2171,6 +2171,12 @@ function slipAbs(ym){
   [out.now, out.past, out.carry].forEach(l=>l.sort((a,b)=>b.ex-a.ex || a.end-b.end || br(a).localeCompare(br(b),'he')));
   return out;
 }
+// חבות במס הכנסה: עובדים שנוכה להם מס הכנסה בתלוש. המנהלות בודקות להם את המצב המשפחתי ונקודות הזיכוי לילדים
+const slipBranch = x => x.t?.b || (wageRec(x)?.d||'').replace(/^\d+\s*-\s*/,'') || 'לא ידוע';
+function slipTax(ym){
+  return slipPairs(ym).filter(x=>(x.p?.h?.['מס הכנסה']||0) > 0).map(x=>({...x, tax:round2(x.p.h['מס הכנסה']), gross:round2(slipPaid(x))}))
+    .sort((a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || b.tax-a.tax);
+}
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2317,6 +2323,16 @@ function renderSlip(v){
       <div class="tbl-wrap"><table class="compact"><thead><tr>${th}</tr></thead><tbody>${k.carry.map(x=>`<tr>${cols(x)}</tr>`).join('')}</tbody></table></div>`:''}
       <p class="hint" style="margin-top:8px">חריגה = ניצול בחודש שאחריו היתרה לסוף החודש שלילית. ימים מעבר ליתרה = החלק מהניצול שלא היה מכוסה ביתרת הפתיחה ובזיכוי של החודש. יתרה שלילית בלי ניצול החודש היא חריגה מחודש קודם (או משנה קודמת) שעוד לא קוזזה. שעות ותשלום בתלוש לפי דוח רכיבי השכר (חופשה שעות / מחלה שעות).</p>
     </section>`; };
+  const taxPanel = () => {
+    if(!(pd.v>=2)) return `<section class="panel"><div class="panel-head"><h2>עובדים עם חבות במס הכנסה</h2></div><p class="muted">כדי לראות את רשימת המשלמים מס הכנסה יש להעלות מחדש את דוח רכיבי השכר של ${monthName(ym)}.</p></section>`;
+    const list = slipTax(ym), byBr = {}; list.forEach(x=>(byBr[slipBranch(x)] ||= []).push(x));
+    return `<section class="panel">
+      <div class="panel-head"><h2>עובדים עם חבות במס הכנסה</h2><span class="small muted">${monthName(ym)} · עובדים שנוכה להם מס הכנסה בתלוש · ${list.length} עובדים · ${money(list.reduce((a,x)=>a+x.tax,0))}</span><button class="btn sm" type="button" data-slipx="tax">ייצוא לאקסל למנהלות</button></div>
+      ${list.length?Object.entries(byBr).map(([br, xs])=>`<h3 style="margin:10px 0 6px">${esc(br)} (${xs.length})</h3><div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">סה״כ תשלומים</th><th class="n">מס הכנסה</th><th class="n">% מהתשלומים</th></tr></thead><tbody>
+        ${xs.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${money(x.gross)}</td><td class="n">${money(x.tax)}</td><td class="n">${x.gross?pct(x.tax/x.gross,1):'—'}</td></tr>`).join('')}</tbody></table></div>`).join('')
+        :'<p class="muted">לא נוכה מס הכנסה לאף עובד החודש.</p>'}
+      <p class="hint" style="margin-top:8px">לכל עובד ברשימה המנהלת בודקת את המצב המשפחתי ואת מספר הילדים (נקודות זיכוי), מול טופס 101 העדכני. בייצוא לאקסל יש לכל סניף גיליון משלו, עם עמודות למילוי.</p>
+    </section>`; };
   const penPanel = () => {
     if(!(pd.v>=2)) return `<section class="panel"><div class="panel-head"><h2>פנסיה ופיצויים</h2></div><p class="muted">כדי לבדוק את ההפרשות לפנסיה יש להעלות מחדש את דוח רכיבי השכר של ${monthName(ym)}.</p></section>`;
     const k = slipPension(ym), sgn = v => ltr((v>0?'+':v<0?'−':'')+money(Math.abs(v)).replace('-','')), rn = r => r==='other' ? 'קופה נוספת' : PEN_ROLES[r].n;
@@ -2382,6 +2398,7 @@ function renderSlip(v){
     ${khPanel()}
     ${penPanel()}
     ${senPanel()}
+    ${taxPanel()}
     ${absPanel()}
     ${amtPanel(2, 'שלב 2: נסיעות, אחזקת רכב ובונוסים', 'תשלומים בשכר מול TimeWatch. בונוסים בשכר = בונוס, מענק, מענק מצויינות ובונוס נטו')}
     ${amtPanel(3, 'שלב 3: מפרעות', '"מפרעה" ב-TimeWatch מול "מקדמה" בניכויי הרשות בשכר')}
@@ -2434,8 +2451,13 @@ function slipXlsx(which){
     const head = ["מס' עובד",'שם','סניף','בן 18 ב-','קרן השתלמות','קרן בתשלום','לקרן','פנסיה','גמל בתשלום','לקופה','הערה'];
     const row = x => [x.e||pe(x)||x.pe, name(x), x.t?.b||'', monthName(x.a18), ST[x.kh], x.khSal, x.khFund, ST[x.pen], x.penSal, x.penFund, notes(x)], cols = [10,22,14,12,16,10,9,16,10,9,24];
     add('קטינים לא תקין', head, k.bad.map(row), cols); add('בני 18 לשכר', head, k.grown.map(row), cols); add('קטינים תקינים', head, k.ok.map(row), cols); };
+  sheets.tax = () => { const list = slipTax(ym), byBr = {}; list.forEach(x=>(byBr[slipBranch(x)] ||= []).push(x));
+    const head = ["מס' עובד",'שם','סה"כ תשלומים','מס הכנסה','מצב משפחתי','מספר ילדים (מתחת לגיל 18)','טופס 101 מעודכן (כן/לא)','תואם לתלוש (כן/לא)','הערות'];
+    const row = x => [x.e||pe(x)||x.pe, name(x), x.gross, x.tax, '', '', '', '', ''], cols = [10,22,12,10,14,14,14,14,30];
+    add('כל העובדים', ['סניף', ...head], list.map(x=>[slipBranch(x), ...row(x)]), [14, ...cols]);
+    Object.entries(byBr).forEach(([br, xs])=>add(br.replace(/[\\/?*\[\]:]/g,' ').slice(0,31), head, xs.map(row), cols)); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', minor:'קטינים', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', minor:'קטינים', tax:'חבות במס הכנסה', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
