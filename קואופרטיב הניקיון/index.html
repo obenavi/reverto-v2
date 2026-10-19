@@ -2029,6 +2029,25 @@ function slipNoTravel(ym){ const shuttle = priv['pslip-settings']?.shuttle || {}
 // הבראה: כל רכיב תשלום שבשמו "הבראה" (הבראה שעתי, הבראה), חוץ מהפחתת הבראה
 const slipRecup = x => Object.entries(x.p?.p||{}).filter(([d,v])=>/הבראה/.test(d) && !/הפחתת/.test(d) && v>0).reduce((a,[,v])=>a+v,0);
 function slipNoRecup(ym){ return slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x) && !(slipRecup(x)>0)).sort((a,b)=>(a.t?.b||'').localeCompare(b.t?.b||'','he') || (b.t?.days||0)-(a.t?.days||0)); }
+// גיל לפי קובץ השכר השעתי: 'minor' (מתחת ל-18 כל החודש), 'turns' (בן 18 החודש), 'adult' (בגיר בשנתיים האחרונות), אחרת null
+const wageRec = x => { const W = priv.wages?.emps || {}; return W[x.e] || W[x.pe] || null; };
+const slipAge = (x, ym) => { const a = wageRec(x)?.a18; return !a ? null : a > ym ? 'minor' : a === ym ? 'turns' : 'adult'; };
+const slipMarked = (x, ym) => !!(priv['pslip-settings']?.khSal || {})[x.e || x.pe] || slipAge(x, ym) === 'minor';
+function slipMinors(ym){
+  const out = {bad:[], ok:[], grown:[]};
+  for(const x of slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x))){
+    const age = slipAge(x, ym); if(!age) continue;
+    const P = x.p.p, khSal = P['קרן השתלמות בתשלום']||0, khFund = (x.p.h?.['קרן השתלמות']||0) + (x.p.c?.['קרן השתלמות']||0);
+    const F = penFunds(x), penFund = Object.values(F).reduce((a,v)=>a+v[0]+v[1]+v[2],0), penSal = P['גמל בתשלום']||0;
+    const st = (sal, fund) => sal && !fund ? 'sal' : fund && !sal ? 'fund' : sal && fund ? 'both' : 'none';
+    const r = {...x, age, a18:wageRec(x).a18, kh:st(khSal, khFund), pen:st(penSal, penFund), khSal, khFund:round2(khFund), penSal, penFund:round2(penFund)};
+    if(age === 'minor') (r.kh==='sal' && r.pen==='sal' ? out.ok : out.bad).push(r);
+    else if(age === 'adult' && (khSal || penSal) && !(priv['pslip-settings']?.khSal || {})[x.e || x.pe]) out.grown.push(r);   // בגיר שעדיין מקבל לשכר
+  }
+  const br = x => x.t?.b || '';
+  [out.bad, out.ok, out.grown].forEach(l=>l.sort((a,b)=>br(a).localeCompare(br(b),'he') || a.a18.localeCompare(b.a18)));
+  return out;
+}
 // קרן השתלמות: 2.5% עובד (ניכוי חובה) ו-7.5% מעביד (השתתפות) מרכיבי השכר וחלף השכר. עובד שמקבל את הקרן כתשלום בשכר
 // (קטינים, ללא ת.ז. ישראלית): "קרן השתלמות בתשלום" = 7.5%. בשכר גלובלי הבסיס כולל גם את רכיב "משכורת"
 const KH_BASE = ['שעות רגילות','ימי חג/ שעות','חופשה שעות','מחלה שעות','תוספת ותק','הבראה שעתי','הבראה','משכורת','שעות נוספות גלובליות'], KH_EMP = 0.025, KH_ER = 0.075, KH_TOL = 1;
@@ -2038,15 +2057,15 @@ const KH_RETRO = /^הפרשי שכר/;   // הפרשי שכר רטרו נכנס�
 const khBaseOf = x => round2(KH_BASE.reduce((a,d)=>{ const v = x.p.p[d]||0, u = KH_HOURLY[d] ? (x.p.u?.[KH_HOURLY[d]]||0) : 0; return a + (u ? Math.min(v, MIN_WAGE_H*u) : v); }, 0)
   + Object.entries(x.p.p).filter(([d])=>KH_RETRO.test(d)).reduce((a,[,v])=>a+v,0));
 function slipKh(ym){
-  const out = {none:[], off:[], ok:0, mis:[], salList:[]}, marked = priv['pslip-settings']?.khSal || {};
+  const out = {none:[], off:[], ok:0, mis:[], salList:[]};
   for(const x of slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x))){
     const base = khBaseOf(x), emp = x.p.h?.['קרן השתלמות']||0, er = x.p.c?.['קרן השתלמות']||0, sal = x.p.p['קרן השתלמות בתשלום']||0;
     const r = {...x, base, emp, er, sal, xEmp:round2(base*KH_EMP), xEr:round2(base*KH_ER)};
-    r.marked = !!marked[x.e || x.pe];
+    r.marked = slipMarked(x, ym); r.minor = slipAge(x, ym) === 'minor';
     if(sal || r.marked) out.salList.push(r);
     // התאמה לרשימת הקטינים / ללא ת.ז. ישראלית: הם מקבלים את הקרן בתשלום לשכר, וכל השאר מפקידים לקרן
-    if(r.marked && (emp || er)) out.mis.push({...r, why:'מסומן כקטין / ללא ת.ז. ישראלית, אבל מפקידים לו לקרן'});
-    else if(r.marked && !sal) out.mis.push({...r, why:'מסומן כקטין / ללא ת.ז. ישראלית, ואין לו קרן השתלמות בתשלום'});
+    if(r.marked && (emp || er)) out.mis.push({...r, why:(r.minor?'קטין לפי תאריך הלידה':'מסומן כקטין / ללא ת.ז. ישראלית')+', אבל מפקידים לו לקרן'});
+    else if(r.marked && !sal) out.mis.push({...r, why:(r.minor?'קטין לפי תאריך הלידה':'מסומן כקטין / ללא ת.ז. ישראלית')+', ואין לו קרן השתלמות בתשלום'});
     else if(!r.marked && sal) out.mis.push({...r, why:'מקבל קרן השתלמות בתשלום לשכר, ולא מסומן ברשימה'});
     if(!emp && !er && !sal){ if(!r.marked) out.none.push(r); continue; }
     r.kind = sal && !emp && !er ? 'sal' : 'fund';
@@ -2072,11 +2091,11 @@ function penFunds(x){
 }
 const perms = (arr, k) => k===0 ? [[]] : arr.flatMap((a,i)=>perms([...arr.slice(0,i), ...arr.slice(i+1)], k-1).map(p=>[a,...p]));
 function slipPension(ym){
-  const out = {missing:[], off:[], sal:[], ok:{main:0, travel:0, ot:0}}, marked = priv['pslip-settings']?.khSal || {};
+  const out = {missing:[], off:[], sal:[], ok:{main:0, travel:0, ot:0}};
   for(const x of slipPairs(ym).filter(x=>slipPaid(x)>0 && slipWorked(x))){
     const P = x.p.p, bases = {main: round2(KH_BASE.reduce((a,d)=>a+(P[d]||0),0) + Object.entries(P).filter(([d])=>KH_RETRO.test(d)).reduce((a,[,v])=>a+v,0)),
       travel: round2(PEN_TRV.reduce((a,d)=>a+(P[d]||0),0)), ot: round2(Object.entries(P).filter(([d])=>PEN_OT.test(d)).reduce((a,[,v])=>a+v,0))};
-    const sal = P['גמל בתשלום']||0, F = penFunds(x), mk = !!marked[x.e||x.pe];
+    const sal = P['גמל בתשלום']||0, F = penFunds(x), mk = slipMarked(x, ym);
     // קופה עם הפקדת מעביד בלבד (בלי ניכוי עובד ובלי פיצויים) לא משויכת לסוג; מוצגת בנפרד
     const erOnly = Object.keys(F).filter(f=>!F[f][0] && !F[f][2] && F[f][1]>KH_TOL), funds = Object.keys(F).filter(f=>!erOnly.includes(f) && F[f].some(v=>v));
     erOnly.forEach(f=>out.off.push({...x, role:'other', base:bases.main, fund:f, act:F[f].map(round2), xp:[0,0,0], d:F[f].map(round2), erOnly:true}));
@@ -2216,7 +2235,23 @@ function renderSlip(v){
         :'<p class="muted">לכל העובדים שעבדו יש תשלום הבראה בתלוש.</p>'}
       <p class="hint" style="margin-top:8px">הבראה מגיעה מהיום הראשון לעבודה. נבדקים עובדים עם תלוש שעבדו בחודש (ימי עבודה ב-TimeWatch, שעות רגילות או משכורת). הסניף לפי TimeWatch.</p>
     </section>`; };
-  const khBox = x => `<label class="small"><input type="checkbox" data-khsal="${esc(x.e||x.pe)}" ${x.marked?'checked':''}> קטין / ללא ת.ז. ישראלית</label>`;
+  const khBox = x => x.minor ? '<span class="small muted">קטין לפי תאריך הלידה</span>' : `<label class="small"><input type="checkbox" data-khsal="${esc(x.e||x.pe)}" ${x.marked?'checked':''}> קטין / ללא ת.ז. ישראלית</label>`;
+  const minorPanel = () => {
+    if(!priv.wages?.birth) return `<section class="panel"><div class="panel-head"><h2>קטינים: קרן השתלמות ופנסיה לשכר</h2></div><p class="muted">כדי לזהות קטינים לפי תאריך הלידה יש להעלות מחדש את קובץ השכר השעתי (עם עמודת תאריך לידה).</p></section>`;
+    const k = slipMinors(ym), ST = {sal:['בתשלום לשכר','muted'], fund:['לקופה','bad'], both:['גם לשכר וגם לקופה','warn'], none:['חסר','bad']};
+    const pill = (st, okSt) => st===okSt ? `<span class="muted">${ST[st][0]}</span>` : `<span class="pill ${ST[st][1]}">${ST[st][0]}</span>`;
+    const a18 = x => monthName(x.a18);
+    const tbl = (list, okSt) => `<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>בן 18 ב-</th><th>קרן השתלמות</th><th class="n">בתשלום</th><th class="n">לקרן</th><th>פנסיה</th><th class="n">גמל בתשלום</th><th class="n">לקופה</th></tr></thead><tbody>
+      ${list.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${a18(x)}</td><td>${pill(x.kh, okSt)}</td><td class="n">${x.khSal?money(x.khSal):'—'}</td><td class="n">${x.khFund?money(x.khFund):'—'}</td><td>${pill(x.pen, okSt)}</td><td class="n">${x.penSal?money(x.penSal):'—'}</td><td class="n">${x.penFund?money(x.penFund):'—'}</td></tr>`).join('')}</tbody></table></div>`;
+    return `<section class="panel">
+      <div class="panel-head"><h2>קטינים: קרן השתלמות ופנסיה לשכר</h2><span class="small muted">${monthName(ym)} · עובדים מתחת לגיל 18 לפי תאריך הלידה · ${k.ok.length+k.bad.length} קטינים, ${k.ok.length} תקינים</span><button class="btn sm" type="button" data-slipx="minor">ייצוא לאקסל</button></div>
+      <h3 style="margin:4px 0 6px">קטינים שלא מקבלים את הקרן והפנסיה לשכר (${k.bad.length})</h3>
+      ${k.bad.length?tbl(k.bad, 'sal'):'<p class="muted">כל הקטינים מקבלים קרן השתלמות ופנסיה בתשלום לשכר.</p>'}
+      ${k.grown.length?`<h3 style="margin:14px 0 6px">הגיעו לגיל 18 ועדיין מקבלים לשכר (${k.grown.length})</h3>
+        <p class="small muted" style="margin:0 0 6px">מהחודש שאחרי גיל 18 ההפרשה צריכה לעבור לקופה, אלא אם העובד בלי ת.ז. ישראלית (אז אפשר לסמן אותו ברשימה בפאנל קרן השתלמות).</p>${tbl(k.grown, 'fund')}`:''}
+      ${k.ok.length?`<details style="margin-top:10px"><summary class="small">קטינים תקינים (${k.ok.length})</summary><div style="margin-top:6px">${tbl(k.ok, 'sal')}</div></details>`:''}
+      <p class="hint" style="margin-top:8px">הגיל לפי תאריך הלידה בקובץ השכר השעתי (${esc(priv.wages.file||'')}). תאריך הלידה עצמו לא נשמר, רק החודש שבו העובד בן 18. בחודש שבו העובד בן 18 הוא לא נבדק. קטינים נחשבים אוטומטית "בתשלום לשכר" בבדיקות קרן ההשתלמות והפנסיה, ושיעור ההפרשה בתשלום נבדק שם.</p>
+    </section>`; };
   const khPanel = () => {
     if(!(pd.v>=2)) return `<section class="panel"><div class="panel-head"><h2>קרן השתלמות</h2></div><p class="muted">כדי לבדוק את קרן ההשתלמות יש להעלות מחדש את דוח רכיבי השכר של ${monthName(ym)}. הגרסה שנקלטה לא כוללת את הניכויים וההפרשות.</p></section>`;
     const k = slipKh(ym), sgn = v => ltr((v>0?'+':v<0?'−':'')+money(Math.abs(v)).replace('-',''));
@@ -2341,6 +2376,7 @@ function renderSlip(v){
     </section>
     ${travelPanel()}
     ${recupPanel()}
+    ${minorPanel()}
     ${khPanel()}
     ${penPanel()}
     ${senPanel()}
@@ -2392,8 +2428,12 @@ function slipXlsx(which){
     add('חריגה החודש', [...head,'ימים מעבר ליתרה','שעות בתלוש','תשלום בתלוש'], k.now.map(x=>[...row(x), x.ex, x.hrs, x.amt]), [10,22,16,8,10,8,8,12,12,10,11]);
     add('חודשים קודמים', ['חודש', ...head,'ימים מעבר ליתרה'], k.past.map(x=>[MONTHS[x.m-1], ...row(x), x.ex]), [9,10,22,16,8,10,8,8,12,12]);
     add('יתרה שלילית', head, k.carry.map(row), [10,22,16,8,10,8,8,12]); };
+  sheets.minor = () => { const k = slipMinors(ym), ST = {sal:'בתשלום לשכר', fund:'לקופה', both:'גם לשכר וגם לקופה', none:'חסר'};
+    const head = ["מס' עובד",'שם','סניף','בן 18 ב-','קרן השתלמות','קרן בתשלום','לקרן','פנסיה','גמל בתשלום','לקופה','הערה'];
+    const row = x => [x.e||pe(x)||x.pe, name(x), x.t?.b||'', monthName(x.a18), ST[x.kh], x.khSal, x.khFund, ST[x.pen], x.penSal, x.penFund, notes(x)], cols = [10,22,14,12,16,10,9,16,10,9,24];
+    add('קטינים לא תקין', head, k.bad.map(row), cols); add('בני 18 לשכר', head, k.grown.map(row), cols); add('קטינים תקינים', head, k.ok.map(row), cols); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', minor:'קטינים', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
@@ -2866,14 +2906,18 @@ function parseWages(wb, fileName){
   const aoa = Object.values(wb.sheets).find(a=>findHeader(a, r=>r.includes('מספר עובד') && r.includes('תעריף שעה'))>=0);
   const hi = findHeader(aoa, r=>r.includes('מספר עובד') && r.includes('תעריף שעה'));
   const H = aoa[hi].map(normName), col = n => H.indexOf(n);
-  const iEmp=col('מספר עובד'), iRate=col('תעריף שעה'), iLast=col('שם משפחה'), iFirst=col('שם פרטי'), iStart=col('תחילת עבודה'), iDept=col('מחלקה');
+  const iEmp=col('מספר עובד'), iRate=col('תעריף שעה'), iLast=col('שם משפחה'), iFirst=col('שם פרטי'), iStart=col('תחילת עבודה'), iDept=col('מחלקה'), iBirth=col('תאריך לידה');
+  // תאריך הלידה לא נשמר: רק החודש שבו העובד בן 18, ורק למי שהגיע לגיל 18 בשנתיים האחרונות או עוד לא הגיע
+  const now = new Date(), cut = ymOf(now.getFullYear()-2, now.getMonth()+1);
   const emps = {};
   for(const r of aoa.slice(hi+1)){
     const e = num(r[iEmp]); if(e==null) continue;
     emps[e] = {n: normName([iFirst>=0?r[iFirst]:'', iLast>=0?r[iLast]:''].join(' ')), r: num(r[iRate])||0, s: iStart>=0 ? dateYm(r[iStart]) : null, sd: iStart>=0 ? dateIso(r[iStart]) : null, d: iDept>=0 ? normName(r[iDept]) : ''};
+    const b = iBirth>=0 ? dateYm(r[iBirth]) : null;
+    if(b){ const a18 = ymOf(+b.slice(0,4)+18, +b.slice(5)); if(a18 >= cut) emps[e].a18 = a18; }
   }
   if(!Object.keys(emps).length) throw new Error('לא נמצאו עובדים בקובץ');
-  return {file:fileName, uploadedAt:new Date().toISOString(), emps};
+  return {file:fileName, uploadedAt:new Date().toISOString(), emps, birth: iBirth>=0};
 }
 async function handleFiles(files){
   // קוראים את כל הקבצים ומעבדים לפי סדר: רכיבי השכר תלויים בדוח השכר של אותו חודש
