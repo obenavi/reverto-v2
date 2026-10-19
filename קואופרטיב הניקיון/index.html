@@ -427,6 +427,7 @@ function detectType(wb){
     if(rows.length>=3 && coded.length>=rows.length*0.8 && coded.every(r=>r.slice(1).every(rateCell))) return 'rates';
     if(flat.some(c=>c.includes('לפני מע"מ')) && flat.includes('לקוח')) return 'revenue';
     if(flat.includes('מספר עובד') && flat.includes('תעריף שעה')) return 'wages';
+    if(flat.includes('מספר עובד') && flat.includes('יתרת חופשה לסוף חודש')) return 'absbal';
     if(flat.includes('לקוח') && (flat.includes('עלות חשבונית') || flat.includes('חיוב ללקוח') || flat.includes('סכום')) && (flat.includes('חודש') || flat.some(c=>c.startsWith('תאריך')))) return 'materials';
     if(flat.some(c=>c==='עלות מעביד'||c==='עלות עובד')) return 'payroll';
     if(flat.includes('סה"כ שעות') && flat.includes('משימה')) return 'hours';
@@ -719,6 +720,26 @@ async function parseTwPay(wb, fileName){
     emps[String(e)] = x;
   }
   return {ym, data:{file:fileName, uploadedAt:new Date().toISOString(), emps}};
+}
+// יתרות חופשה ומחלה (בימים) לפי עובד וחודש: [פתיחה, זיכוי, ניצול, סוף חודש] לחופשה ואז למחלה. מספר עובד ארוך (ת.ז.) נשמר כקוד מוצפן
+const ABS_COLS = ['יתרת חופשה','זיכוי חופש','ניצול חופש','יתרת חופשה לסוף חודש','יתרת מחלה','זיכוי מחלה','ניצול מחלה','יתרת מחלה לסוף חודש'];
+async function parseAbsBal(wb, fileName){
+  const aoa = Object.values(wb.sheets).find(a=>findHeader(a, r=>r.includes('מספר עובד') && r.includes('יתרת חופשה לסוף חודש'))>=0);
+  const hi = findHeader(aoa, r=>r.includes('מספר עובד') && r.includes('יתרת חופשה לסוף חודש')), H = aoa[hi].map(normName);
+  const iE=H.indexOf('מספר עובד'), iM=H.indexOf('חודש'), iL=H.indexOf('שם משפחה'), iF=H.indexOf('שם פרטי'), iD=H.lastIndexOf('מחלקה'), iC=ABS_COLS.map(c=>H.indexOf(c));
+  if(iM<0 || iC.some(i=>i<0)) throw new Error('חסרות עמודות ביתרות');
+  // השנה לפי שם הקובץ (למשל 9.26), אחרת לפי החודשים שנקלטו
+  const fm = String(fileName).match(/(?:^|\D)(\d{1,2})[.\-_/](\d{2}|\d{4})(?!\d)/), y = fm ? (fm[2].length===2 ? 2000+ +fm[2] : +fm[2]) : +((monthList().slice(-1)[0]||String(new Date().getFullYear())).slice(0,4));
+  const emps = {}; let upTo = 0;
+  for(const r of aoa.slice(hi+1)){
+    if(normName(r[0])) continue;   // שורות סיכום
+    const e = num(r[iE]), m = num(r[iM]); if(e==null || !m) continue;
+    const id = String(e), k = id.length>=8 ? await idKey(id) : id;
+    const x = emps[k] ||= {n:[normName(r[iF]), normName(r[iL])].filter(Boolean).join(' '), d: iD>=0 ? normName(r[iD]) : '', m:{}};
+    x.m[m] = iC.map(i=>round2(num(r[i])||0)); upTo = Math.max(upTo, m);
+  }
+  if(!Object.keys(emps).length) throw new Error('לא נמצאו עובדים בקובץ');
+  return {file:fileName, uploadedAt:new Date().toISOString(), y, upTo, emps};
 }
 async function parseComponentsEmp(wb, fileName){
   const aoa = Object.values(wb.sheets).find(a=>findHeader(a, r=>r.includes('סוג נתון') && r.includes('תאור סמל'))>=0);
@@ -2105,6 +2126,30 @@ function slipSeniority(ym){
   out.missing.sort((a,b)=>b.xp-a.xp); out.off.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d));
   return out;
 }
+// חופשה ומחלה מעבר לצבירה: ניצול בחודש שאחריו היתרה לסוף החודש שלילית. החריגה = הניצול שמעבר ליתרה (פתיחה + זיכוי)
+const ABS_KINDS = [['vac','חופשה',0,'18','חופשה שעות'], ['sick','מחלה',4,'21','מחלה שעות']];
+function slipAbs(ym){
+  const A = priv['pslip-abs-'+ym.slice(0,4)], mo = +ym.slice(5);
+  if(!A) return null;
+  const out = {now:[], past:[], carry:[], has:!!Object.values(A.emps).some(x=>x.m[mo]), A};
+  const byKey = {}; slipPairs(ym).forEach(x=>{ if(x.pe) byKey[x.pe] = x; if(x.p?.k2) byKey[x.p.k2] = x; });
+  for(const [k, a] of Object.entries(A.emps)){
+    const x = byKey[k], base = {...(x||{e:null, pe:null, t:null, p:null}), an:a.n, ad:a.d};
+    for(const [kind, label, o, sym, pd] of ABS_KINDS){
+      for(const [m, v] of Object.entries(a.m).map(([m,v])=>[+m, v]).filter(([m])=>m<=mo).sort((p,q)=>p[0]-q[0])){
+        const [op, cr, use, end] = v.slice(o, o+4);
+        if(end >= -0.005) continue;
+        const r = {...base, kind, label, m, op, cr, use, end, ex: round2(Math.min(use, -end))};
+        if(use > 0){
+          if(m===mo){ r.hrs = x?.p?.u?.[sym]||0; r.amt = x?.p?.p?.[pd]||0; out.now.push(r); } else out.past.push(r);
+        } else if(m===mo) out.carry.push(r);
+      }
+    }
+  }
+  const br = x => x.t?.b || x.ad || '';
+  [out.now, out.past, out.carry].forEach(l=>l.sort((a,b)=>b.ex-a.ex || a.end-b.end || br(a).localeCompare(br(b),'he')));
+  return out;
+}
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2216,6 +2261,25 @@ function renderSlip(v){
         ${k.noDate.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td class="n">${x.amt?money(x.amt):'—'}</td></tr>`).join('')}</tbody></table></div>`:''}
       <p class="hint" style="margin-top:8px">שנות הוותק נספרות מתאריך תחילת העבודה בקובץ השכר השעתי (${esc(priv.wages.file||'')}) עד סוף החודש. שעות עבודה = שעות רגילות וש"נ 125% ו-150% בתלוש. התוספת נבדקת מול השעות שבתלוש לתוספת (סמל ${SEN_SYM}) או שעות העבודה, הגבוה מביניהם, כי מותר לכלול בה גם שעות חופשה. בחודש שבו העובד משלים את השנה הראשונה או נכנס לשנה השישית מתקבל כל שיעור בין שני השיעורים. הפרש של עד ${money(KH_TOL)} לא מסומן.</p>
     </section>`; };
+  const absPanel = () => {
+    const k = slipAbs(ym), mn = monthName(ym);
+    if(!k) return `<section class="panel"><div class="panel-head"><h2>חופשה ומחלה מעבר לצבירה</h2></div><p class="muted">כדי לבדוק יש להעלות את דוח יתרות החופשה והמחלה מתוכנת השכר לשנת ${ym.slice(0,4)}.</p></section>`;
+    const d2 = v => ltr(nf2.format(v)), nmA = x => x.t||x.p ? nm(x) : esc(x.an), numA = x => x.e||x.pe ? num_(x) : '<span class="muted">מספר ארוך</span>', brA = x => esc(x.t?.b || x.ad || '');
+    const cols = x => `<td class="first">${numA(x)}</td><td>${nmA(x)}</td><td>${brA(x)}</td><td>${x.label}</td><td class="n">${d2(x.op)}</td><td class="n">${d2(x.cr)}</td><td class="n">${d2(x.use)}</td><td class="n"><span class="pill bad">${d2(x.end)}</span></td>`;
+    const th = `<th class="first">מס' עובד</th><th>שם</th><th>סניף / מחלקה</th><th>סוג</th><th class="n">יתרת פתיחה</th><th class="n">זיכוי</th><th class="n">ניצול</th><th class="n">יתרה לסוף חודש</th>`;
+    return `<section class="panel">
+      <div class="panel-head"><h2>חופשה ומחלה מעבר לצבירה</h2><span class="small muted">${mn} · לפי דוח היתרות (${esc(k.A.file)}), בימים · ${k.now.length} חריגות החודש</span><button class="btn sm" type="button" data-slipx="abs">ייצוא לאקסל</button></div>
+      ${k.has?'':`<p class="hint">בדוח היתרות שהועלה אין נתונים ל${mn} (הוא עד ${MONTHS[k.A.upTo-1]}).</p>`}
+      <h3 style="margin:4px 0 6px">ניצול מעבר ליתרה ב${mn} (${k.now.length})</h3>
+      ${k.now.length?`<div class="tbl-wrap"><table class="compact"><thead><tr>${th}<th class="n">ימים מעבר ליתרה</th><th class="n">שעות בתלוש</th><th class="n">תשלום בתלוש</th></tr></thead><tbody>
+        ${k.now.map(x=>`<tr>${cols(x)}<td class="n"><b>${d2(x.ex)}</b></td><td class="n">${x.hrs?d2(x.hrs):'—'}</td><td class="n">${x.amt?money(x.amt):'—'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">לא נוצלו החודש ימי חופשה או מחלה מעבר ליתרה.</p>'}
+      <h3 style="margin:14px 0 6px">ניצול מעבר ליתרה בחודשים קודמים השנה (${k.past.length})</h3>
+      ${k.past.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th>חודש</th>${th}<th class="n">ימים מעבר ליתרה</th></tr></thead><tbody>
+        ${k.past.map(x=>`<tr><td>${MONTHS[x.m-1]}</td>${cols(x)}<td class="n"><b>${d2(x.ex)}</b></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">אין חריגות בחודשים הקודמים.</p>'}
+      ${k.carry.length?`<h3 style="margin:14px 0 6px">יתרה שלילית בסוף ${mn} בלי ניצול החודש (${k.carry.length})</h3>
+      <div class="tbl-wrap"><table class="compact"><thead><tr>${th}</tr></thead><tbody>${k.carry.map(x=>`<tr>${cols(x)}</tr>`).join('')}</tbody></table></div>`:''}
+      <p class="hint" style="margin-top:8px">חריגה = ניצול בחודש שאחריו היתרה לסוף החודש שלילית. ימים מעבר ליתרה = החלק מהניצול שלא היה מכוסה ביתרת הפתיחה ובזיכוי של החודש. יתרה שלילית בלי ניצול החודש היא חריגה מחודש קודם (או משנה קודמת) שעוד לא קוזזה. שעות ותשלום בתלוש לפי דוח רכיבי השכר (חופשה שעות / מחלה שעות).</p>
+    </section>`; };
   const penPanel = () => {
     if(!(pd.v>=2)) return `<section class="panel"><div class="panel-head"><h2>פנסיה ופיצויים</h2></div><p class="muted">כדי לבדוק את ההפרשות לפנסיה יש להעלות מחדש את דוח רכיבי השכר של ${monthName(ym)}.</p></section>`;
     const k = slipPension(ym), sgn = v => ltr((v>0?'+':v<0?'−':'')+money(Math.abs(v)).replace('-','')), rn = r => r==='other' ? 'קופה נוספת' : PEN_ROLES[r].n;
@@ -2280,6 +2344,7 @@ function renderSlip(v){
     ${khPanel()}
     ${penPanel()}
     ${senPanel()}
+    ${absPanel()}
     ${amtPanel(2, 'שלב 2: נסיעות, אחזקת רכב ובונוסים', 'תשלומים בשכר מול TimeWatch. בונוסים בשכר = בונוס, מענק, מענק מצויינות ובונוס נטו')}
     ${amtPanel(3, 'שלב 3: מפרעות', '"מפרעה" ב-TimeWatch מול "מקדמה" בניכויי הרשות בשכר')}
   </div>`;
@@ -2321,8 +2386,14 @@ function slipXlsx(which){
       k.off.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', dt(x), x.yrs, x.work, x.u, x.rate, x.act, x.amt, x.xp, x.d, [x.part?'שינוי שיעור בחודש זה':'', notes(x)].filter(Boolean).join(' · ')]), [10,22,14,12,9,11,11,10,10,10,10,9,30]);
     add('פחות משנה', ["מס' עובד",'שם','סניף','תחילת עבודה','תוספת ותק'], k.early.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', dt(x), x.amt]), [10,22,14,12,10]);
     add('אין תאריך תחילה', ["מס' עובד",'שם','סניף','תוספת ותק'], k.noDate.map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'', x.amt]), [10,22,14,10]); };
+  sheets.abs = () => { const k = slipAbs(ym); if(!k) return add('אין נתונים', ['יש להעלות את דוח יתרות החופשה והמחלה'], [], [40]);
+    const id = x => x.e||pe(x)||x.pe||'מספר ארוך', nmA = x => name(x)||x.an, brA = x => x.t?.b||x.ad||'';
+    const head = ["מס' עובד",'שם','סניף / מחלקה','סוג','יתרת פתיחה','זיכוי','ניצול','יתרה לסוף חודש'], row = x => [id(x), nmA(x), brA(x), x.label, x.op, x.cr, x.use, x.end];
+    add('חריגה החודש', [...head,'ימים מעבר ליתרה','שעות בתלוש','תשלום בתלוש'], k.now.map(x=>[...row(x), x.ex, x.hrs, x.amt]), [10,22,16,8,10,8,8,12,12,10,11]);
+    add('חודשים קודמים', ['חודש', ...head,'ימים מעבר ליתרה'], k.past.map(x=>[MONTHS[x.m-1], ...row(x), x.ex]), [9,10,22,16,8,10,8,8,12,12]);
+    add('יתרה שלילית', head, k.carry.map(row), [10,22,16,8,10,8,8,12]); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
@@ -2812,7 +2883,7 @@ async function handleFiles(files){
       if(!type){ toast(`לא זוהה סוג הדוח בקובץ ${f.name}`); continue; } items.push({f, wb, type}); }
     catch(err){ toast(`לא הצלחנו לקרוא את ${f.name}`); }
   }
-  const order = {materials:-4, wages:-3, plan:-2, rates:-1, revenue:0, hours:1, payroll:2, components:3, twpay:4};
+  const order = {absbal:-5, materials:-4, wages:-3, plan:-2, rates:-1, revenue:0, hours:1, payroll:2, components:3, twpay:4};
   items.sort((a,b)=>order[a.type]-order[b.type]);
   for(const {f, wb, type} of items){
     try{
@@ -2829,6 +2900,11 @@ async function handleFiles(files){
         if(!store.hasPrivate){ toast('אין אזור פרטי בתצוגה הזו, ולכן קובץ השכר לא נשמר'); continue; }
         const w = parseWages(wb, f.name); await store.savePrivate('wages', w);
         const n = Object.values(w.emps); toast(`נקלט שכר שעתי ל-${n.length} עובדים (${n.filter(x=>x.r>0).length} עם תעריף). נשמר באזור הפרטי שלך בלבד`); continue;
+      }
+      if(type==='absbal'){
+        if(!store.hasPrivate){ toast('אין אזור פרטי בתצוגה הזו, ולכן קובץ היתרות לא נשמר'); continue; }
+        const a = await parseAbsBal(wb, f.name); await store.savePrivate('pslip-abs-'+a.y, a);
+        toast(`נקלטו יתרות חופשה ומחלה ל-${Object.keys(a.emps).length} עובדים, ינואר עד ${MONTHS[a.upTo-1]} ${a.y}. נשמר באזור הפרטי שלך בלבד`); continue;
       }
       if(type==='twpay'){
         if(!store.hasPrivate){ toast('אין אזור פרטי בתצוגה הזו, ולכן קובץ העברת נתוני השכר לא נשמר'); continue; }
