@@ -2177,6 +2177,12 @@ function slipTax(ym){
   return slipPairs(ym).filter(x=>(x.p?.h?.['מס הכנסה']||0) > 0).map(x=>({...x, tax:round2(x.p.h['מס הכנסה']), gross:round2(slipPaid(x))}))
     .sort((a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || b.tax-a.tax);
 }
+// סניף ירושלים: החזר נסיעות מעל מחיר חופשי חודשי (315 ש"ח). אחזקת רכב לא נכללת
+const TRV_CAP = 315, TRV_CAP_BR = /ירושלים/;
+function slipTravelCap(ym){
+  return slipPairs(ym).filter(x=>x.p && TRV_CAP_BR.test(slipBranch(x))).map(x=>({...x, trv:round2(PEN_TRV.reduce((a,d)=>a+(x.p.p?.[d]||0),0)), car:round2(x.p.p?.['אחזקת רכב']||0)}))
+    .filter(x=>x.trv > TRV_CAP).sort((a,b)=>b.trv-a.trv);
+}
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2233,7 +2239,10 @@ function renderSlip(v){
         <div class="tbl-wrap"><table class="compact">${thead}<tbody>${xs.sort((a,b)=>(b.t?.days||0)-(a.t?.days||0)).map(row).join('')}</tbody></table></div>`).join('')
         :'<p class="muted">לכל העובדים שעבדו יש רכיב נסיעות בתלוש.</p>'}
       ${done.length?`<details style="margin-top:10px"><summary class="small">${done.length} עובדים מסומנים "יש הסעה" ולא נספרים</summary><div class="tbl-wrap" style="margin-top:6px"><table class="compact">${thead}<tbody>${done.map(row).join('')}</tbody></table></div></details>`:''}
-      <p class="hint" style="margin-top:8px">אחזקת רכב נחשבת רכיב נסיעות. סימון "יש הסעה" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך. הסניף לפי TimeWatch.</p>
+      ${(()=>{ const cap = slipTravelCap(ym); return `<h3 style="margin:14px 0 6px">ירושלים: החזר נסיעות מעל ${money(TRV_CAP)} (חופשי חודשי) (${cap.length})</h3>
+      ${cap.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">ימי עבודה</th><th class="n">נסיעות</th><th class="n">מעל ${money(TRV_CAP)}</th><th class="n">אחזקת רכב</th></tr></thead><tbody>
+        ${cap.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${x.t?.days?ltr(nf0.format(x.t.days)):'—'}</td><td class="n">${money(x.trv)}</td><td class="n"><span class="pill warn">${money(x.trv-TRV_CAP)}</span></td><td class="n">${x.car?money(x.car):'—'}</td></tr>`).join('')}</tbody></table></div>`:`<p class="muted">אין בירושלים עובדים עם החזר נסיעות מעל ${money(TRV_CAP)}.</p>`}`; })()}
+      <p class="hint" style="margin-top:8px">אחזקת רכב נחשבת רכיב נסיעות. בבדיקת ירושלים נספרים נסיעות חודשי, נסיעות והוצאות נסיעה, בלי אחזקת רכב. סימון "יש הסעה" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך. הסניף לפי TimeWatch.</p>
     </section>`; };
   const recupPanel = () => { const list = slipNoRecup(ym), byBr = {}; list.forEach(x=>(byBr[x.t?.b||'לא ידוע'] ||= []).push(x));
     return `<section class="panel">
@@ -2419,7 +2428,8 @@ function slipXlsx(which){
         noTwData.map(x=>[x.e||pe(x)||x.pe, name(x), round2(slipPaid(x)), x.p.u?.['19']||0, Object.entries(x.p.p).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([d,v])=>`${d} ${v}`).join(' · '), notes(x)]), [12,22,12,12,40,20]); },
     travel: () => { const {open, done} = slipNoTravel(ym);
       add('בלי נסיעות', ["מס' עובד",'שם','סניף','ימי עבודה','שעות רגילות','יש הסעה','הערה'],
-        [...open, ...done].sort((a,b)=>(a.t?.b||'').localeCompare(b.t?.b||'','he') || (b.t?.days||0)-(a.t?.days||0)).map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'לא ידוע', x.t?.days||0, x.p.u?.['19']||0, done.includes(x)?'כן':'', notes(x)]), [10,22,14,10,12,9,30]); },
+        [...open, ...done].sort((a,b)=>(a.t?.b||'').localeCompare(b.t?.b||'','he') || (b.t?.days||0)-(a.t?.days||0)).map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.b||'לא ידוע', x.t?.days||0, x.p.u?.['19']||0, done.includes(x)?'כן':'', notes(x)]), [10,22,14,10,12,9,30]);
+      add('ירושלים מעל 315', ["מס' עובד",'שם','ימי עבודה','נסיעות','מעל 315','אחזקת רכב','הערה'], slipTravelCap(ym).map(x=>[x.e||pe(x)||x.pe, name(x), x.t?.days||0, x.trv, round2(x.trv-TRV_CAP), x.car, notes(x)]), [10,22,10,10,10,11,30]); },
   };
   const amt = (st, title) => add(title, ["מס' עובד","מס' עובד בשכר",'שם','סניף','רכיב','TimeWatch','שכר','הפרש','פירוט בשכר','הערה'],
     slipAmtDiffs(ym, st).map(x=>[x.e||'', pe(x), name(x), x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), notes(x)]), [10,12,22,14,12,10,10,9,28,30]);
