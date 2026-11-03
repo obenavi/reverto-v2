@@ -653,13 +653,15 @@ function parseComponents(wb, fileName){
   const iEmp=H.indexOf('מספר עובד'), iType=H.indexOf('סוג נתון'), iSym=H.indexOf('סמל'), iDesc=H.indexOf('תאור סמל');
   const monthCols = H.map((h,i)=>[i, monthFromHeader(h)]).filter(([i,m])=>i>iDesc && m);
   if(!monthCols.length) throw new Error('לא נמצאה עמודת חודש (למשל "יולי") בקובץ הרכיבים');
-  const out = [];
+  const out = [], skipped = [];
   for(const [col, mNum] of monthCols){
+    if(!aoa.slice(hi+1).some(r=>!normName(r[0]) && num(r[col]))) continue;   // עמודת חודש ריקה (למשל חודשים שעוד לא היו)
     // השנה: לפי חודש שכבר נקלט עם דוח שכר באותו חודש קלנדרי
     const cand = monthList().filter(x=>+x.slice(5)===mNum).sort((a,b)=>(!!months[b].payroll?.empShares - !!months[a].payroll?.empShares) || b.localeCompare(a));
     const ym = cand[0] || ymOf(new Date().getFullYear(), mNum);
     const shares = months[ym]?.payroll?.empShares;
-    if(!shares) throw new Error(`יש להעלות קודם את דוח השכר (עלות מעביד לפי אתר) של ${monthName(ym)}${months[ym]?.payroll?' מחדש, כדי שיישמר פיצול העובדים בין האתרים':''}`);
+    // חודש בלי דוח שכר (למשל עמודת חודש עתידי בקובץ) מדולג; שגיאה רק אם אף חודש לא נקלט
+    if(!shares){ skipped.push(ym); continue; }
     const sites = {}, symbols = {}; let total = 0, unallocated = 0; const emps = new Set();
     // שעות לפי רכיב (סוג נתון "יחידות"): שעות ששולמו בפועל לכל רכיב ישיר, ו"שעות עבודה בפועל" (בלי הפסקות).
     // נשמרות ברכיבים כ-u_<רכיב>; pu_<רכיב> = התשלום של רכיבים שיש להם שעות (בלי משכורת גלובלית), לחישוב ברוטו לשעה
@@ -692,6 +694,7 @@ function parseComponents(wb, fileName){
     for(const x of Object.values(symbols)) x.total = round2(x.total);
     out.push({ym, data:{v:5, file:fileName, uploadedAt:new Date().toISOString(), sites, symbols, total:round2(total), unallocated:round2(unallocated), employees:emps.size}});
   }
+  if(!out.length && skipped.length) throw new Error(`יש להעלות קודם את דוח השכר (עלות מעביד לפי אתר) של ${skipped.map(monthName).join(', ')}`);
   return out;
 }
 
