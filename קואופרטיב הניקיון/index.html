@@ -616,7 +616,7 @@ function parsePayroll(wb, fileName){
 /* --- דוח רכיבי שכר (ברוטו לפי סמל) ---
    נלקח רק סוג הנתון "תשלומים" (רכיבי הברוטו). כל רכיב של עובד מתחלק בין האתרים לפי חלוקת
    עלות המעביד שלו בדוח השכר של אותו חודש, ולכן דוח השכר צריך להיקלט קודם. נשמרים רק סיכומים לפי אתר ורכיב. */
-const BUCKETS = [['base','בסיס: שעות רגילות ומשכורת'],['topup','השלמת שעות והפסקות'],['ot','שעות נוספות (בימי חול)'],['weekend','עבודה בשבת וחג (מחויבת ללקוח בתעריף מוגדל)'],['sick','ימי מחלה'],['absence','חופשה, חג ומילואים (זכות של העובד)'],
+const BUCKETS = [['base','בסיס: שעות רגילות ומשכורת'],['topup','השלמת שעות והפסקות'],['ot','שעות נוספות בימי חול (125%)'],['weekend','עבודה בשבת וחג, כולל ש"נ 150% (מחויבת ללקוח בתעריף מוגדל)'],['sick','ימי מחלה'],['absence','חופשה, חג ומילואים (זכות של העובד)'],
   ['travel','נסיעות ורכב'],['allow','הבראה, ותק ותוספות'],['prov','הפרשות ששולמו בשכר'],['once','חד-פעמי: פדיון, מענקים, בונוסים'],['other','אחר']];
 const BUCKET = Object.fromEntries(BUCKETS);
 // ברוטו ישיר: תשלומים שנגזרים משעות העבודה אצל הלקוח בלבד (שעות רגילות, הפסקות, נוספות, שבת וחג)
@@ -628,7 +628,8 @@ const directOf = comp => DIRECT.reduce((a,k)=>a+(comp?.[k]||0),0);
 function bucketOf(desc){
   const d = normName(desc);
   if(/פדיון|מענק|בונוס|גילום|גלום|שי לחג|הודעה מוקדמת|אשל|קיזוז/.test(d)) return 'once';
-  if(/שבת/.test(d) || (/חג/.test(d) && /%/.test(d))) return 'weekend';   // שבת וחג מחויבים ללקוח ב-150%: לא יעד לחיסכון
+  // ש"נ 150% הוא ברוב המקרים עבודה בשבת, ולכן נספר עם שבת וחג ולא עם שעות נוספות בימי חול
+  if(/שבת/.test(d) || (/חג/.test(d) && /%/.test(d)) || /^ש"?נ\s*150/.test(d)) return 'weekend';   // שבת וחג מחויבים ללקוח ב-150%: לא יעד לחיסכון
   if(/%|נוספות/.test(d)) return 'ot';
   if(/מחלה/.test(d)) return 'sick';   // מחלה בנפרד: מדד שאפשר לנהל. חופשה וחג הם זכות צבורה שתשולם בכל מקרה
   if(/חופשה|חג|מילואים|אבל/.test(d)) return 'absence';
@@ -689,7 +690,7 @@ function parseComponents(wb, fileName){
     }
     for(const x of Object.values(sites)) for(const k in x) x[k] = round2(x[k]);
     for(const x of Object.values(symbols)) x.total = round2(x.total);
-    out.push({ym, data:{v:4, file:fileName, uploadedAt:new Date().toISOString(), sites, symbols, total:round2(total), unallocated:round2(unallocated), employees:emps.size}});
+    out.push({ym, data:{v:5, file:fileName, uploadedAt:new Date().toISOString(), sites, symbols, total:round2(total), unallocated:round2(unallocated), employees:emps.size}});
   }
   return out;
 }
@@ -1899,7 +1900,7 @@ function renderCost(v){
   const per = period(), R = computePeriod(per.months), t = (ui.target||15)/100;
   const withComp = monthList().filter(m=>months[m].components);
   if(!R.hasComp){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">חסר דוח רכיבי שכר ל${per.label}</h2><p>יש להעלות בלשונית "קליטת נתונים" את דוח הברוטו לפי רכיבי שכר (הנתונים נלקחים מסעיף "תשלומים").</p>${withComp.length?`<p style="margin-top:8px">נקלט עבור: ${withComp.map(monthName).join(', ')}.</p>`:''}</div>`; return; }
-  const oldComp = monthList().filter(m=>(per.months.includes(m) || (m.slice(0,4)===(ui.ym||'').slice(0,4) && complete(m))) && months[m]?.components && !(months[m].components.v>=3));
+  const oldComp = monthList().filter(m=>(per.months.includes(m) || (m.slice(0,4)===(ui.ym||'').slice(0,4) && complete(m))) && months[m]?.components && !(months[m].components.v>=5));
   const T = ui.branch ? branchTot(R, ui.branch) : R.tot, nM = per.months.length, inScope = ui.branch ? `בסניף ${esc(ui.branch)}` : 'בארגון';
   let groups = R.groups.filter(g=>g.h>0 || g.rev>0);
   if(ui.branch) groups = groups.filter(g=>g.branchList.includes(ui.branch));
@@ -1954,7 +1955,7 @@ function renderCost(v){
   };
   const kpi = (l, val, sub) => `<div class="kpi"><span class="label">${l}</span><span class="value num">${val}</span><span class="sub">${sub||'&nbsp;'}</span></div>`;
   v.innerHTML = `<div class="stack">
-    ${oldComp.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${oldComp.map(monthName).join(', ')} דוח רכיבי השכר נקלט לפני ההפרדה, ולכן עבודה בשבת וחג עדיין כלולה בשעות נוספות, וימי מחלה כלולים בחופשה ובחג. כדי להפריד, יש להעלות מחדש את דוח רכיבי השכר של ${oldComp.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
+    ${oldComp.length?`<div class="panel small" style="background:var(--warn-soft);border-color:transparent">ב${oldComp.map(monthName).join(', ')} דוח רכיבי השכר נקלט לפני העדכון, ולכן ש"נ 150% (עבודה בשבת) עדיין נספר בשעות נוספות בימי חול. כדי להפריד, יש להעלות מחדש את דוח רכיבי השכר של ${oldComp.length>1?'החודשים האלה':'החודש הזה'} בלשונית "קליטת נתונים".</div>`:''}
     ${ui.branch?`<div class="panel small" style="background:var(--accent-soft);border-color:transparent"><b>מוצגים נתוני ${esc(ui.branch)} בלבד:</b> עלות ורכיבי השכר של אתרי הסניף, והלקוחות שלו. <button class="btn sm" type="button" id="ov-all">לכל הארגון</button></div>`:''}
     <div class="kpis">
       ${kpi('ברוטו ישיר לשעת עבודה', perH(T.grossH), 'שעות TimeWatch בקיזוז הפסקות שלא מחויבות')}
