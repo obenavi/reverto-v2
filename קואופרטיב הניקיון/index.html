@@ -2960,7 +2960,7 @@ async function handleFiles(files){
   for(const f of files){
     try{ const wb = await readWorkbook(f); const type = detectType(wb);
       if(!type){ toast(`לא זוהה סוג הדוח בקובץ ${f.name}`); continue; } items.push({f, wb, type}); }
-    catch(err){ toast(`לא הצלחנו לקרוא את ${f.name}`); }
+    catch(err){ console.error(err); toast(`לא הצלחנו לפתוח את ${f.name}${err?.name==='NotReadableError'?': הקובץ פתוח בתוכנה אחרת. יש לסגור אותו באקסל ולהעלות שוב':err?.message?` (${err.message})`:''}`); }
   }
   const order = {absbal:-5, materials:-4, wages:-3, plan:-2, rates:-1, revenue:0, hours:1, payroll:2, components:3, twpay:4};
   items.sort((a,b)=>order[a.type]-order[b.type]);
