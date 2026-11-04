@@ -632,7 +632,7 @@ function bucketOf(desc){
   if(/שבת/.test(d) || (/חג/.test(d) && /%/.test(d)) || /^ש"?נ\s*150/.test(d)) return 'weekend';   // שבת וחג מחויבים ללקוח ב-150%: לא יעד לחיסכון
   if(/%|נוספות/.test(d)) return 'ot';
   if(/מחלה/.test(d)) return 'sick';   // מחלה בנפרד: מדד שאפשר לנהל. חופשה וחג הם זכות צבורה שתשולם בכל מקרה
-  if(/חופשה|חג|מילואים|אבל/.test(d)) return 'absence';
+  if(/חופשה|חג|מילואים|אבל|בחירות/.test(d)) return 'absence';
   if(/נסיע|רכב|חניה/.test(d)) return 'travel';
   if(/השלמ|הפסק/.test(d)) return 'topup';
   if(/הבראה|ותק|תוספת|טלפון|ביגוד/.test(d)) return 'allow';
@@ -2059,7 +2059,7 @@ function slipMinors(ym){
 const KH_BASE = ['שעות רגילות','ימי חג/ שעות','חופשה שעות','מחלה שעות','תוספת ותק','הבראה שעתי','הבראה','משכורת','שעות נוספות גלובליות'], KH_EMP = 0.025, KH_ER = 0.075, KH_TOL = 1;
 // רכיב שעתי (סמל בדוח רכיבי השכר): בשכר מעל שכר המינימום, השכר הקובע לקרן הוא שכר מינימום × השעות
 const MIN_WAGE_H = 39.11, KH_HOURLY = {'שעות רגילות':'19', 'ימי חג/ שעות':'26', 'חופשה שעות':'18', 'מחלה שעות':'21'};
-const KH_RETRO = /^הפרשי שכר/;   // הפרשי שכר רטרו נכנסים לבסיס
+const KH_RETRO = /^הפרשי שכר|בחירות/;   // נכנסים לבסיס גם: הפרשי שכר רטרו, ותשלום יום בחירות (חלף שכר כמו חופשה, מחלה וחג)
 const khBaseOf = x => round2(KH_BASE.reduce((a,d)=>{ const v = x.p.p[d]||0, u = KH_HOURLY[d] ? (x.p.u?.[KH_HOURLY[d]]||0) : 0; return a + (u ? Math.min(v, MIN_WAGE_H*u) : v); }, 0)
   + Object.entries(x.p.p).filter(([d])=>KH_RETRO.test(d)).reduce((a,[,v])=>a+v,0));
 function slipKh(ym){
@@ -2309,7 +2309,7 @@ function renderSlip(v){
         ${k.off.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(x.t?.b||'')}</td><td>${x.kind==='sal'?'בתשלום לשכר':'לקרן'}</td><td class="n">${money(x.base)}</td>
           <td class="n">${x.kind==='sal'?'—':money(x.emp)}</td><td class="n">${x.kind==='sal'?'—':money(x.xEmp)}</td><td class="n">${money(x.kind==='sal'?x.sal:x.er)}</td><td class="n">${money(x.xEr)}</td>
           <td class="n"><span class="pill ${x.dEr<0?'bad':'warn'}">${sgn(x.dEr)}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל ההפרשות בשיעור הנכון.</p>'}
-      <p class="hint" style="margin-top:8px">שכר לקרן = ${KH_BASE.join(', ')} והפרשי שכר רטרו. ברכיבים השעתיים (${Object.keys(KH_HOURLY).join(', ')}), כשהתעריף גבוה משכר המינימום (${ltr('₪'+nf2.format(MIN_WAGE_H))} לשעה), נלקח שכר מינימום × מספר השעות. הפרש של עד ${money(KH_TOL)} לא מסומן. עובד שמקבל את הקרן בתשלום לשכר (קטינים, ללא ת.ז. ישראלית) נבדק מול 7.5%. הסימון "קטין / ללא ת.ז. ישראלית" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך.</p>
+      <p class="hint" style="margin-top:8px">שכר לקרן = ${KH_BASE.join(', ')}, יום בחירות והפרשי שכר רטרו. ברכיבים השעתיים (${Object.keys(KH_HOURLY).join(', ')}), כשהתעריף גבוה משכר המינימום (${ltr('₪'+nf2.format(MIN_WAGE_H))} לשעה), נלקח שכר מינימום × מספר השעות. הפרש של עד ${money(KH_TOL)} לא מסומן. עובד שמקבל את הקרן בתשלום לשכר (קטינים, ללא ת.ז. ישראלית) נבדק מול 7.5%. הסימון "קטין / ללא ת.ז. ישראלית" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך.</p>
     </section>`; };
   const senPanel = () => {
     if(!priv.wages) return `<section class="panel"><div class="panel-head"><h2>תוספת ותק</h2></div><p class="muted">כדי לבדוק את תוספת הוותק יש להעלות את קובץ השכר השעתי (עם תאריך תחילת עבודה).</p></section>`;
@@ -2381,7 +2381,7 @@ function renderSlip(v){
         ${badSal.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${money(x.base)}</td><td class="n">${x.bt?money(x.bt):'—'}</td><td class="n">${x.bo?money(x.bo):'—'}</td><td class="n">${money(x.sal)}</td><td class="n">${money(x.xs)}</td><td class="n"><span class="pill ${x.ds<0?'bad':'warn'}">${sgn(x.ds)}</span></td>
           <td class="small">${x.hasFund?'יש גם הפקדה לקופה':''}</td></tr>`).join('')}</tbody></table></div>
         `:'<p class="muted">'+(k.sal.length?'כל הגמל בתשלום לשכר בשיעור הנכון.':'אין עובדים עם גמל בתשלום לשכר.')+'</p>'}
-      <p class="hint" style="margin-top:8px">פנסיה: 7% עובד, 7.5% מעביד ו-8.33% פיצויים מ: ${KH_BASE.join(', ')} והפרשי שכר רטרו (בשכר בפועל). קופת נסיעות: 5% עובד ו-5% מעביד מ: ${PEN_TRV.join(', ')} (בלי אחזקת רכב). קופת שעות נוספות: 7% עובד, 7.5% מעביד ו-6% פיצויים מהשעות הנוספות (ש"נ, שבת וחג 150%). גמל בתשלום לשכר (עובדים זרים): בתנאים זהים לפנסיה, חלק המעביד והפיצויים: 15.83% מהשכר, 5% מהנסיעות ו-13.5% מהשעות הנוספות. מוצגים רק מי שלא בשיעור הנכון. הפרש של עד ${money(KH_TOL)} לא מסומן.</p>
+      <p class="hint" style="margin-top:8px">פנסיה: 7% עובד, 7.5% מעביד ו-8.33% פיצויים מ: ${KH_BASE.join(', ')}, יום בחירות והפרשי שכר רטרו (בשכר בפועל). קופת נסיעות: 5% עובד ו-5% מעביד מ: ${PEN_TRV.join(', ')} (בלי אחזקת רכב). קופת שעות נוספות: 7% עובד, 7.5% מעביד ו-6% פיצויים מהשעות הנוספות (ש"נ, שבת וחג 150%). גמל בתשלום לשכר (עובדים זרים): בתנאים זהים לפנסיה, חלק המעביד והפיצויים: 15.83% מהשכר, 5% מהנסיעות ו-13.5% מהשעות הנוספות. מוצגים רק מי שלא בשיעור הנכון. הפרש של עד ${money(KH_TOL)} לא מסומן.</p>
     </section>`; };
   const amtPanel = (stage, title, sub) => { const rows = slipAmtDiffs(ym, stage), sum = rows.reduce((a,x)=>a+x.d,0);
     return `<section class="panel">
