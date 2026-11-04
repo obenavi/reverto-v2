@@ -2196,14 +2196,14 @@ function slipNegBreak(ym){
     return {...x, parts, amt:round2(parts.reduce((a,[,v])=>a+v,0)), units:round2(x.p.u?.['57']||0)};
   }).filter(x=>x.amt<0 || x.units<0).sort((a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || a.amt-b.amt);
 }
-// יום בחירות: רכיב שבשמו "בחירות" (בלי % ובלי "עבודה", למשל "חג/בחירות שעות", סמל 26). שעות לפי סמל 26
+// יום בחירות בתשלום מלא: 8 שעות × שכר מינימום. רכיב שבשמו "בחירות" (בלי % ובלי "עבודה", למשל "חג/בחירות שעות", סמל 26)
 const ELEC_SYM = '26', ELEC_MIN_H = 8;
 function slipElection(ym){
   return slipPairs(ym).filter(x=>x.p).map(x=>{
     const parts = Object.entries(x.p.p||{}).filter(([d])=>/בחירות/.test(d) && !/%|עבודה/.test(d));
     const amt = round2(parts.reduce((a,[,v])=>a+v,0)), h = round2(x.p.u?.[ELEC_SYM]||0);
     return {...x, amt, h, rate: h ? round2(amt/h) : 0, desc: parts.map(([d])=>d).join(', ')};
-  }).filter(x=>x.amt && x.h >= ELEC_MIN_H).sort((a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || a.rate-b.rate);
+  }).filter(x=>x.h >= ELEC_MIN_H && Math.abs(x.amt - round2(ELEC_MIN_H*MIN_WAGE_H)) <= 0.1).sort((a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || (+a.e||0)-(+b.e||0));
 }
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
@@ -2267,12 +2267,12 @@ function renderSlip(v){
       <p class="hint" style="margin-top:8px">אחזקת רכב נחשבת רכיב נסיעות. בבדיקת ירושלים נספרים נסיעות חודשי, נסיעות והוצאות נסיעה, בלי אחזקת רכב. סימון "יש הסעה" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך. הסניף לפי TimeWatch.</p>
     </section>`; };
   const elecPanel = () => { const list = slipElection(ym); if(!list.length) return '';
-    const byBr = {}, low = list.filter(x=>x.rate < MIN_WAGE_H - 0.01); list.forEach(x=>(byBr[slipBranch(x)] ||= []).push(x));
+    const byBr = {}; list.forEach(x=>(byBr[slipBranch(x)] ||= []).push(x));
     return `<section class="panel">
-      <div class="panel-head"><h2>יום בחירות: ${ELEC_MIN_H} שעות או יותר</h2><span class="small muted">${monthName(ym)} · ${esc([...new Set(list.map(x=>x.desc))].join(', '))} · ${list.length} עובדים · ${money(list.reduce((a,x)=>a+x.amt,0))} · ${low.length} מתחת לשכר מינימום לשעה</span><button class="btn sm" type="button" data-slipx="elec">ייצוא לאקסל</button></div>
-      ${Object.entries(byBr).map(([br, xs])=>`<h3 style="margin:10px 0 6px">${esc(br)} (${xs.length})</h3><div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">שעות</th><th class="n">תשלום</th><th class="n">לשעה</th><th class="n">שעות רגילות בחודש</th></tr></thead><tbody>
-        ${xs.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${ltr(nf2.format(x.h))}</td><td class="n">${money(x.amt)}</td><td class="n">${x.rate < MIN_WAGE_H - 0.01?`<span class="pill warn">${ltr('₪'+nf2.format(x.rate))}</span>`:ltr('₪'+nf2.format(x.rate))}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td></tr>`).join('')}</tbody></table></div>`).join('')}
-      <p class="hint" style="margin-top:8px">שעות = יחידות ברכיב סמל ${ELEC_SYM} בתלוש. כשהרכיב משותף לחג ולבחירות ("חג/בחירות שעות"), השעות כוללות גם ימי חג של החודש. "לשעה" מסומן כשהוא נמוך משכר מינימום (${ltr('₪'+nf2.format(MIN_WAGE_H))}).</p>
+      <div class="panel-head"><h2>יום בחירות בתשלום מלא</h2><span class="small muted">${monthName(ym)} · ${ELEC_MIN_H} שעות × ${ltr('₪'+nf2.format(MIN_WAGE_H))} = ${ltr('₪'+nf2.format(round2(ELEC_MIN_H*MIN_WAGE_H)))} · ${list.length} עובדים</span><button class="btn sm" type="button" data-slipx="elec">ייצוא לאקסל</button></div>
+      ${Object.entries(byBr).map(([br, xs])=>`<h3 style="margin:10px 0 6px">${esc(br)} (${xs.length})</h3><div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">שעות</th><th class="n">תשלום</th><th class="n">שעות רגילות בחודש</th></tr></thead><tbody>
+        ${xs.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${ltr(nf2.format(x.h))}</td><td class="n">${ltr('₪'+nf2.format(x.amt))}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td></tr>`).join('')}</tbody></table></div>`).join('')}
+      <p class="hint" style="margin-top:8px">עובדים שקיבלו ברכיב ${esc([...new Set(list.map(x=>x.desc))].join(', '))} (סמל ${ELEC_SYM}) ${ELEC_MIN_H} שעות ותשלום של ${ELEC_MIN_H} × שכר מינימום. כשהרכיב משותף לחג ולבחירות, חודש עם יום חג בתשלום ייכלל גם הוא.</p>
     </section>`; };
   const negBrkPanel = () => { const list = slipNegBreak(ym), byBr = {}; list.forEach(x=>(byBr[slipBranch(x)] ||= []).push(x));
     return `<section class="panel">
@@ -2473,8 +2473,8 @@ function slipXlsx(which){
   };
   const amt = (st, title) => add(title, ["מס' עובד","מס' עובד בשכר",'שם','סניף','רכיב','TimeWatch','שכר','הפרש','פירוט בשכר','הערה'],
     slipAmtDiffs(ym, st).map(x=>[x.e||'', pe(x), name(x), x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), notes(x)]), [10,12,22,14,12,10,10,9,28,30]);
-  sheets.elec = () => add('יום בחירות', ["מס' עובד",'שם','סניף','רכיב','שעות','תשלום','לשעה','שעות רגילות בחודש','הערה'],
-    slipElection(ym).map(x=>[x.e||pe(x)||x.pe, name(x), slipBranch(x), x.desc, x.h, x.amt, x.rate, x.p.u?.['19']||0, [x.rate < MIN_WAGE_H - 0.01 ? 'מתחת לשכר מינימום לשעה' : '', notes(x)].filter(Boolean).join(' · ')]), [10,22,14,16,7,10,8,12,30]);
+  sheets.elec = () => add('יום בחירות תשלום מלא', ["מס' עובד",'שם','סניף','רכיב','שעות','תשלום','שעות רגילות בחודש','הערה'],
+    slipElection(ym).map(x=>[x.e||pe(x)||x.pe, name(x), slipBranch(x), x.desc, x.h, x.amt, x.p.u?.['19']||0, notes(x)]), [10,22,14,16,7,10,12,30]);
   sheets.negbrk = () => add('הפסקה במינוס', ["מס' עובד",'שם','סניף','שעות הפסקה בתלוש','תשלום הפסקה','הפסקות ב-TimeWatch','שעות רגילות','הערה'],
     slipNegBreak(ym).map(x=>[x.e||pe(x)||x.pe, name(x), slipBranch(x), x.units, x.amt, x.t?.brk??'', x.p.u?.['19']||0, notes(x)]), [10,22,14,12,12,12,11,30]);
   sheets.recup = () => add('בלי הבראה', ["מס' עובד",'שם','סניף','ימי עבודה','שעות רגילות','סה"כ תשלומים','הערה'],
