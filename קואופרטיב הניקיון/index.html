@@ -669,7 +669,7 @@ function parseComponents(wb, fileName){
     for(const r of aoa.slice(hi+1)){
       if(normName(r[0]) || normName(r[iType])!=='יחידות') continue;
       const emp = num(r[iEmp]), v = num(r[col]); if(emp==null || !v) continue;
-      const desc = normName(r[iDesc]), b = desc==='שעות עבודה בפועל' ? 'worked' : bucketOf(desc);
+      const desc = normName(r[iDesc]), b = desc==='שעות עבודה בפועל' ? 'worked' : normName(r[iSym])===ELEC_WORK_SYM ? 'ot' : bucketOf(desc);
       if(b!=='worked' && (!DIRECT.includes(b) || !paySyms.has(normName(r[iSym])))) continue;   // רק שעות של רכיב תשלום (לא "תקן שעות" וכד')
       if(b!=='worked') withUnits.add(normName(r[iSym]));
       const sh = shares[emp]; if(!sh) continue;
@@ -678,7 +678,7 @@ function parseComponents(wb, fileName){
     for(const r of aoa.slice(hi+1)){
       if(normName(r[0]) || normName(r[iType])!=='תשלומים') continue;
       const emp = num(r[iEmp]), v = num(r[col]); if(emp==null || !v) continue;
-      const desc = normName(r[iDesc]), sym = normName(r[iSym]), b = bucketOf(desc), prem = premiumOf(desc);
+      const desc = normName(r[iDesc]), sym = normName(r[iSym]), b = sym===ELEC_WORK_SYM ? 'ot' : bucketOf(desc), prem = premiumOf(desc);
       const sy = symbols[sym] ||= {name:desc, bucket:b, total:0, emps:0}; sy.total += v; sy.emps++;
       total += v; emps.add(emp);
       const sh = shares[emp];
@@ -755,21 +755,21 @@ async function parseComponentsEmp(wb, fileName){
     const rows = aoa.slice(hi+1).filter(r=>!normName(r[0]) && num(r[iE])!=null);
     if(!rows.some(r=>num(r[col]))) continue;   // עמודת חודש ריקה
     const cand = monthList().filter(x=>+x.slice(5)===mNum).sort((a,b)=>b.localeCompare(a));
-    const ym = cand[0] || ymOf(new Date().getFullYear(), mNum), paySyms = new Set(rows.filter(r=>normName(r[iT])==='תשלומים').map(r=>normName(r[iS]))), emps = {};
+    const ym = cand[0] || ymOf(new Date().getFullYear(), mNum), paySyms = new Set(rows.filter(r=>normName(r[iT])==='תשלומים').map(r=>normName(r[iS]))), emps = {}, syms = {};
     for(const r of rows){
       const e = String(num(r[iE])), x = emps[e] ||= {n:[normName(r[iF]), normName(r[iL])].filter(Boolean).join(' '), u:{}, p:{}, d:{}, h:{}, c:{}};
       if(!x.k && iId>=0){ const k = await idKey(r[iId]); if(k) x.k = k; }
       if(!x.k2 && e.length>=8){ const k = await idKey(e); if(k && k!==x.k) x.k2 = k; }   // מספר העובד בשכר הוא עצמו ת.ז.
       const v = num(r[col]); if(!v) continue;
       const t = normName(r[iT]), sym = normName(r[iS]), desc = normName(r[iD]);
-      if(t==='תשלומים') x.p[desc] = round2((x.p[desc]||0) + v);
+      if(t==='תשלומים'){ x.p[desc] = round2((x.p[desc]||0) + v); syms[desc] = sym; }
       else if(t==='יחידות' && paySyms.has(sym)) x.u[sym] = round2((x.u[sym]||0) + v);
       else if(t==='נכויי רשות') x.d[desc] = round2((x.d[desc]||0) + v);
       else if(t==='נכויי חובה') x.h[desc] = round2((x.h[desc]||0) + v);
       else if(t==='השתתפות') x.c[desc] = round2((x.c[desc]||0) + v);
     }
     for(const x of Object.values(emps)){ for(const k of ['u','p','d','h','c']) if(!Object.keys(x[k]).length) delete x[k]; }
-    out.push({ym, data:{v:2, file:fileName, uploadedAt:new Date().toISOString(), emps}});
+    out.push({ym, data:{v:2, file:fileName, uploadedAt:new Date().toISOString(), emps, syms}});   // syms: תיאור רכיב → סמל
   }
   return out;
 }
@@ -2060,7 +2060,11 @@ const KH_BASE = ['שעות רגילות','ימי חג/ שעות','חופשה ש�
 // רכיב שעתי (סמל בדוח רכיבי השכר): בשכר מעל שכר המינימום, השכר הקובע לקרן הוא שכר מינימום × השעות
 const MIN_WAGE_H = 39.11, KH_HOURLY = {'שעות רגילות':'19', 'ימי חג/ שעות':'26', 'חופשה שעות':'18', 'מחלה שעות':'21'};
 // נכנסים לבסיס גם: הפרשי שכר רטרו, ותשלום יום בחירות (חלף שכר כמו חופשה, מחלה וחג). עבודה בבחירות (200%) לא נכללת
-const KH_RETRO = /^הפרשי שכר|^(?!.*(%|עבודה)).*בחירות/;
+// עבודה בבחירות: סמל WW בדוח רכיבי השכר (או רכיב "בחירות" עם % / "עבודה"). נכנסת לקופת שעות נוספות ולא לשכר לקרן ולפנסיה
+const ELEC_WORK_SYM = 'WW';
+const paySymOf = d => { for(const k in priv) if(k.startsWith('pslip-pay-') && priv[k]?.syms?.[d]) return priv[k].syms[d]; return null; };
+const isElecWork = d => paySymOf(d)===ELEC_WORK_SYM || /בחירות.*(%|עבודה)|עבודה.*בחירות/.test(d);
+const KH_RETRO = {test: d => /^הפרשי שכר/.test(d) || (/בחירות/.test(d) && !isElecWork(d))};
 const khBaseOf = x => round2(KH_BASE.reduce((a,d)=>{ const v = x.p.p[d]||0, u = KH_HOURLY[d] ? (x.p.u?.[KH_HOURLY[d]]||0) : 0; return a + (u ? Math.min(v, MIN_WAGE_H*u) : v); }, 0)
   + Object.entries(x.p.p).filter(([d])=>KH_RETRO.test(d)).reduce((a,[,v])=>a+v,0));
 function slipKh(ym){
@@ -2087,7 +2091,7 @@ function slipKh(ym){
    הנסיעות (בלי אחזקת רכב); קופת שעות נוספות (7%/7.5%, פיצויים 6%) מרכיבי השעות הנוספות. אותיות הקופות (א/ב/ג) משתנות בין
    עובדים, ולכן כל קופה משויכת לסוג שהסכומים שלה הכי קרובים אליו. "גמל בתשלום" = הפנסיה משולמת בשכר (קטינים, ללא ת.ז. ישראלית). */
 const PEN_ROLES = {main:{n:'פנסיה',r:[0.07,0.075,0.0833]}, travel:{n:'קופת נסיעות',r:[0.05,0.05,0]}, ot:{n:'קופת שעות נוספות',r:[0.07,0.075,0.06]}};
-const PEN_TRV = ['נסיעות חודשי','נסיעות','הוצאות נסיעה'], PEN_OT = /^(ש"נ|ש\.שבת|שבת תוספת|שעות חג 150)|בחירות.*(%|עבודה)|עבודה.*בחירות/,   // עבודה בבחירות (200%) = שעות נוספות; יום בחירות = חלף שכר (KH_RETRO) PEN_FUND = /ק(?:\.|"ג)?\s*גמל\s*([אבג])|ק"ג\s*([אבג])-/;
+const PEN_TRV = ['נסיעות חודשי','נסיעות','הוצאות נסיעה'], PEN_OT = {test: d => /^(ש"נ|ש\.שבת|שבת תוספת|שעות חג 150)/.test(d) || isElecWork(d)}, PEN_FUND = /ק(?:\.|"ג)?\s*גמל\s*([אבג])|ק"ג\s*([אבג])-/;   // עבודה בבחירות (WW) = שעות נוספות; יום בחירות = חלף שכר (KH_RETRO)
 function penFunds(x){
   const F = {};
   for(const [src, m] of [['h', x.p.h||{}], ['c', x.p.c||{}]]) for(const [d,v] of Object.entries(m)){
@@ -2200,7 +2204,7 @@ function slipNegBreak(ym){
 const ELEC_SYM = '26', ELEC_MIN_H = 8;
 function slipElection(ym){
   return slipPairs(ym).filter(x=>x.p).map(x=>{
-    const parts = Object.entries(x.p.p||{}).filter(([d])=>/בחירות/.test(d) && !/%|עבודה/.test(d));
+    const parts = Object.entries(x.p.p||{}).filter(([d])=>/בחירות/.test(d) && !isElecWork(d));
     const amt = round2(parts.reduce((a,[,v])=>a+v,0)), h = round2(x.p.u?.[ELEC_SYM]||0);
     return {...x, amt, h, rate: h ? round2(amt/h) : 0, desc: parts.map(([d])=>d).join(', ')};
   }).filter(x=>x.h >= ELEC_MIN_H && Math.abs(x.amt - round2(ELEC_MIN_H*MIN_WAGE_H)) <= 0.1).sort((a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || (+a.e||0)-(+b.e||0));
@@ -2208,7 +2212,7 @@ function slipElection(ym){
 // זכאים ליום בחירות שלא קיבלו תשלום: תחילת עבודה לפני ה-13 בחודש, בלי פדיון חופשה לעוזב, עובד ישראלי, לא בשכר גלובלי
 // (לא מסומן ידנית כ"ללא ת.ז. ישראלית" ולא מקבל קרן השתלמות בתשלום לשכר, אלא אם הוא קטין לפי הגיל)
 const ELEC_CUT = 13;
-const elecPaidAny = x => Object.entries(x.p?.p||{}).some(([d,v])=>v && /בחירות/.test(d));
+const elecPaidAny = x => Object.entries(x.p?.p||{}).some(([d,v])=>v && (/בחירות/.test(d) || isElecWork(d)));
 const slipForeign = (x, ym) => slipAge(x, ym)!=='minor' && (!!(priv['pslip-settings']?.khSal||{})[x.e||x.pe] || (x.p?.p?.['קרן השתלמות בתשלום']||0) > 0);
 function slipElectionMissing(ym){
   const pairs = slipPairs(ym); if(!pairs.some(elecPaidAny)) return null;   // חודש בלי יום בחירות
@@ -2218,7 +2222,7 @@ function slipElectionMissing(ym){
     const sd = wageRec(x)?.sd;
     if(!sd){ out.noDate.push(x); continue; }
     if(sd >= cut) continue;
-    if((x.p.p['ש.שבת/חג 200%']||0) > 0 || Object.keys(x.p.p).some(d=>/בחירות/.test(d) && /%|עבודה/.test(d))) out.worked.push({...x, sd}); else out.miss.push({...x, sd});
+    if((x.p.p['ש.שבת/חג 200%']||0) > 0 || Object.keys(x.p.p).some(isElecWork)) out.worked.push({...x, sd}); else out.miss.push({...x, sd});
   }
   const ord = (a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || (+a.e||0)-(+b.e||0);
   Object.values(out).forEach(l=>l.sort(ord));
