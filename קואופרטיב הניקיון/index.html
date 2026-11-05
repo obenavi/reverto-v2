@@ -2232,13 +2232,21 @@ function slipLeavePay(ym){
     const reg = x.p.p['שעות רגילות']||0, ru = x.p.u?.['19']||0, rate = ru ? round2(reg/ru) : (wageRec(x)?.r||0);
     for(const [k,,d,sym] of LEAVE_KINDS){
       const amt = x.p.p[d]||0, h = x.p.u?.[sym]||0; if(!amt || !h) continue;
-      out[k].push({...x, amt:round2(amt), h:round2(h), rate, hr:round2(amt/h), pct: rate ? amt/(h*rate) : NaN});
+      const r = {...x, amt:round2(amt), h:round2(h), rate, hr:round2(amt/h), pct: rate ? amt/(h*rate) : NaN};
+      if(k==='sick'){   // יום ראשון ללא תשלום, ימים 2–3 ב-50%, מהיום הרביעי 100%: לפי ימי מחלה בתשלום חלקי ומלא ב-TimeWatch
+        // יום עבודה = שעות הבסיס ÷ ימי העבודה ב-TimeWatch. הצפוי = יום עבודה × תעריף × (50% × ימים חלקיים + ימים מלאים); יום ראשון לא נספר
+        const P = x.t?.sickP||0, F = x.t?.sickF||0, dayH = x.t?.days ? (x.t.base || ru)/x.t.days : 0;
+        Object.assign(r, {P, F, dayH:round2(dayH), days: dayH ? round2(h/dayH) : null});
+        if(rate && dayH && (P+F > 0 || x.t)){ r.xp = round2(dayH*rate*(0.5*P + F)); r.d = round2(amt - r.xp); }
+      }
+      out[k].push(r);
     }
   }
   for(const l of Object.values(out)) l.sort((a,b)=>(b.pct||0)-(a.pct||0));
   return out;
 }
 const leaveFull = x => x.pct >= 0.995;
+const sickOff = x => x.xp == null || Math.abs(x.d) > KH_TOL;   // אין נתונים ב-TimeWatch לחישוב, או סכום שלא תואם ל-0%/50%/100%
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2330,7 +2338,11 @@ function renderSlip(v){
     return `<section class="panel">
       <div class="panel-head"><h2>חופשה ומחלה בתשלום מלא</h2><span class="small muted">${monthName(ym)} · תשלום לשעה ביחס לתעריף השעה של העובד</span><button class="btn sm" type="button" data-slipx="leave">ייצוא לאקסל</button></div>
       ${part('vac','חופשה')}${part('sick','מחלה')}
-      <p class="hint" style="margin-top:8px">תעריף שעה = התשלום על שעות רגילות ÷ מספר השעות הרגילות בתלוש (בלי שעות רגילות: התעריף בקובץ השכר השעתי). שיעור = תשלום לשעה ÷ תעריף שעה; 100% ומעלה מסומן. במחלה לפי החוק: יום ראשון ללא תשלום, ימים 2–3 ב-50%, מהיום הרביעי 100%.</p>
+      ${(()=>{ const xs = k.sick.filter(sickOff); return `<h3 style="margin:14px 0 6px">מחלה: יום ראשון ללא תשלום, 50% בימים 2–3 ו-100% מהיום הרביעי (${xs.length} לא תואמים מתוך ${k.sick.length})</h3>
+        ${xs.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th class="n">שעות מחלה</th><th class="n">ימים ששולמו בשכר</th><th class="n">תעריף שעה</th><th class="n">ימים ב-50%</th><th class="n">ימים ב-100%</th><th class="n">צפוי</th><th class="n">שולם</th><th class="n">הפרש</th></tr></thead><tbody>
+          ${xs.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(slipBranch(x))}</td><td class="n">${ltr(nf2.format(x.h))}</td><td class="n">${x.days!=null?ltr(nf2.format(x.days)):'—'}</td><td class="n">${x.rate?ltr('₪'+nf2.format(x.rate)):'—'}</td><td class="n">${ltr(nf2.format(x.P))}</td><td class="n">${ltr(nf2.format(x.F))}</td>
+            <td class="n">${x.xp!=null?money(x.xp):'—'}</td><td class="n">${money(x.amt)}</td><td class="n">${x.xp!=null?`<span class="pill ${x.d<0?'bad':'warn'}">${ltr((x.d>0?'+':'−')+money(Math.abs(x.d)).replace('-',''))}</span>`:'<span class="pill warn">אין נתונים ב-TimeWatch</span>'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל תשלומי המחלה תואמים ל-50% / 100% לפי TimeWatch.</p>'}`; })()}
+      <p class="hint" style="margin-top:8px">תעריף שעה = התשלום על שעות רגילות ÷ מספר השעות הרגילות בתלוש (בלי שעות רגילות: התעריף בקובץ השכר השעתי). שיעור = תשלום לשעה ÷ תעריף שעה; 100% ומעלה מסומן. במחלה לפי החוק: יום ראשון ללא תשלום, ימים 2–3 ב-50%, מהיום הרביעי 100%. הצפוי = יום עבודה (שעות הבסיס ÷ ימי העבודה ב-TimeWatch) × תעריף שעה × (50% על כל יום "מחלה בתשלום חלקי" ו-100% על כל יום "מחלה בתשלום מלא" ב-TimeWatch). היום הראשון של המחלה לא נספר, ולכן תשלום עליו יופיע כהפרש לחובת העובד (+). "ימים ששולמו בשכר" = שעות המחלה בתלוש ÷ יום עבודה. הפרש של עד ${money(KH_TOL)} לא מסומן.</p>
     </section>`; };
   const negBrkPanel = () => { const list = slipNegBreak(ym), byBr = {}; list.forEach(x=>(byBr[slipBranch(x)] ||= []).push(x));
     return `<section class="panel">
@@ -2537,7 +2549,7 @@ function slipXlsx(which){
     const head = ["מס' עובד",'שם','סניף','שעות','תשלום','לשעה','תעריף שעה','שיעור %','תשלום מלא','הערה'];
     const row = x => [x.e||pe(x)||x.pe, name(x), slipBranch(x), x.h, x.amt, x.hr, x.rate, isNaN(x.pct)?'':round2(x.pct*100), leaveFull(x)?'כן':'', notes(x)], cols = [10,22,14,8,10,9,10,9,10,30];
     add('חופשה', head, k.vac.map(row), cols);
-    add('מחלה', [...head, 'TimeWatch חלקי', 'TimeWatch מלא'], k.sick.map(x=>[...row(x), x.t?.sickP||0, x.t?.sickF||0]), [...cols, 12, 12]); };
+    add('מחלה', [...head, 'TimeWatch חלקי', 'TimeWatch מלא', 'צפוי 50%/100%', 'הפרש'], k.sick.map(x=>[...row(x), x.P||0, x.F||0, x.xp??'', x.d??(x.xp==null?'אין נתונים ב-TimeWatch':'')]), [...cols, 12, 12, 12, 10]); };
   sheets.elecmiss = () => { const k = slipElectionMissing(ym) || {miss:[], worked:[], noDate:[]}, dt = x => x.sd ? x.sd.split('-').reverse().join('/') : '';
     const head = ["מס' עובד",'שם','סניף','תחילת עבודה','שעות רגילות בחודש','ימי עבודה','הערה'], row = x => [x.e||pe(x)||x.pe, name(x), slipBranch(x), dt(x), x.p.u?.['19']||0, x.t?.days||0, notes(x)], cols = [10,22,14,12,12,10,30];
     add('לא קיבלו יום בחירות', head, k.miss.map(row), cols); add('עם 200% בלי יום בחירות', head, k.worked.map(row), cols); add('בלי תאריך תחילה', head, k.noDate.map(row), cols); };
