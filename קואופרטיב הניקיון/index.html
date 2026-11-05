@@ -2230,8 +2230,8 @@ function slipElectionMissing(ym){
 }
 // חופשה ומחלה: שיעור התשלום לשעה ביחס לתעריף השעה של העובד (שעות רגילות ÷ יחידות, או התעריף בקובץ השכר השעתי). 100% = תשלום מלא
 // חלקיות משרה למחלה: ממוצע שלושת החודשים שקדמו לחודש השכר. שעות חלף שכר ועבודה (רגילות, חופשה, מחלה, חג) ÷ 182 שעות משרה מלאה.
-// יום מחלה = חלקיות × 8.4 שעות (182 שעות בחודש, 5 ימים בשבוע)
-const FULL_MONTH_H = 182, FULL_DAY_H = 8.4, JOB_SYMS = ['19','18','21','26'];
+// יום מחלה = חלקיות × 8 שעות (יום של 8.4 שעות בלי חצי שעת הפסקה, שלא רלוונטית ביום מחלה)
+const FULL_MONTH_H = 182, FULL_DAY_H = 8, JOB_SYMS = ['19','18','21','26'];
 const ymAdd = (ym, n) => { const d = new Date(+ym.slice(0,4), +ym.slice(5)-1+n, 1); return ymOf(d.getFullYear(), d.getMonth()+1); };
 function jobFraction(x, ym){
   const ids = [x.pe, x.e].filter(Boolean), ms = [];
