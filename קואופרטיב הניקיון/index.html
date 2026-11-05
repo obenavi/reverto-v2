@@ -2205,6 +2205,25 @@ function slipElection(ym){
     return {...x, amt, h, rate: h ? round2(amt/h) : 0, desc: parts.map(([d])=>d).join(', ')};
   }).filter(x=>x.h >= ELEC_MIN_H && Math.abs(x.amt - round2(ELEC_MIN_H*MIN_WAGE_H)) <= 0.1).sort((a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || (+a.e||0)-(+b.e||0));
 }
+// זכאים ליום בחירות שלא קיבלו תשלום: תחילת עבודה לפני ה-13 בחודש, בלי פדיון חופשה לעוזב, עובד ישראלי, לא בשכר גלובלי
+// (לא מסומן ידנית כ"ללא ת.ז. ישראלית" ולא מקבל קרן השתלמות בתשלום לשכר, אלא אם הוא קטין לפי הגיל)
+const ELEC_CUT = 13;
+const elecPaidAny = x => Object.entries(x.p?.p||{}).some(([d,v])=>v && /בחירות/.test(d));
+const slipForeign = (x, ym) => slipAge(x, ym)!=='minor' && (!!(priv['pslip-settings']?.khSal||{})[x.e||x.pe] || (x.p?.p?.['קרן השתלמות בתשלום']||0) > 0);
+function slipElectionMissing(ym){
+  const pairs = slipPairs(ym); if(!pairs.some(elecPaidAny)) return null;   // חודש בלי יום בחירות
+  const cut = `${ym}-${String(ELEC_CUT).padStart(2,'0')}`, out = {miss:[], noDate:[], worked:[]};
+  for(const x of pairs.filter(x=>slipPaid(x)>0 && !elecPaidAny(x))){
+    if(Object.keys(x.p.p).some(d=>/פדיון חופשה לעוזב/.test(d)) || slipForeign(x, ym) || slipGlobal(x)) continue;   // בשכר גלובלי יום הבחירות כלול במשכורת
+    const sd = wageRec(x)?.sd;
+    if(!sd){ out.noDate.push(x); continue; }
+    if(sd >= cut) continue;
+    if((x.p.p['ש.שבת/חג 200%']||0) > 0 || Object.keys(x.p.p).some(d=>/בחירות/.test(d) && /%|עבודה/.test(d))) out.worked.push({...x, sd}); else out.miss.push({...x, sd});
+  }
+  const ord = (a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || (+a.e||0)-(+b.e||0);
+  Object.values(out).forEach(l=>l.sort(ord));
+  return out;
+}
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2265,6 +2284,17 @@ function renderSlip(v){
       ${cap.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th class="n">ימי עבודה</th><th class="n">נסיעות</th><th class="n">מעל ${money(TRV_CAP)}</th><th class="n">אחזקת רכב</th></tr></thead><tbody>
         ${cap.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td class="n">${x.t?.days?ltr(nf0.format(x.t.days)):'—'}</td><td class="n">${money(x.trv)}</td><td class="n"><span class="pill warn">${money(x.trv-TRV_CAP)}</span></td><td class="n">${x.car?money(x.car):'—'}</td></tr>`).join('')}</tbody></table></div>`:`<p class="muted">אין בירושלים עובדים עם החזר נסיעות מעל ${money(TRV_CAP)}.</p>`}`; })()}
       <p class="hint" style="margin-top:8px">אחזקת רכב נחשבת רכיב נסיעות. בבדיקת ירושלים נספרים נסיעות חודשי, נסיעות והוצאות נסיעה, בלי אחזקת רכב. סימון "יש הסעה" נשמר לעובד גם לחודשים הבאים, באזור הפרטי שלך. הסניף לפי TimeWatch.</p>
+    </section>`; };
+  const elecMissPanel = () => { const k = slipElectionMissing(ym); if(!k) return '';
+    const dt = x => x.sd ? ltr(x.sd.split('-').reverse().join('/')) : '—';
+    const tbl = xs => `<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>תחילת עבודה</th><th class="n">שעות רגילות בחודש</th><th class="n">ימי עבודה</th></tr></thead><tbody>
+      ${xs.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(slipBranch(x))}</td><td>${dt(x)}</td><td class="n">${x.p.u?.['19']?ltr(nf2.format(x.p.u['19'])):'—'}</td><td class="n">${x.t?.days?ltr(nf0.format(x.t.days)):'—'}</td></tr>`).join('')}</tbody></table></div>`;
+    return `<section class="panel">
+      <div class="panel-head"><h2>זכאים ליום בחירות שלא קיבלו תשלום</h2><span class="small muted">${monthName(ym)} · ${k.miss.length} עובדים</span><button class="btn sm" type="button" data-slipx="elecmiss">ייצוא לאקסל</button></div>
+      ${k.miss.length?tbl(k.miss):'<p class="muted">כל הזכאים קיבלו תשלום על יום הבחירות.</p>'}
+      ${k.worked.length?`<details style="margin-top:10px"><summary class="small">${k.worked.length} עובדים בלי יום בחירות אבל עם שעות 200% (כנראה עבדו ביום הבחירות)</summary><div style="margin-top:6px">${tbl(k.worked)}</div></details>`:''}
+      ${k.noDate.length?`<details style="margin-top:10px"><summary class="small">${k.noDate.length} עובדים בלי תאריך תחילת עבודה בקובץ השכר השעתי, לא נבדקו</summary><div style="margin-top:6px">${tbl(k.noDate)}</div></details>`:''}
+      <p class="hint" style="margin-top:8px">זכאי = קיבל תלוש החודש, התחיל לעבוד לפני ${ELEC_CUT} ב${MONTHS[+ym.slice(5)-1]} (לפי קובץ השכר השעתי), אין לו פדיון חופשה לעוזב, והוא עובד ישראלי (לא מסומן "ללא ת.ז. ישראלית" ולא מקבל קרן השתלמות בתשלום לשכר, חוץ מקטינים), ולא בשכר גלובלי (שם יום הבחירות כלול במשכורת). "לא קיבל" = אין בתלוש אף רכיב עם המילה "בחירות".</p>
     </section>`; };
   const elecPanel = () => { const list = slipElection(ym); if(!list.length) return '';
     const byBr = {}; list.forEach(x=>(byBr[slipBranch(x)] ||= []).push(x));
@@ -2443,6 +2473,7 @@ function renderSlip(v){
     ${recupPanel()}
     ${negBrkPanel()}
     ${elecPanel()}
+    ${elecMissPanel()}
     ${minorPanel()}
     ${khPanel()}
     ${penPanel()}
@@ -2473,6 +2504,9 @@ function slipXlsx(which){
   };
   const amt = (st, title) => add(title, ["מס' עובד","מס' עובד בשכר",'שם','סניף','רכיב','TimeWatch','שכר','הפרש','פירוט בשכר','הערה'],
     slipAmtDiffs(ym, st).map(x=>[x.e||'', pe(x), name(x), x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), notes(x)]), [10,12,22,14,12,10,10,9,28,30]);
+  sheets.elecmiss = () => { const k = slipElectionMissing(ym) || {miss:[], worked:[], noDate:[]}, dt = x => x.sd ? x.sd.split('-').reverse().join('/') : '';
+    const head = ["מס' עובד",'שם','סניף','תחילת עבודה','שעות רגילות בחודש','ימי עבודה','הערה'], row = x => [x.e||pe(x)||x.pe, name(x), slipBranch(x), dt(x), x.p.u?.['19']||0, x.t?.days||0, notes(x)], cols = [10,22,14,12,12,10,30];
+    add('לא קיבלו יום בחירות', head, k.miss.map(row), cols); add('עם 200% בלי יום בחירות', head, k.worked.map(row), cols); add('בלי תאריך תחילה', head, k.noDate.map(row), cols); };
   sheets.elec = () => add('יום בחירות תשלום מלא', ["מס' עובד",'שם','סניף','רכיב','שעות','תשלום','שעות רגילות בחודש','הערה'],
     slipElection(ym).map(x=>[x.e||pe(x)||x.pe, name(x), slipBranch(x), x.desc, x.h, x.amt, x.p.u?.['19']||0, notes(x)]), [10,22,14,16,7,10,12,30]);
   sheets.negbrk = () => add('הפסקה במינוס', ["מס' עובד",'שם','סניף','שעות הפסקה בתלוש','תשלום הפסקה','הפסקות ב-TimeWatch','שעות רגילות','הערה'],
@@ -2511,7 +2545,7 @@ function slipXlsx(which){
     add('כל העובדים', ['סניף', ...head], list.map(x=>[slipBranch(x), ...row(x)]), [14, ...cols]);
     Object.entries(byBr).forEach(([br, xs])=>add(br.replace(/[\\/?*\[\]:]/g,' ').slice(0,31), head, xs.map(row), cols)); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', minor:'קטינים', tax:'חבות במס הכנסה', negbrk:'הפסקה במינוס', elec:'יום בחירות', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', minor:'קטינים', tax:'חבות במס הכנסה', negbrk:'הפסקה במינוס', elec:'יום בחירות', elecmiss:'לא קיבלו יום בחירות', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
