@@ -429,6 +429,7 @@ function detectType(wb){
     if(flat.some(c=>c.includes('לפני מע"מ')) && flat.includes('לקוח')) return 'revenue';
     if(flat.includes('מספר עובד') && flat.includes('תעריף שעה')) return 'wages';
     if(flat.includes('מספר עובד') && flat.includes('יתרת חופשה לסוף חודש')) return 'absbal';
+    if(flat.includes('מספר עובד') && flat.includes('חשבון בנק') && flat.includes('נטו לבנק')) return 'bank';
     if(flat.includes('לקוח') && (flat.includes('עלות חשבונית') || flat.includes('חיוב ללקוח') || flat.includes('סכום')) && (flat.includes('חודש') || flat.some(c=>c.startsWith('תאריך')))) return 'materials';
     if(flat.some(c=>c==='עלות מעביד'||c==='עלות עובד')) return 'payroll';
     if(flat.includes('סה"כ שעות') && flat.includes('משימה')) return 'hours';
@@ -728,6 +729,30 @@ async function parseTwPay(wb, fileName){
 }
 // יתרות חופשה ומחלה (בימים) לפי עובד וחודש: [פתיחה, זיכוי, ניצול, סוף חודש] לחופשה ואז למחלה. מספר עובד ארוך (ת.ז.) נשמר כקוד מוצפן
 const ABS_COLS = ['יתרת חופשה','זיכוי חופש','ניצול חופש','יתרת חופשה לסוף חודש','יתרת מחלה','זיכוי מחלה','ניצול מחלה','יתרת מחלה לסוף חודש'];
+// חשבונות בנק (דוח "נטו לבנק ומס"ב" + גיליון שקים/קופה): לכל עובד נשמרים רק קוד מוצפן של הבנק+סניף+חשבון, שם הבנק,
+// הסניף ו-3 הספרות האחרונות של החשבון. מספר החשבון המלא לא נשמר. עובד בלי חשבון = תשלום בשיק / קופה
+async function bankHash(s){
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('coop-bank|'+s));
+  return [...new Uint8Array(b)].slice(0,8).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function parseBank(wb, fileName){
+  const emps = {}; let ym = null;
+  for(const [sheet, aoa] of Object.entries(wb.sheets)){
+    const hi = findHeader(aoa, r=>r.includes('מספר עובד') && r.includes('חשבון בנק')); if(hi<0) continue;
+    const H = aoa[hi].map(normName), c = n => H.indexOf(n);
+    const iE=c('מספר עובד'), iB=c('בנק'), iBr=c('סניף בנק'), iA=c('חשבון בנק'), iD=c('תאריך'), iL=c('שם משפחה'), iF=c('שם פרטי'), iDep=c('מחלקה'), iN=c('נטו לבנק');
+    for(const r of aoa.slice(hi+1)){
+      const e0 = num(r[iE]); if(e0==null || (iD!==0 && normName(r[0]))) continue;   // שורות סיכום (טקסט בעמודה הראשונה)
+      ym ||= iD>=0 ? dateYm(r[iD]) : null;
+      const id = String(e0), key = id.length>=8 ? await idKey(id) : id;
+      const bank = normName(r[iB]), br = String(num(r[iBr]) ?? normName(r[iBr])), acct = String(r[iA]??'').replace(/\D/g,'');
+      emps[key] = {n:[normName(r[iF]), normName(r[iL])].filter(Boolean).join(' '), d:normName(r[iDep]), bank, br: acct ? br : '', a3: acct ? acct.slice(-3) : '',
+        h: acct ? await bankHash(`${bank.replace(/\D.*$/,'')}|${br}|${acct}`) : 'no-account|'+bank, net: num(r[iN])||0, sheet};
+    }
+  }
+  if(!Object.keys(emps).length) throw new Error('לא נמצאו עובדים בקובץ');
+  return {ym, data:{file:fileName, uploadedAt:new Date().toISOString(), emps}};
+}
 async function parseAbsBal(wb, fileName){
   const aoa = Object.values(wb.sheets).find(a=>findHeader(a, r=>r.includes('מספר עובד') && r.includes('יתרת חופשה לסוף חודש'))>=0);
   const hi = findHeader(aoa, r=>r.includes('מספר עובד') && r.includes('יתרת חופשה לסוף חודש')), H = aoa[hi].map(normName);
@@ -2282,7 +2307,28 @@ function slipLeaveDays(ym){
   return out.sort((a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || (Math.abs(b.dv)+Math.abs(b.ds))-(Math.abs(a.dv)+Math.abs(a.ds)));
 }
 const sickOff = x => x.xp == null || Math.abs(x.d) > KH_TOL;   // אין נתונים ב-TimeWatch לחישוב, או סכום שלא תואם ל-0%/50%/100%
-function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
+// שינוי בחשבון הבנק מול החודש הקודם (רק עובדים שהיו בקובץ החודש הקודם)
+function slipBankChanges(ym){
+  const cur = priv['pslip-bank-'+ym], prev = priv['pslip-bank-'+ymAdd(ym,-1)];
+  if(!cur || !prev) return null;
+  const out = [];
+  for(const [k, x] of Object.entries(cur.emps)) { const p = prev.emps[k]; if(p && p.h !== x.h) out.push({k, cur:x, prev:p}); }
+  return {list: out.sort((a,b)=>(a.cur.d||'').localeCompare(b.cur.d||'','he') || (+a.k||0)-(+b.k||0)), prevYm: ymAdd(ym,-1), both: Object.keys(cur.emps).filter(k=>prev.emps[k]).length};
+}
+const bankDesc = b => b.a3 ? `${b.bank} · סניף ${b.br} · ***${b.a3}` : (b.bank ? `${b.bank} (בלי חשבון)` : 'שיק / בלי חשבון');
+function bankPanel(ym){
+  if(!ym || !priv['pslip-bank-'+ym]) return '';
+  const k = slipBankChanges(ym), numK = k => k.length>=12 ? 'מספר ארוך' : esc(k);
+  return `<section class="panel">
+    <div class="panel-head"><h2>שינויים בחשבון הבנק</h2><span class="small muted">${monthName(ym)} מול ${monthName(ymAdd(ym,-1))}${k?` · ${k.list.length} עובדים מתוך ${k.both}`:''}</span>${k?'<button class="btn sm" type="button" data-slipx="bank">ייצוא לאקסל</button>':''}</div>
+    ${!k?`<p class="muted">כדי להשוות יש להעלות גם את קובץ חשבונות הבנק של ${monthName(ymAdd(ym,-1))}.</p>`
+      :k.list.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>מחלקה</th><th>${esc(monthName(k.prevYm))}</th><th>${esc(monthName(ym))}</th><th class="n">נטו לבנק</th></tr></thead><tbody>
+        ${k.list.map(x=>`<tr><td class="first">${numK(x.k)}</td><td>${esc(x.cur.n)}</td><td>${esc(x.cur.d)}</td><td class="small">${esc(bankDesc(x.prev))}</td><td class="small"><span class="pill warn">${esc(bankDesc(x.cur))}</span></td><td class="n">${money(x.cur.net)}</td></tr>`).join('')}</tbody></table></div>`
+      :'<p class="muted">לא נמצאו שינויים בחשבונות הבנק של עובדים שהיו בחודש הקודם.</p>'}
+    <p class="hint" style="margin-top:8px">שינוי = בנק, סניף או מספר חשבון שונים מהחודש הקודם, כולל מעבר בין העברה בנקאית לשיק. עובדים חדשים שלא היו בקובץ החודש הקודם לא נבדקים. מספר החשבון המלא לא נשמר: רק 3 הספרות האחרונות וקוד מוצפן להשוואה.</p>
+  </section>`;
+}
+function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay|bank)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
   const pairs = [], usedP = new Set(), byK = {};
@@ -2319,7 +2365,7 @@ function renderSlip(v){
       ${ym?`<span class="small">${twd?`TimeWatch: <b>${esc(twd.file)}</b>`:'<span class="pill warn">חסר קובץ העברת נתוני שכר מ-TimeWatch</span>'} · ${pd?`רכיבי שכר: <b>${esc(pd.file)}</b>`:'<span class="pill warn">חסר דוח רכיבי שכר</span>'}</span>`:''}</div>
     <p class="hint" style="margin-top:8px">מעלים את שני הקבצים של החודש (אפשר גם יחד): "דוחות למייצג" (העברת נתוני שכר) מ-TimeWatch, ודוח רכיבי השכר. דוח רכיבי שכר שהועלה בלשונית "קליטת נתונים" נקלט גם כאן.</p>
   </section>`;
-  if(!ym || !twd || !pd){ v.innerHTML = `<div class="stack">${head}</div>`; return; }
+  if(!ym || !twd || !pd){ v.innerHTML = `<div class="stack">${head}${bankPanel(ym)}</div>`; return; }
   const all = slipUnitDiffs(ym), shown = all;
   const pairs = slipPairs(ym), hasH = x => SLIP_UNITS.some(([k,,sym])=>(x.t?.[k]||0) || (x.p?.u?.[sym]||0));
   const {noSlip, noTwData} = slipOneSided(ym), viaId = pairs.filter(x=>x.viaId);
@@ -2555,6 +2601,7 @@ function renderSlip(v){
     ${leavePanel()}
     ${elecPanel()}
     ${elecMissPanel()}
+    ${bankPanel(ym)}
     ${minorPanel()}
     ${khPanel()}
     ${penPanel()}
@@ -2585,6 +2632,8 @@ function slipXlsx(which){
   };
   const amt = (st, title) => add(title, ["מס' עובד","מס' עובד בשכר",'שם','סניף','רכיב','TimeWatch','שכר','הפרש','פירוט בשכר','הערה'],
     slipAmtDiffs(ym, st).map(x=>[x.e||'', pe(x), name(x), x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), notes(x)]), [10,12,22,14,12,10,10,9,28,30]);
+  sheets.bank = () => { const k = slipBankChanges(ym) || {list:[], prevYm:ymAdd(ym,-1)}, d = b => bankDesc(b);
+    add('שינוי חשבון בנק', ["מס' עובד",'שם','מחלקה',monthName(k.prevYm),monthName(ym),'נטו לבנק'], k.list.map(x=>[x.k.length>=12?'מספר ארוך':x.k, x.cur.n, x.cur.d, d(x.prev), d(x.cur), x.cur.net]), [10,22,14,36,36,11]); };
   sheets.leave = () => { const k = slipLeavePay(ym);
     const head = ["מס' עובד",'שם','סניף','שעות','תשלום','לשעה','תעריף שעה','שיעור %','תשלום מלא','הערה'];
     const row = x => [x.e||pe(x)||x.pe, name(x), slipBranch(x), x.h, x.amt, x.hr, x.rate, isNaN(x.pct)?'':round2(x.pct*100), leaveFull(x)?'כן':'', notes(x)], cols = [10,22,14,8,10,9,10,9,10,30];
@@ -2633,7 +2682,7 @@ function slipXlsx(which){
     add('כל העובדים', ['סניף', ...head], list.map(x=>[slipBranch(x), ...row(x)]), [14, ...cols]);
     Object.entries(byBr).forEach(([br, xs])=>add(br.replace(/[\\/?*\[\]:]/g,' ').slice(0,31), head, xs.map(row), cols)); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', minor:'קטינים', tax:'חבות במס הכנסה', negbrk:'הפסקה במינוס', elec:'יום בחירות', elecmiss:'לא קיבלו יום בחירות', leave:'חופשה ומחלה', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', minor:'קטינים', tax:'חבות במס הכנסה', negbrk:'הפסקה במינוס', elec:'יום בחירות', elecmiss:'לא קיבלו יום בחירות', leave:'חופשה ומחלה', bank:'שינוי חשבון בנק', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
@@ -3127,7 +3176,7 @@ async function handleFiles(files){
       if(!type){ toast(`לא זוהה סוג הדוח בקובץ ${f.name}`); continue; } items.push({f, wb, type}); }
     catch(err){ console.error(err); toast(`לא הצלחנו לפתוח את ${f.name}${err?.name==='NotReadableError'?': הקובץ פתוח בתוכנה אחרת. יש לסגור אותו באקסל ולהעלות שוב':err?.message?` (${err.message})`:''}`); }
   }
-  const order = {absbal:-5, materials:-4, wages:-3, plan:-2, rates:-1, revenue:0, hours:1, payroll:2, components:3, twpay:4};
+  const order = {bank:-6, absbal:-5, materials:-4, wages:-3, plan:-2, rates:-1, revenue:0, hours:1, payroll:2, components:3, twpay:4};
   items.sort((a,b)=>order[a.type]-order[b.type]);
   for(const {f, wb, type} of items){
     try{
@@ -3144,6 +3193,12 @@ async function handleFiles(files){
         if(!store.hasPrivate){ toast('אין אזור פרטי בתצוגה הזו, ולכן קובץ השכר לא נשמר'); continue; }
         const w = parseWages(wb, f.name); await store.savePrivate('wages', w);
         const n = Object.values(w.emps); toast(`נקלט שכר שעתי ל-${n.length} עובדים (${n.filter(x=>x.r>0).length} עם תעריף). נשמר באזור הפרטי שלך בלבד`); continue;
+      }
+      if(type==='bank'){
+        if(!store.hasPrivate){ toast('אין אזור פרטי בתצוגה הזו, ולכן קובץ חשבונות הבנק לא נשמר'); continue; }
+        const {ym, data} = await parseBank(wb, f.name); if(!ym){ toast(`לא זוהה החודש בקובץ ${f.name}`); continue; }
+        await store.savePrivate('pslip-bank-'+ym, data); ui.slipYm = ym;
+        toast(`נקלטו חשבונות בנק ל${monthName(ym)}: ${Object.keys(data.emps).length} עובדים. נשמרו רק 3 ספרות אחרונות וקוד מוצפן, באזור הפרטי שלך`); continue;
       }
       if(type==='absbal'){
         if(!store.hasPrivate){ toast('אין אזור פרטי בתצוגה הזו, ולכן קובץ היתרות לא נשמר'); continue; }
