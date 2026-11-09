@@ -1672,18 +1672,6 @@ function ceoReport(ctx){
       ${ytd.map(m=>{ const t = C(m).tot; return `<tr${m===ym?' style="font-weight:600"':''}><td class="first">${MONTHS[+m.slice(5)-1]}</td><td class="n">${money(t.gp)}</td><td class="n">${money(t.overhead)}</td><td class="n">${money(t.ga||0)}</td><td class="n">${money(t.op)}</td><td class="n">${marginPill(t.opMargin, t.rev)}</td></tr>`; }).join('')}
       <tr class="total"><td class="first">מצטבר</td><td class="n">${money(Yt.tot.gp)}</td><td class="n">${money(Yt.tot.overhead)}</td><td class="n">${money(Yt.tot.ga||0)}</td><td class="n">${money(Yt.tot.op)}</td><td class="n">${pct(Yt.tot.opMargin)}</td></tr>
     </tbody></table></div></div>`));
-  const orgIns = [];
-  const loss = R.groups.filter(g=>g.rev>0 && g.gp<0).sort((a,b)=>a.gp-b.gp);
-  orgIns.push({level: T.opMargin>=0.08?'good':T.opMargin>=0?'warn':'bad', title:`אחרי הנהלה וכלליות: ${money(T.op)} (${pct(T.opMargin)})`,
-    text:`רווח גולמי ${money(T.gp)} פחות שכר הנהלה ${money(T.overhead)} ופחות הנהלה וכלליות ${money(T.ga||0)}.${P?` ב${pS}: ${money(P.tot.op)} (${pct(P.tot.opMargin)}).`:''}`});
-  if(loss.length) orgIns.push({level:'bad', title:`${loss.length} לקוחות בהפסד בארגון, בסך ${money(-loss.reduce((a,g)=>a+g.gp,0))}`,
-    text: loss.slice(0,5).map(g=>`<b>${esc(g.name)}</b> (${esc(g.branch)}, ${money(g.gp)})`).join(' · ') + '.'});
-  const unS = Object.values(R.unSites), unC = Object.values(R.unClients);
-  if(unS.length || unC.length) orgIns.push({level:'info', title:`${unS.length+unC.length} פריטים לא משויכים ללקוח`,
-    text:`${unC.length?`הכנסות ${money(unC.reduce((a,c)=>a+c.rev,0))}`:''}${unC.length&&unS.length?' · ':''}${unS.length?`${hrs(unS.reduce((a,s)=>a+s.h,0))} שעות`:''}. נכללים בסה״כ הארגון אבל לא ברווחיות הלקוחות.`});
-  pages.push(rPage('תובנות מרכזיות לפי סניף', who, ym, `
-    <div class="brblock"><h3>כל הארגון</h3>${insightHtml(orgIns)}</div>
-    ${brs.map(b=>`<div class="brblock"><h3><span class="legend" style="margin:0;display:inline"><i style="background:${brColor(b)}"></i></span>${esc(b)}</h3>${insightHtml(topInsights(branchInsights(ctx, b), 3))}</div>`).join('')}`));
   // לפי שיעור הרווח הגולמי; לקוחות קטנים (הכנסה חודשית מתחת לסף) לא נכללים, כי אצלם שיעור קיצוני הוא רעש
   const Y = Yt, all = R.groups.filter(g=>g.rev>=RANK_MIN_REV && g.h>0 && isFinite(g.margin));
   const yg = Object.fromEntries(Y.groups.map(g=>[g.id,g])), pg = prev ? Object.fromEntries(P.groups.map(g=>[g.id,g])) : {};
