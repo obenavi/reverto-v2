@@ -2328,6 +2328,20 @@ function bankPanel(ym){
     <p class="hint" style="margin-top:8px">שינוי = בנק, סניף או מספר חשבון שונים מהחודש הקודם, כולל מעבר בין העברה בנקאית לשיק. עובדים חדשים שלא היו בקובץ החודש הקודם לא נבדקים. מספר החשבון המלא לא נשמר: רק 3 הספרות האחרונות וקוד מוצפן להשוואה.</p>
   </section>`;
 }
+// תשלום על שעות: יחידות ברכיב שעתי בלי תשלום, או תעריף לשעה מתחת לשכר מינימום (קטינים לפי הגיל לא נבדקים לשכר מינימום)
+const RATE_CHECK = [['19','שעות רגילות'], ['18','חופשה שעות'], ['21','מחלה שעות']];
+function slipRates(ym){
+  const out = [];
+  for(const x of slipPairs(ym).filter(x=>x.p)){
+    for(const [sym, d] of RATE_CHECK){
+      const u = x.p.u?.[sym]||0, amt = x.p.p?.[d]||0; if(u <= 0) continue;
+      const rate = round2(amt/u);
+      if(!amt) out.push({...x, d, u, amt, rate, why:'שעות בלי תשלום'});
+      else if(sym==='19' && rate < MIN_WAGE_H - 0.01 && slipAge(x, ym)!=='minor') out.push({...x, d, u, amt, rate, why:'מתחת לשכר מינימום'});
+    }
+  }
+  return out.sort((a,b)=>slipBranch(a).localeCompare(slipBranch(b),'he') || (+a.e||0)-(+b.e||0));
+}
 function slipMonths(){ return [...new Set(Object.keys(priv).filter(k=>/^pslip-(tw|pay|bank)-\d{4}-\d{2}$/.test(k)).map(k=>k.slice(-7)))].sort(); }
 function slipPairs(ym){
   const tw = priv['pslip-tw-'+ym]?.emps || {}, pay = priv['pslip-pay-'+ym]?.emps || {};
@@ -2429,6 +2443,13 @@ function renderSlip(v){
           ${xs.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(slipBranch(x))}</td><td class="n">${ltr(nf2.format(x.h))}</td><td class="n" title="${x.jf?esc(x.jf.months.map(y=>`${monthName(y.m)}: ${nf2.format(y.h)} שעות`).join(' · ')):'אין תלושים מהחודשים הקודמים'}">${x.jf?`${pct(x.jf.frac,0)}${x.jf.months.length<3?` <span class="small muted">(${x.jf.months.length} ח׳)</span>`:''}`:'<span class="small muted">לפי TimeWatch</span>'}</td><td class="n">${x.dayH?ltr(nf2.format(x.dayH)):'—'}</td><td class="n">${x.days!=null?ltr(nf2.format(x.days)):'—'}</td><td class="n">${x.rate?ltr('₪'+nf2.format(x.rate)):'—'}</td><td class="n">${ltr(nf2.format(x.P))}</td><td class="n">${ltr(nf2.format(x.F))}</td>
             <td class="n">${x.xp!=null?money(x.xp):'—'}</td><td class="n">${money(x.amt)}</td><td class="n">${x.xp!=null?`<span class="pill ${x.d<0?'bad':'warn'}">${ltr((x.d>0?'+':'−')+money(Math.abs(x.d)).replace('-',''))}</span>`:'<span class="pill warn">אין נתונים ב-TimeWatch</span>'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">כל תשלומי המחלה תואמים ל-50% / 100% לפי TimeWatch.</p>'}`; })()}
       <p class="hint" style="margin-top:8px">תעריף שעה = התשלום על שעות רגילות ÷ מספר השעות הרגילות בתלוש (בלי שעות רגילות: התעריף בקובץ השכר השעתי). שיעור = תשלום לשעה ÷ תעריף שעה; 100% ומעלה מסומן. במחלה לפי החוק: יום ראשון ללא תשלום, ימים 2–3 ב-50%, מהיום הרביעי 100%. יום מחלה = חלקיות המשרה הממוצעת בשלושת החודשים שקדמו לחודש השכר × ${FULL_DAY_H} שעות; חלקיות = שעות רגילות, חופשה, מחלה וחג (חג/בחירות) ÷ ${FULL_MONTH_H} בכל חודש (עד 100%). בלי תלושים מהחודשים הקודמים: שעות הבסיס ÷ ימי העבודה ב-TimeWatch. הצפוי = יום מחלה × תעריף שעה × (50% על כל יום "מחלה בתשלום חלקי" ו-100% על כל יום "מחלה בתשלום מלא" ב-TimeWatch). היום הראשון של המחלה לא נספר, ולכן תשלום עליו יופיע כהפרש לחובת העובד (+). "ימים ששולמו בשכר" = שעות המחלה בתלוש ÷ ${FULL_DAY_H}. הפרש של עד ${money(KH_TOL)} לא מסומן. ימים בשכר מול TimeWatch: ימים בשכר = שעות ברכיב חופשה / מחלה ÷ ${FULL_DAY_H}; ב-TimeWatch חופשה = "חופש", מחלה = ימי מחלה בתשלום חלקי + מלא (בלי היום הראשון שאינו בתשלום). הפרש = שכר פחות TimeWatch; עד ${LEAVE_DAY_TOL} יום לא מסומן.</p>
+    </section>`; };
+  const ratePanel = () => { const xs = slipRates(ym);
+    return `<section class="panel">
+      <div class="panel-head"><h2>תשלום על שעות</h2><span class="small muted">${monthName(ym)} · שעות בתלוש בלי תשלום, או שעות רגילות מתחת לשכר מינימום · ${xs.length} שורות</span><button class="btn sm" type="button" data-slipx="rates">ייצוא לאקסל</button></div>
+      ${xs.length?`<div class="tbl-wrap"><table class="compact"><thead><tr><th class="first">מס' עובד</th><th>שם</th><th>סניף</th><th>רכיב</th><th class="n">שעות</th><th class="n">תשלום</th><th class="n">לשעה</th><th>בעיה</th><th>הערה ב-TimeWatch</th></tr></thead><tbody>
+        ${xs.map(x=>`<tr><td class="first">${num_(x)}</td><td>${nm(x)}</td><td>${esc(slipBranch(x))}</td><td>${esc(x.d)}</td><td class="n">${ltr(nf2.format(x.u))}</td><td class="n">${money(x.amt)}</td><td class="n">${x.amt?ltr('₪'+nf2.format(x.rate)):'—'}</td><td><span class="pill bad">${x.why}</span></td><td class="small">${esc(x.t?.note||'')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">לכל השעות בתלוש יש תשלום, ושעות רגילות לא מתחת לשכר מינימום.</p>'}
+      <p class="hint" style="margin-top:8px">שלב 1 משווה רק את מספר השעות לרכיב; כאן נבדק שעל השעות שולם כסף. נבדקים שעות רגילות, חופשה ומחלה. שכר מינימום (${ltr('₪'+nf2.format(MIN_WAGE_H))}) נבדק בשעות רגילות, בלי קטינים לפי הגיל.</p>
     </section>`; };
   const negBrkPanel = () => { const list = slipNegBreak(ym), byBr = {}; list.forEach(x=>(byBr[slipBranch(x)] ||= []).push(x));
     return `<section class="panel">
@@ -2597,6 +2618,7 @@ function renderSlip(v){
     </section>
     ${travelPanel()}
     ${recupPanel()}
+    ${ratePanel()}
     ${negBrkPanel()}
     ${leavePanel()}
     ${elecPanel()}
@@ -2632,6 +2654,7 @@ function slipXlsx(which){
   };
   const amt = (st, title) => add(title, ["מס' עובד","מס' עובד בשכר",'שם','סניף','רכיב','TimeWatch','שכר','הפרש','פירוט בשכר','הערה'],
     slipAmtDiffs(ym, st).map(x=>[x.e||'', pe(x), name(x), x.t?.b||'', x.label, x.tw, x.pay, x.d, x.parts.map(([d,v])=>`${d} ${v}`).join(' + '), notes(x)]), [10,12,22,14,12,10,10,9,28,30]);
+  sheets.rates = () => add('תשלום על שעות', ["מס' עובד",'שם','סניף','רכיב','שעות','תשלום','לשעה','בעיה','הערה ב-TimeWatch'], slipRates(ym).map(x=>[x.e||pe(x)||x.pe, name(x), slipBranch(x), x.d, x.u, x.amt, x.amt?x.rate:'', x.why, x.t?.note||'']), [10,22,14,14,8,10,9,18,40]);
   sheets.bank = () => { const k = slipBankChanges(ym) || {list:[], prevYm:ymAdd(ym,-1)}, d = b => bankDesc(b);
     add('שינוי חשבון בנק', ["מס' עובד",'שם','מחלקה',monthName(k.prevYm),monthName(ym),'נטו לבנק'], k.list.map(x=>[x.k.length>=12?'מספר ארוך':x.k, x.cur.n, x.cur.d, d(x.prev), d(x.cur), x.cur.net]), [10,22,14,36,36,11]); };
   sheets.leave = () => { const k = slipLeavePay(ym);
@@ -2682,7 +2705,7 @@ function slipXlsx(which){
     add('כל העובדים', ['סניף', ...head], list.map(x=>[slipBranch(x), ...row(x)]), [14, ...cols]);
     Object.entries(byBr).forEach(([br, xs])=>add(br.replace(/[\\/?*\[\]:]/g,' ').slice(0,31), head, xs.map(row), cols)); };
   sheets['2'] = () => amt(2, 'נסיעות רכב ובונוסים'); sheets['3'] = () => amt(3, 'מפרעות');
-  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', minor:'קטינים', tax:'חבות במס הכנסה', negbrk:'הפסקה במינוס', elec:'יום בחירות', elecmiss:'לא קיבלו יום בחירות', leave:'חופשה ומחלה', bank:'שינוי חשבון בנק', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
+  const title = {units:'שעות', onesided:'עובדים בקובץ אחד', travel:'בלי נסיעות', recup:'בלי הבראה', kh:'קרן השתלמות', pen:'פנסיה', sen:'תוספת ותק', abs:'חופשה ומחלה', minor:'קטינים', tax:'חבות במס הכנסה', negbrk:'הפסקה במינוס', elec:'יום בחירות', elecmiss:'לא קיבלו יום בחירות', leave:'חופשה ומחלה', bank:'שינוי חשבון בנק', rates:'תשלום על שעות', '2':'נסיעות רכב ובונוסים', '3':'מפרעות'}[which];
   sheets[which]();
   saveXlsx(wb, `בדיקת תלושים ${ym} - ${title}.xlsx`);
 }
