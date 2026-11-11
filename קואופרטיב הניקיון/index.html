@@ -1168,7 +1168,11 @@ function yoyMonth(br, y, m){
   const ym = ymOf(y, m);
   if(y===dataYear()){
     if(months[ym]){ const a = actualFor([br],[ym]); return {h:a.h, revenue:a.revenue, gm:a.gm, tc:a.tc, workers:a.workers, src:'actual'}; }
-    const x = plans[br]?.months?.[ym]; return x ? {h:+x.hours||0, revenue:+x.revenue||0, gm:+x.gm||0, tc:+x.tc||0, workers:x.workers!=null?+x.workers:null, src:'plan'} : null;
+    const x = plans[br]?.months?.[ym]; if(x) return {h:+x.hours||0, revenue:+x.revenue||0, gm:+x.gm||0, tc:+x.tc||0, workers:x.workers!=null?+x.workers:null, src:'plan'};
+    // סניף בלי תכנית לשנה (למשל נגב): החודשים שעוד אין להם ביצוע = החודש האחרון עם ביצוע
+    const last = monthList().filter(k=>k.startsWith(y+'-') && k<ym).pop();
+    if(!last || plans[br]?.months) return null;
+    const a = actualFor([br],[last]); return a.revenue || a.h ? {h:a.h, revenue:a.revenue, gm:a.gm, tc:a.tc, workers:a.workers, src:'est', from:last} : null;
   }
   const e = history.years[y]?.[br], x = e?.months?.[ym];
   return x ? {h:+x.hours||0, revenue:+x.revenue||0, gm:+x.gm||0, tc:+x.tc||0, workers:x.workers!=null?+x.workers:null, src:e.kind==='plan'?'plan':'actual'} : null;
@@ -1179,7 +1183,7 @@ function yoySum(brs, y, ms){
   const S = {h:0, revenue:0, gm:0, tc:0, workers:0, n:0, plan:0, missing:0};
   for(const br of brs){ let w = 0, wn = 0;
     for(const m of ms){ const x = yoyMonth(br, y, m); if(!x){ S.missing++; continue; }
-      S.n++; S.h += x.h; S.revenue += x.revenue; S.gm += x.gm; S.tc += x.tc; if(x.src==='plan') S.plan++;
+      S.n++; S.h += x.h; S.revenue += x.revenue; S.gm += x.gm; S.tc += x.tc; if(x.src==='plan' || x.src==='est') S.plan++; if(x.src==='est') S.est = (S.est||0)+1;
       if(x.workers!=null){ w += x.workers; wn++; } }
     S.workers += wn ? w/wn : 0; }
   S.margin = S.revenue ? S.gm/S.revenue : NaN;
@@ -1218,7 +1222,7 @@ function renderYoy(v){
     : Array.from({length:12},(_,i)=>({label:MONTHS[i], ms:[i+1]}));
   const chg = (a,b) => { if(!b || a==null) return '—'; const q = (a-b)/Math.abs(b); return `<span class="pill ${Math.abs(q)<0.02?'info':q>=0?'good':'bad'}">${q>=0?'▲':'▼'} ${pct(Math.abs(q))}</span>`; };
   const pts = (a,b) => !isFinite(a)||!isFinite(b) ? '—' : `<span class="pill ${Math.abs(a-b)<0.005?'info':a>=b?'good':'bad'}">${ltr((a>=b?'+':'−')+nf1.format(Math.abs(a-b)*100))} נק׳</span>`;
-  const src = S => S.missing && !S.n ? '<span class="pill warn">חסר</span>' : S.missing ? '<span class="pill warn">חלקי</span>' : S.plan ? `<span class="pill info">${S.plan===S.n?'תכנון':'כולל תכנון'}</span>` : '';
+  const src = S => S.missing && !S.n ? '<span class="pill warn">חסר</span>' : S.missing ? '<span class="pill warn">חלקי</span>' : S.plan ? `<span class="pill info">${S.plan===S.n?(S.est===S.n?'הערכה':'תכנון'):S.est?'כולל תכנון/הערכה':'כולל תכנון'}</span>` : '';
   const sum = (y, ms) => yoySum(sel, y, ms);
   // לכל מדד: ערך לכל שנה, ושינוי מול השנה הקודמת
   const cols = (vals, fmt, diff) => vals.map((S,k)=>`<td class="n">${S.n?fmt(S):'—'}</td>${k?`<td class="n">${S.n&&vals[k-1].n?diff(S, vals[k-1]):'—'}</td>`:''}`).join('');
@@ -1228,7 +1232,8 @@ function renderYoy(v){
       ${cols(V, S=>pct(S.margin), (a,b)=>pts(a.margin,b.margin))}${V.map(S=>`<td class="n">${S.n?ltr(nf1.format(S.workers)):'—'}</td>`).join('')}</tr>`; };
   const all12 = Array.from({length:12},(_,i)=>i+1), T = ys.map(y=>sum(y, all12));
   const curBrs = isOrg ? orgBranches() : sel, planMs = all12.filter(m=>!months[ymOf(cy,m)]);
-  const noPlan = curBrs.filter(b=>planMs.some(m=>!plans[b]?.months?.[ymOf(cy,m)]));
+  const noPlan = curBrs.filter(b=>!plans[b]?.months && planMs.length);
+  const lastAct = monthList().filter(k=>k.startsWith(cy+'-')).pop();
   const missYs = ys.filter((y,k)=>!T[k].n);
   const card = (label, f, fmt) => `<div class="kpi"><span class="label">${label}</span><span class="value num">${ys.map((y,k)=>`<span class="small muted">${y}</span> ${T[k].n?fmt(f(T[k])):'—'}`).join('<br>')}</span></div>`;
   const brName = b => b===ORG ? 'כל הארגון (מאוחד)' : b;
@@ -1247,7 +1252,7 @@ function renderYoy(v){
         <button class="btn sm" type="button" data-yoymovego="${y}">העברה</button> <button class="btn danger sm" type="button" data-yoydel="${y}">מחיקת ${y}</button></span></details>`).join('')}
       ${isOrg?`<div class="small muted" style="margin-top:6px">${ys.map(y=>y===cy?`${y}: סכום כל הסניפים (${esc(orgBranches().join(', '))})`:`${y}: מהקובץ המאוחד`).join(' · ')}.</div>`:''}
       ${missYs.length?`<div class="small muted" style="margin-top:6px">אין נתוני ${missYs.join(', ')} ל${esc(isOrg?'כל הארגון':sel.join(', '))}.</div>`:''}
-      ${noPlan.length?`<div class="small" style="margin-top:6px;color:var(--warn)">ל${esc(noPlan.join(', '))} אין תכנית ${cy} לחודשים בלי ביצוע, ולכן החודשים האלה חסרים ב-${cy}.</div>`:''}
+      ${noPlan.length?`<div class="small muted" style="margin-top:6px">ל${esc(noPlan.join(', '))} אין תכנית ${cy}, ולכן ${planMs.map(m=>MONTHS[m-1]).join(' ו')} ${cy} מוערכים כזהים ל${lastAct?MONTHS[+lastAct.slice(5)-1]:'החודש האחרון'} ("הערכה").</div>`:''}
     </div>
     <div class="kpis">
       ${card('הכנסות', S=>S.revenue, moneyC)}${card('רווח גולמי', S=>S.gm, moneyC)}${card('שיעור רווח גולמי', S=>S.margin, pct)}${card('שעות', S=>S.h, hrs)}
