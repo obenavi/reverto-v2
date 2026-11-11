@@ -481,6 +481,28 @@ function guessPlanBranch(wb){
   }
   return Object.entries(votes).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
 }
+// קובץ מאוחד (כל הארגון): לפי השם, או כשלקוחות מכמה סניפים מופיעים בו בהיקף דומה
+function isOrgPlan(wb, fileName){
+  if(/מאוחד|מרוכז|כל הסניפים/.test(fileName||'')) return true;
+  const words = s => normName(s).replace(/[()"'\-\d]/g,' ').split(' ').filter(w=>w.length>2);
+  const names = new Set(); Object.values(wb.sheets).forEach(a=>a.forEach(r=>{ const v=normName(r[0]); if(v && v.length<40 && !num(r[0])) names.add(v); }));
+  const votes = {};
+  for(const g of mapping.groups){
+    const gw = new Set([g.name, ...g.clients].flatMap(words));
+    if(![...names].some(n=>{ const w=words(n); return w.length && w.every(x=>gw.has(x)); })) continue;
+    const br = g.sites.map(c=>knownBranch(c, monthList().slice(-1)[0]||'9999-12')).find(b=>b!==NO_BRANCH);
+    if(br) votes[br] = (votes[br]||0)+1;
+  }
+  const v = Object.values(votes).sort((a,b)=>b-a), tot = v.reduce((a,x)=>a+x,0);
+  return v.length>=2 && v[1] >= 0.25*tot;
+}
+const ORG = '__org';
+// סניף לפי שם הקובץ (למשל "ביצוע גיסר 2025"): השוואה בלי אותיות אהו"י וגרשיים, כך ש"גיסר" = "ג'אסר"
+function branchFromFileName(fileName){
+  const sk = w => normName(w).replace(/['"׳״אהוי]/g,'');
+  const fw = new Set(String(fileName||'').replace(/\.[a-z]+$/i,'').split(/[\s_\-.]+/).map(sk).filter(w=>w.length>=2));
+  return branchNames().filter(b=>b!==NO_BRANCH).find(b=>normName(b).split(' ').filter(w=>w!=='גרעין' && sk(w).length>=2).some(w=>fw.has(sk(w)))) || null;
+}
 function parsePlan(wb, fileName){
   const {name, aoa, info} = findPlanSheet(wb); const {hi, col, year} = info;
   const pm = {}; for(let m=1;m<=12;m++) pm[ymOf(year,m)] = {costs:{}};
@@ -1159,36 +1181,42 @@ function yoySum(brs, y, ms, cur){
 function renderYoy(v){
   const ys = Object.keys(history.years).map(Number).sort((a,b)=>b-a);
   if(!ys.length){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין לא נקלט ביצוע של שנה קודמת</h2><p>יש להעלות בלשונית "קליטת נתונים" קובץ ביצוע של השנה הקודמת, לכל סניף, באותו פורמט של התכנית העסקית (גיליון רווח והפסד עם חודשים 1–12). קובץ ששנתו קודמת לשנת הנתונים נקלט אוטומטית להשוואה.</p></div>`; return; }
-  const Yp = ys[0], Y = Yp+1, hb = Object.keys(history.years[Yp]).sort();
-  if(ui.yoyBranch!=='__all' && !hb.includes(ui.yoyBranch)) ui.yoyBranch = '__all';
-  const sel = ui.yoyBranch==='__all' ? hb : [ui.yoyBranch], mode = ui.yoyMode||'month';
+  const Yp = ys[0], Y = Yp+1, hb = Object.keys(history.years[Yp]).filter(b=>b!==ORG).sort(), hasOrg = !!history.years[Yp][ORG];
+  if(ui.yoyBranch==='__all' && hb.length<2) ui.yoyBranch = hasOrg ? ORG : hb[0];   // "סכום הסניפים" רק כשיש לפחות שני סניפים
+  if(ui.yoyBranch!=='__all' && ui.yoyBranch!==ORG && !hb.includes(ui.yoyBranch)) ui.yoyBranch = hasOrg ? ORG : '__all';
+  if(ui.yoyBranch===ORG && !hasOrg) ui.yoyBranch = '__all';
+  // מאוחד: 2025 מהקובץ המאוחד, 2026 כל הסניפים
+  const orgBrs = branchNames().filter(b=>b!==NO_BRANCH), isOrg = ui.yoyBranch===ORG;
+  const sel = isOrg ? orgBrs : ui.yoyBranch==='__all' ? hb : [ui.yoyBranch], mode = ui.yoyMode||'month';
   const groups = mode==='quarter' ? [1,2,3,4].map(q=>({label:`רבעון ${q}`, ms:[q*3-2,q*3-1,q*3]}))
     : mode==='ytd' ? Array.from({length:12},(_,i)=>({label:i?`ינואר–${MONTHS[i]}`:'ינואר', ms:Array.from({length:i+1},(_,k)=>k+1)}))
     : Array.from({length:12},(_,i)=>({label:MONTHS[i], ms:[i+1]}));
   const chg = (a,b,kind) => { if(!b || a==null) return '—'; const q = (a-b)/Math.abs(b); return `<span class="pill ${Math.abs(q)<0.02?'info':(q>=0)===(kind!=='down')?'good':'bad'}">${q>=0?'▲':'▼'} ${pct(Math.abs(q))}</span>`; };
   const pts = (a,b) => !isFinite(a)||!isFinite(b) ? '—' : `<span class="pill ${Math.abs(a-b)<0.005?'info':a>=b?'good':'bad'}">${ltr((a>=b?'+':'−')+nf1.format(Math.abs(a-b)*100))} נק׳</span>`;
   const src = S => S.missing ? '<span class="pill warn">חסר</span>' : S.plan ? `<span class="pill info">${S.plan===S.n?'תכנון':'כולל תכנון'}</span>` : '';
-  const row = (g, cls='') => { const A = yoySum(sel, Yp, g.ms, false), B = yoySum(sel, Y, g.ms, true), has = B.n>0;
+  const prevSel = isOrg ? [ORG] : sel;
+  const row = (g, cls='') => { const A = yoySum(prevSel, Yp, g.ms, false), B = yoySum(sel, Y, g.ms, true), has = B.n>0;
     return `<tr class="${cls}"><td class="first">${esc(g.label)} ${src(B)}</td>
       <td class="n">${hrs(A.h)}</td><td class="n">${has?hrs(B.h):'—'}</td><td class="n">${has?chg(B.h,A.h):'—'}</td>
       <td class="n">${money(A.revenue)}</td><td class="n">${has?money(B.revenue):'—'}</td><td class="n">${has?chg(B.revenue,A.revenue):'—'}</td>
       <td class="n">${money(A.gm)}</td><td class="n">${has?money(B.gm):'—'}</td><td class="n">${has?chg(B.gm,A.gm):'—'}</td>
       <td class="n">${pct(A.margin)}</td><td class="n">${has?pct(B.margin):'—'}</td><td class="n">${has?pts(B.margin,A.margin):'—'}</td>
       <td class="n">${ltr(nf1.format(A.workers))}</td><td class="n">${has?ltr(nf1.format(B.workers)):'—'}</td></tr>`; };
-  const all12 = Array.from({length:12},(_,i)=>i+1), TA = yoySum(sel, Yp, all12, false), TB = yoySum(sel, Y, all12, true);
+  const all12 = Array.from({length:12},(_,i)=>i+1), TA = yoySum(prevSel, Yp, all12, false), TB = yoySum(sel, Y, all12, true);
   const actMs = all12.filter(m=>months[ymOf(Y,m)]), planMs = all12.filter(m=>!months[ymOf(Y,m)]);
   const noPlan = sel.filter(b=>planMs.some(m=>!plans[b]?.months?.[ymOf(Y,m)]));
   const card = (label, a, b, fmt, kind) => `<div class="kpi"><span class="label">${label}</span><span class="value num">${fmt(b)}</span><span class="sub">${Yp}: ${fmt(a)} ${chg(b,a,kind)}</span></div>`;
   const missingBr = branchNames().filter(b=>b!==NO_BRANCH && !hb.includes(b));
   v.innerHTML = `<div class="stack">
     <div class="panel" style="background:var(--accent-soft);border-color:transparent"><div class="actions">
-      <label class="small"><b>סניף</b> <select id="yoy-br"><option value="__all" ${ui.yoyBranch==='__all'?'selected':''}>כל הסניפים${hb.length>1?` (${hb.length})`:''}</option>${hb.map(b=>`<option value="${esc(b)}" ${ui.yoyBranch===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+      <label class="small"><b>סניף</b> <select id="yoy-br">${hasOrg?`<option value="${ORG}" ${isOrg?'selected':''}>כל הארגון (מאוחד)</option>`:''}${hb.length>1?`<option value="__all" ${ui.yoyBranch==='__all'?'selected':''}>סכום הסניפים (${hb.length})</option>`:''}${hb.map(b=>`<option value="${esc(b)}" ${ui.yoyBranch===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
       <label class="small"><b>תצוגה</b> <select id="yoy-mode">${[['month','לפי חודש'],['quarter','לפי רבעון'],['ytd','מצטבר מתחילת השנה']].map(([k,n])=>`<option value="${k}" ${mode===k?'selected':''}>${n}</option>`).join('')}</select></label>
       <span class="small muted">${Y} = ביצוע ${actMs.length?`${MONTHS[actMs[0]-1]}–${MONTHS[actMs[actMs.length-1]-1]}`:'—'}${planMs.length?` ועוד תכנון ל${planMs.map(m=>MONTHS[m-1]).join(', ')}`:''}. ${Yp} = ביצוע מהקבצים שנקלטו.</span></div>
-      ${ui.yoyBranch!=='__all'?`<details class="small" style="margin-top:6px"><summary>קובץ ${Yp} של ${esc(ui.yoyBranch)}: ${esc(history.years[Yp][ui.yoyBranch].file||'')}</summary>
-        <span class="actions" style="margin-top:6px">שיוך לסניף אחר: <select id="yoy-move">${branchNames().filter(b=>b!==ui.yoyBranch && b!==NO_BRANCH && !history.years[Yp][b]).map(b=>`<option>${esc(b)}</option>`).join('')}</select>
+      ${ui.yoyBranch!=='__all'?`<details class="small" style="margin-top:6px"><summary>קובץ ${Yp} של ${isOrg?'כל הארגון':esc(ui.yoyBranch)}: ${esc(history.years[Yp][ui.yoyBranch].file||'')}</summary>
+        <span class="actions" style="margin-top:6px">שיוך אחר: <select id="yoy-move">${[...(isOrg?[]:[ORG]), ...branchNames()].filter(b=>b!==ui.yoyBranch && b!==NO_BRANCH && !history.years[Yp][b]).map(b=>`<option value="${esc(b)}">${b===ORG?'כל הארגון (מאוחד)':esc(b)}</option>`).join('')}</select>
         <button class="btn sm" type="button" id="yoy-move-go">העברה</button> <button class="btn danger sm" type="button" id="yoy-del">מחיקת הביצוע של ${Yp}</button></span></details>`:''}
-      ${missingBr.length?`<div class="small muted" style="margin-top:6px">עוד לא נקלט ביצוע ${Yp} ל${esc(missingBr.join(', '))}${ui.yoyBranch==='__all'?', ולכן הם לא כלולים בכל הסניפים':''}.</div>`:''}
+      ${missingBr.length && !isOrg?`<div class="small muted" style="margin-top:6px">עוד לא נקלט ביצוע ${Yp} ל${esc(missingBr.join(', '))}${ui.yoyBranch==='__all'?', ולכן הם לא כלולים בסכום הסניפים':''}.</div>`:''}
+      ${isOrg?`<div class="small muted" style="margin-top:6px">${Yp} מהקובץ המאוחד; ${Y} סכום כל הסניפים (${esc(orgBrs.join(', '))}).</div>`:''}
       ${noPlan.length?`<div class="small" style="margin-top:6px;color:var(--warn)">ל${esc(noPlan.join(', '))} אין תכנית ${Y} לחודשים בלי ביצוע, ולכן החודשים האלה חסרים ב-${Y}.</div>`:''}
     </div>
     <div class="kpis">
@@ -1198,7 +1226,7 @@ function renderYoy(v){
       ${card(`שעות ${Y}`, TA.h, TB.h, hrs, 'up')}
     </div>
     <section class="panel">
-      <div class="panel-head"><h2>${Yp} מול ${Y} ${mode==='quarter'?'לפי רבעון':mode==='ytd'?'מצטבר מתחילת השנה':'לפי חודש'}</h2><span class="small muted">${esc(sel.join(' + '))}</span><button class="btn sm" type="button" id="yoy-xlsx">ייצוא לאקסל</button></div>
+      <div class="panel-head"><h2>${Yp} מול ${Y} ${mode==='quarter'?'לפי רבעון':mode==='ytd'?'מצטבר מתחילת השנה':'לפי חודש'}</h2><span class="small muted">${isOrg?'כל הארגון':esc(sel.join(' + '))}</span><button class="btn sm" type="button" id="yoy-xlsx">ייצוא לאקסל</button></div>
       <div class="tbl-wrap"><table>
         <thead><tr><th class="first" rowspan="2">${mode==='quarter'?'רבעון':mode==='ytd'?'תקופה':'חודש'}</th><th colspan="3" style="text-align:center">שעות</th><th colspan="3" style="text-align:center">הכנסות</th><th colspan="3" style="text-align:center">רווח גולמי</th><th colspan="3" style="text-align:center">שיעור רווח גולמי</th><th colspan="2" style="text-align:center">עובדות</th></tr>
           <tr>${`<th class="n">${Yp}</th><th class="n">${Y}</th><th class="n">שינוי</th>`.repeat(4)}<th class="n">${Yp}</th><th class="n">${Y}</th></tr></thead>
@@ -1208,10 +1236,10 @@ function renderYoy(v){
   </div>`;
 }
 function yoyXlsx(){
-  const Yp = Object.keys(history.years).map(Number).sort((a,b)=>b-a)[0], Y = Yp+1, hb = Object.keys(history.years[Yp]).sort();
-  const sel = ui.yoyBranch==='__all' ? hb : [ui.yoyBranch], wb = XLSX.utils.book_new(); wb.Workbook = {Views:[{RTL:true}]};
+  const Yp = Object.keys(history.years).map(Number).sort((a,b)=>b-a)[0], Y = Yp+1, hb = Object.keys(history.years[Yp]).filter(b=>b!==ORG).sort(), isOrg = ui.yoyBranch===ORG;
+  const sel = isOrg ? branchNames().filter(b=>b!==NO_BRANCH) : ui.yoyBranch==='__all' ? hb : [ui.yoyBranch], prevSel = isOrg ? [ORG] : sel, wb = XLSX.utils.book_new(); wb.Workbook = {Views:[{RTL:true}]};
   const r2 = v => isFinite(v) ? round2(v) : '';
-  const mk = (title, groups) => { const rows = groups.map(g=>{ const A = yoySum(sel, Yp, g.ms, false), B = yoySum(sel, Y, g.ms, true);
+  const mk = (title, groups) => { const rows = groups.map(g=>{ const A = yoySum(prevSel, Yp, g.ms, false), B = yoySum(sel, Y, g.ms, true);
       return [g.label, B.missing?'חסר':B.plan?(B.plan===B.n?'תכנון':'כולל תכנון'):'ביצוע', r2(A.h), r2(B.h), r2(A.revenue), r2(B.revenue), r2(A.gm), r2(B.gm), r2(A.margin*100), r2(B.margin*100), r2(A.workers), r2(B.workers)]; });
     const ws = XLSX.utils.aoa_to_sheet([['תקופה',`מקור ${Y}`,`שעות ${Yp}`,`שעות ${Y}`,`הכנסות ${Yp}`,`הכנסות ${Y}`,`רווח גולמי ${Yp}`,`רווח גולמי ${Y}`,`% רווח גולמי ${Yp}`,`% רווח גולמי ${Y}`,`עובדות ${Yp}`,`עובדות ${Y}`], ...rows]);
     ws['!cols'] = [16,12,10,10,12,12,12,12,10,10,9,9].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb, ws, title); };
@@ -1219,7 +1247,7 @@ function yoyXlsx(){
   mk('לפי חודש', [...all12.map(m=>({label:MONTHS[m-1], ms:[m]})), {label:'שנה מלאה', ms:all12}]);
   mk('לפי רבעון', [...[1,2,3,4].map(q=>({label:`רבעון ${q}`, ms:[q*3-2,q*3-1,q*3]})), {label:'שנה מלאה', ms:all12}]);
   mk('מצטבר', all12.map(m=>({label:m>1?`ינואר–${MONTHS[m-1]}`:'ינואר', ms:all12.slice(0,m)})));
-  saveXlsx(wb, `שנה מול שנה ${Yp}-${Y} - ${ui.yoyBranch==='__all'?'כל הסניפים':ui.yoyBranch}.xlsx`);
+  saveXlsx(wb, `שנה מול שנה ${Yp}-${Y} - ${isOrg?'כל הארגון':ui.yoyBranch==='__all'?'סכום הסניפים':ui.yoyBranch}.xlsx`);
 }
 function renderPlan(v){
   const brs = Object.keys(plans).filter(b=>plans[b]?.months).sort();
@@ -3321,12 +3349,12 @@ async function handleFiles(files){
         // קובץ בפורמט התכנית לשנה שלפני שנת הנתונים = ביצוע שנה קודמת (להשוואת שנה מול שנה)
         const curY = +((monthList().slice(-1)[0]||'').slice(0,4)) || new Date().getFullYear();
         if(p.year < curY){
-          const br = guessPlanBranch(wb) || branchNames().find(b=>!history.years[p.year]?.[b] && b!==NO_BRANCH) || branchNames()[0] || '';
+          const br = /מאוחד|מרוכז|כל הסניפים/.test(f.name) ? ORG : branchFromFileName(f.name) || (isOrgPlan(wb, f.name) ? ORG : guessPlanBranch(wb)) || branchNames().find(b=>!history.years[p.year]?.[b] && b!==NO_BRANCH) || branchNames()[0] || '';
           history.years[p.year] = {...(history.years[p.year]||{}), [br]:{file:p.file, sheet:p.sheet, year:p.year, uploadedAt:p.uploadedAt, months:p.months}};
           await store.saveHistory(); ui.tab='yoy'; ui.yoyBranch = br;
-          toast(`ביצוע ${p.year} של ${br} נקלט מהגיליון "${p.sheet}" להשוואת שנה מול שנה. אם הסניף שגוי, אפשר לשנות בלשונית שנה מול שנה`); continue;
+          toast(`ביצוע ${p.year} של ${br===ORG?'כל הארגון (מאוחד)':br} נקלט מהגיליון "${p.sheet}" להשוואת שנה מול שנה. אם הסניף שגוי, אפשר לשנות בלשונית שנה מול שנה`); continue;
         }
-        p.branch = guessPlanBranch(wb) || branchNames().find(b=>!plans[b]) || branchNames()[0] || '';
+        p.branch = branchFromFileName(f.name) || guessPlanBranch(wb) || branchNames().find(b=>!plans[b]) || branchNames()[0] || '';
         const prev = plans[p.branch]; if(prev){ p.lineSource = {...p.lineSource, ...prev.lineSource}; p.extraManual = prev.extraManual || p.extraManual; }  // עדכון תכנית: שומרים את ההגדרות
         plans = {...plans, [p.branch]:p}; await store.savePlan(); ui.tab='plan'; ui.planBranch = p.branch;
         toast(`התכנית העסקית ${p.year} של ${p.branch} נקלטה מהגיליון "${p.sheet}". אם הסניף שגוי, אפשר לשנות בלשונית תכנון מול ביצוע`); continue;
