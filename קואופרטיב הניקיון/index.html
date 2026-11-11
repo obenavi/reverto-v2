@@ -227,6 +227,7 @@ const monthName = ym => `${MONTHS[+ym.slice(5)-1]} ${ym.slice(0,4)}`;
 
 let mapping = {groups:[], overheadSites:[]};
 let months = {};                 // ym -> doc
+let history = {years:{}};          // settings/history: ביצוע שנים קודמות בפורמט התכנית העסקית (year -> branch -> {months})
 let plans = {};                  // settings/plan: תכנית עסקית לכל סניף (branch -> plan, מגיליון רווח והפסד)
 let manual = {};                 // settings/manual: עלויות ידניות בפועל (branch -> ym -> line -> ₪), תשלומים ישירים לספקים
 // settings/materials: חומרי ניקיון לפי לקוח וחודש. byMonth: ym -> קבוצה -> עלות חשבונית (ספק);
@@ -255,11 +256,12 @@ const matFor = (gid, ym) => +(materials.byMonth[ym]?.[gid] || 0);
 const matBillAuto = (gid, ym) => materials.fixedBill[gid] ? +materials.fixedBill[gid] : matFor(gid, ym)*(1+materials.markup);
 function matBilledFor(gid, ym){ const v = materials.billByMonth[ym]?.[gid]; return v!=null && v!=='' ? +v : matBillAuto(gid, ym); }
 let priv = {};                   // אזור פרטי של הצופה (data/users/<id>): wages = שכר שעתי לפי עובד, staff-YYYY-MM = שעות ועלות לפי עובד ואתר
+const loadHistory = d => ({years: JSON.parse(JSON.stringify(d?.years||{}))});
 const loadPlans = d => !d ? {} : d.plans ? d.plans : d.months ? {[d.branch||'']: d} : {};
 const loadManual = d => !d ? {} : d.byBranch ? d.byBranch : {};
-let ui = {dashYm:null, dashWho:'ceo', tab:'overview', ym:null, pmode:'month', branch:'', q:'', sort:['gp','asc'], open:null, client:null, target:15, planBranch:null};
+let ui = {dashYm:null, dashWho:'ceo', tab:'overview', ym:null, pmode:'month', branch:'', q:'', sort:['gp','asc'], open:null, client:null, target:15, planBranch:null, yoyBranch:'__all', yoyMode:'month'};
 try{ Object.assign(ui, JSON.parse(localStorage.getItem('coop-ui')||'{}')); }catch(e){}
-const saveUi = () => { try{ localStorage.setItem('coop-ui', JSON.stringify({tab:ui.tab, ym:ui.ym, pmode:ui.pmode, branch:ui.branch, sort:ui.sort, client:ui.client, target:ui.target, planBranch:ui.planBranch, dashYm:ui.dashYm, dashWho:ui.dashWho})); }catch(e){} };
+const saveUi = () => { try{ localStorage.setItem('coop-ui', JSON.stringify({tab:ui.tab, ym:ui.ym, pmode:ui.pmode, branch:ui.branch, sort:ui.sort, client:ui.client, target:ui.target, planBranch:ui.planBranch, yoyBranch:ui.yoyBranch, yoyMode:ui.yoyMode, dashYm:ui.dashYm, dashWho:ui.dashWho})); }catch(e){} };
 const charts = {};
 
 /* ============================================================ utils */
@@ -318,6 +320,7 @@ const store = {
       this.db.doc('settings/plan').onSnapshot(s=>{ plans = loadPlans(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/manual').onSnapshot(s=>{ manual = loadManual(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/breaks').onSnapshot(s=>{ breaks = loadBreaks(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
+      this.db.doc('settings/history').onSnapshot(s=>{ history = loadHistory(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/materials').onSnapshot(s=>{ materials = loadMaterials(s.exists ? thaw(s.data()) : null); render(); }, e=>this.fail(e));
       this.db.doc('settings/ga').onSnapshot(s=>{ gaLegacy = loadGA(s.exists ? thaw(s.data()) : null); mergeGA(); render(); }, e=>this.fail(e));
       this.db.collection('ga').onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=thaw(d.data())); gaDocs = m; mergeGA(); render(); }, e=>this.fail(e));
@@ -325,7 +328,8 @@ const store = {
       try{ mapping = normalizeMapping(JSON.parse(localStorage.getItem('coop-mapping')||'null')||{}); months = JSON.parse(localStorage.getItem('coop-months')||'{}');
            plans = loadPlans(JSON.parse(localStorage.getItem('coop-plan')||'null')); manual = loadManual(JSON.parse(localStorage.getItem('coop-manual')||'null'));
            priv = JSON.parse(localStorage.getItem('coop-private')||'{}'); materials = loadMaterials(JSON.parse(localStorage.getItem('coop-materials')||'null'));
-           ga = loadGA(JSON.parse(localStorage.getItem('coop-ga')||'null')); breaks = loadBreaks(JSON.parse(localStorage.getItem('coop-breaks')||'null')); }catch(e){}
+           ga = loadGA(JSON.parse(localStorage.getItem('coop-ga')||'null')); breaks = loadBreaks(JSON.parse(localStorage.getItem('coop-breaks')||'null'));
+           history = loadHistory(JSON.parse(localStorage.getItem('coop-history')||'null')); }catch(e){}
     }
   },
   get hasPrivate(){ return this.mode==='local' || !!this.uid; },
@@ -350,6 +354,12 @@ const store = {
     const doc = {byBranch:JSON.parse(JSON.stringify(manual)), updatedAt:new Date().toISOString()};
     if(this.db) await this.db.doc('settings/manual').set(doc);
     else try{ localStorage.setItem('coop-manual', JSON.stringify(doc)); }catch(e){ toast('השמירה בדפדפן נכשלה'); }
+  },
+  async saveHistory(){
+    const doc = {years:JSON.parse(JSON.stringify(history.years)), updatedAt:new Date().toISOString()};
+    if(this.db){ try{ await this.db.doc('settings/history').set(doc); return true; }
+      catch(e){ console.error(e); toast(`שמירת ביצוע השנה הקודמת נכשלה: ${e?.message||e?.code||e}`); return false; } }
+    try{ localStorage.setItem('coop-history', JSON.stringify(doc)); return true; }catch(e){ toast('השמירה בדפדפן נכשלה'); return false; }
   },
   async saveBreaks(){
     const doc = {byMonth:JSON.parse(JSON.stringify(breaks.byMonth)), updatedAt:new Date().toISOString()};
@@ -1127,6 +1137,90 @@ function actualFor(branches, yms){
   A.workers = wAny ? wSum : null;
   return A;
 }
+/* ---------- שנה מול שנה ----------
+   שנה קודמת: ביצוע מקבצי "ביצוע" בפורמט התכנית העסקית (settings/history). השנה: ביצוע מהנתונים שנקלטו, ולחודשים שעוד אין
+   להם ביצוע — התכנית העסקית של השנה (מסומן "תכנון"). עובדות = ממוצע חודשי, מחובר בין הסניפים */
+function yoyMonth(br, y, m, cur){
+  const ym = ymOf(y, m);
+  if(!cur){ const x = history.years[y]?.[br]?.months?.[ym]; return x ? {h:+x.hours||0, revenue:+x.revenue||0, gm:+x.gm||0, tc:+x.tc||0, workers:x.workers!=null?+x.workers:null, src:'actual'} : null; }
+  if(months[ym]){ const a = actualFor([br],[ym]); return {h:a.h, revenue:a.revenue, gm:a.gm, tc:a.tc, workers:a.workers, src:'actual'}; }
+  const x = plans[br]?.months?.[ym]; return x ? {h:+x.hours||0, revenue:+x.revenue||0, gm:+x.gm||0, tc:+x.tc||0, workers:x.workers!=null?+x.workers:null, src:'plan'} : null;
+}
+function yoySum(brs, y, ms, cur){
+  const S = {h:0, revenue:0, gm:0, tc:0, workers:0, n:0, plan:0, missing:0};
+  for(const br of brs){ let w = 0, wn = 0;
+    for(const m of ms){ const x = yoyMonth(br, y, m, cur); if(!x){ S.missing++; continue; }
+      S.n++; S.h += x.h; S.revenue += x.revenue; S.gm += x.gm; S.tc += x.tc; if(x.src==='plan') S.plan++;
+      if(x.workers!=null){ w += x.workers; wn++; } }
+    S.workers += wn ? w/wn : 0; }
+  S.margin = S.revenue ? S.gm/S.revenue : NaN;
+  return S;
+}
+function renderYoy(v){
+  const ys = Object.keys(history.years).map(Number).sort((a,b)=>b-a);
+  if(!ys.length){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין לא נקלט ביצוע של שנה קודמת</h2><p>יש להעלות בלשונית "קליטת נתונים" קובץ ביצוע של השנה הקודמת, לכל סניף, באותו פורמט של התכנית העסקית (גיליון רווח והפסד עם חודשים 1–12). קובץ ששנתו קודמת לשנת הנתונים נקלט אוטומטית להשוואה.</p></div>`; return; }
+  const Yp = ys[0], Y = Yp+1, hb = Object.keys(history.years[Yp]).sort();
+  if(ui.yoyBranch!=='__all' && !hb.includes(ui.yoyBranch)) ui.yoyBranch = '__all';
+  const sel = ui.yoyBranch==='__all' ? hb : [ui.yoyBranch], mode = ui.yoyMode||'month';
+  const groups = mode==='quarter' ? [1,2,3,4].map(q=>({label:`רבעון ${q}`, ms:[q*3-2,q*3-1,q*3]}))
+    : mode==='ytd' ? Array.from({length:12},(_,i)=>({label:i?`ינואר–${MONTHS[i]}`:'ינואר', ms:Array.from({length:i+1},(_,k)=>k+1)}))
+    : Array.from({length:12},(_,i)=>({label:MONTHS[i], ms:[i+1]}));
+  const chg = (a,b,kind) => { if(!b || a==null) return '—'; const q = (a-b)/Math.abs(b); return `<span class="pill ${Math.abs(q)<0.02?'info':(q>=0)===(kind!=='down')?'good':'bad'}">${q>=0?'▲':'▼'} ${pct(Math.abs(q))}</span>`; };
+  const pts = (a,b) => !isFinite(a)||!isFinite(b) ? '—' : `<span class="pill ${Math.abs(a-b)<0.005?'info':a>=b?'good':'bad'}">${ltr((a>=b?'+':'−')+nf1.format(Math.abs(a-b)*100))} נק׳</span>`;
+  const src = S => S.missing ? '<span class="pill warn">חסר</span>' : S.plan ? `<span class="pill info">${S.plan===S.n?'תכנון':'כולל תכנון'}</span>` : '';
+  const row = (g, cls='') => { const A = yoySum(sel, Yp, g.ms, false), B = yoySum(sel, Y, g.ms, true), has = B.n>0;
+    return `<tr class="${cls}"><td class="first">${esc(g.label)} ${src(B)}</td>
+      <td class="n">${hrs(A.h)}</td><td class="n">${has?hrs(B.h):'—'}</td><td class="n">${has?chg(B.h,A.h):'—'}</td>
+      <td class="n">${money(A.revenue)}</td><td class="n">${has?money(B.revenue):'—'}</td><td class="n">${has?chg(B.revenue,A.revenue):'—'}</td>
+      <td class="n">${money(A.gm)}</td><td class="n">${has?money(B.gm):'—'}</td><td class="n">${has?chg(B.gm,A.gm):'—'}</td>
+      <td class="n">${pct(A.margin)}</td><td class="n">${has?pct(B.margin):'—'}</td><td class="n">${has?pts(B.margin,A.margin):'—'}</td>
+      <td class="n">${ltr(nf1.format(A.workers))}</td><td class="n">${has?ltr(nf1.format(B.workers)):'—'}</td></tr>`; };
+  const all12 = Array.from({length:12},(_,i)=>i+1), TA = yoySum(sel, Yp, all12, false), TB = yoySum(sel, Y, all12, true);
+  const actMs = all12.filter(m=>months[ymOf(Y,m)]), planMs = all12.filter(m=>!months[ymOf(Y,m)]);
+  const noPlan = sel.filter(b=>planMs.some(m=>!plans[b]?.months?.[ymOf(Y,m)]));
+  const card = (label, a, b, fmt, kind) => `<div class="kpi"><span class="label">${label}</span><span class="value num">${fmt(b)}</span><span class="sub">${Yp}: ${fmt(a)} ${chg(b,a,kind)}</span></div>`;
+  const missingBr = branchNames().filter(b=>b!==NO_BRANCH && !hb.includes(b));
+  v.innerHTML = `<div class="stack">
+    <div class="panel" style="background:var(--accent-soft);border-color:transparent"><div class="actions">
+      <label class="small"><b>סניף</b> <select id="yoy-br"><option value="__all" ${ui.yoyBranch==='__all'?'selected':''}>כל הסניפים${hb.length>1?` (${hb.length})`:''}</option>${hb.map(b=>`<option value="${esc(b)}" ${ui.yoyBranch===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+      <label class="small"><b>תצוגה</b> <select id="yoy-mode">${[['month','לפי חודש'],['quarter','לפי רבעון'],['ytd','מצטבר מתחילת השנה']].map(([k,n])=>`<option value="${k}" ${mode===k?'selected':''}>${n}</option>`).join('')}</select></label>
+      <span class="small muted">${Y} = ביצוע ${actMs.length?`${MONTHS[actMs[0]-1]}–${MONTHS[actMs[actMs.length-1]-1]}`:'—'}${planMs.length?` ועוד תכנון ל${planMs.map(m=>MONTHS[m-1]).join(', ')}`:''}. ${Yp} = ביצוע מהקבצים שנקלטו.</span></div>
+      ${ui.yoyBranch!=='__all'?`<details class="small" style="margin-top:6px"><summary>קובץ ${Yp} של ${esc(ui.yoyBranch)}: ${esc(history.years[Yp][ui.yoyBranch].file||'')}</summary>
+        <span class="actions" style="margin-top:6px">שיוך לסניף אחר: <select id="yoy-move">${branchNames().filter(b=>b!==ui.yoyBranch && b!==NO_BRANCH && !history.years[Yp][b]).map(b=>`<option>${esc(b)}</option>`).join('')}</select>
+        <button class="btn sm" type="button" id="yoy-move-go">העברה</button> <button class="btn danger sm" type="button" id="yoy-del">מחיקת הביצוע של ${Yp}</button></span></details>`:''}
+      ${missingBr.length?`<div class="small muted" style="margin-top:6px">עוד לא נקלט ביצוע ${Yp} ל${esc(missingBr.join(', '))}${ui.yoyBranch==='__all'?', ולכן הם לא כלולים בכל הסניפים':''}.</div>`:''}
+      ${noPlan.length?`<div class="small" style="margin-top:6px;color:var(--warn)">ל${esc(noPlan.join(', '))} אין תכנית ${Y} לחודשים בלי ביצוע, ולכן החודשים האלה חסרים ב-${Y}.</div>`:''}
+    </div>
+    <div class="kpis">
+      ${card(`הכנסות ${Y}`, TA.revenue, TB.revenue, moneyC, 'up')}
+      ${card(`רווח גולמי ${Y}`, TA.gm, TB.gm, moneyC, 'up')}
+      <div class="kpi"><span class="label">שיעור רווח גולמי ${Y}</span><span class="value num">${pct(TB.margin)}</span><span class="sub">${Yp}: ${pct(TA.margin)} ${pts(TB.margin, TA.margin)}</span></div>
+      ${card(`שעות ${Y}`, TA.h, TB.h, hrs, 'up')}
+    </div>
+    <section class="panel">
+      <div class="panel-head"><h2>${Yp} מול ${Y} ${mode==='quarter'?'לפי רבעון':mode==='ytd'?'מצטבר מתחילת השנה':'לפי חודש'}</h2><span class="small muted">${esc(sel.join(' + '))}</span><button class="btn sm" type="button" id="yoy-xlsx">ייצוא לאקסל</button></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th class="first" rowspan="2">${mode==='quarter'?'רבעון':mode==='ytd'?'תקופה':'חודש'}</th><th colspan="3" style="text-align:center">שעות</th><th colspan="3" style="text-align:center">הכנסות</th><th colspan="3" style="text-align:center">רווח גולמי</th><th colspan="3" style="text-align:center">שיעור רווח גולמי</th><th colspan="2" style="text-align:center">עובדות</th></tr>
+          <tr>${`<th class="n">${Yp}</th><th class="n">${Y}</th><th class="n">שינוי</th>`.repeat(4)}<th class="n">${Yp}</th><th class="n">${Y}</th></tr></thead>
+        <tbody>${groups.map(g=>row(g)).join('')}${mode!=='ytd'?row({label:`שנה מלאה`, ms:all12}, 'total'):''}</tbody></table></div>
+      <p class="hint" style="margin-top:8px">${Y}: חודשים עם ביצוע לפי הנתונים שנקלטו (אחרי הנהלה ישירה לסניף, כמו בתכנון מול ביצוע); חודשים בלי ביצוע לפי התכנית העסקית ${Y} ("תכנון"). ${Yp}: לפי קבצי הביצוע. רווח גולמי = הכנסות פחות עלות המכר. עובדות = ממוצע חודשי.</p>
+    </section>
+  </div>`;
+}
+function yoyXlsx(){
+  const Yp = Object.keys(history.years).map(Number).sort((a,b)=>b-a)[0], Y = Yp+1, hb = Object.keys(history.years[Yp]).sort();
+  const sel = ui.yoyBranch==='__all' ? hb : [ui.yoyBranch], wb = XLSX.utils.book_new(); wb.Workbook = {Views:[{RTL:true}]};
+  const r2 = v => isFinite(v) ? round2(v) : '';
+  const mk = (title, groups) => { const rows = groups.map(g=>{ const A = yoySum(sel, Yp, g.ms, false), B = yoySum(sel, Y, g.ms, true);
+      return [g.label, B.missing?'חסר':B.plan?(B.plan===B.n?'תכנון':'כולל תכנון'):'ביצוע', r2(A.h), r2(B.h), r2(A.revenue), r2(B.revenue), r2(A.gm), r2(B.gm), r2(A.margin*100), r2(B.margin*100), r2(A.workers), r2(B.workers)]; });
+    const ws = XLSX.utils.aoa_to_sheet([['תקופה',`מקור ${Y}`,`שעות ${Yp}`,`שעות ${Y}`,`הכנסות ${Yp}`,`הכנסות ${Y}`,`רווח גולמי ${Yp}`,`רווח גולמי ${Y}`,`% רווח גולמי ${Yp}`,`% רווח גולמי ${Y}`,`עובדות ${Yp}`,`עובדות ${Y}`], ...rows]);
+    ws['!cols'] = [16,12,10,10,12,12,12,12,10,10,9,9].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb, ws, title); };
+  const all12 = Array.from({length:12},(_,i)=>i+1);
+  mk('לפי חודש', [...all12.map(m=>({label:MONTHS[m-1], ms:[m]})), {label:'שנה מלאה', ms:all12}]);
+  mk('לפי רבעון', [...[1,2,3,4].map(q=>({label:`רבעון ${q}`, ms:[q*3-2,q*3-1,q*3]})), {label:'שנה מלאה', ms:all12}]);
+  mk('מצטבר', all12.map(m=>({label:m>1?`ינואר–${MONTHS[m-1]}`:'ינואר', ms:all12.slice(0,m)})));
+  saveXlsx(wb, `שנה מול שנה ${Yp}-${Y} - ${ui.yoyBranch==='__all'?'כל הסניפים':ui.yoyBranch}.xlsx`);
+}
 function renderPlan(v){
   const brs = Object.keys(plans).filter(b=>plans[b]?.months).sort();
   if(!brs.length){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין לא נקלטה תכנית עסקית</h2><p>יש להעלות את קובץ התכנית בלשונית "קליטת נתונים". נקרא גיליון רווח והפסד עם שורת חודשים 1–12 ושורות שעות, עובדות, הכנסות, עלויות ו-GM.</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
@@ -1211,7 +1305,7 @@ function manualPanel(br){
 }
 
 /* ============================================================ רינדור */
-const TABS = [['overview','סקירה ותובנות'],['dash','דשבורדים חודשיים'],['plan','תכנון מול ביצוע'],['clients','רווחיות לקוחות'],['cost','עלות שעה והתייעלות'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים'],['slip','בדיקת תלושים']];
+const TABS = [['overview','סקירה ותובנות'],['dash','דשבורדים חודשיים'],['plan','תכנון מול ביצוע'],['yoy','שנה מול שנה'],['clients','רווחיות לקוחות'],['cost','עלות שעה והתייעלות'],['client','כרטיס לקוח'],['match','התאמת לקוחות'],['data','קליטת נתונים'],['slip','בדיקת תלושים']];
 // ציור מחדש בלי לאבד את התא שבו מקלידים: עדכון מהמאגר או שמירה של תא קודם לא מוחקים את מה שכבר הוקלד ולא מזיזים את הסמן
 function focusKey(el){
   if(!el || !['INPUT','TEXTAREA','SELECT'].includes(el.tagName) || el.type==='file' || !$('#view')?.contains(el)) return null;
@@ -1250,8 +1344,8 @@ function renderNow(){
   Object.values(charts).forEach(c=>c.destroy()); for(const k in charts) delete charts[k];
   const v = $('#view');
   if(store.noDb){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">אין גישה לנתונים</h2><p>הנתונים נשמרים במאגר של הדף, ורק מי שמחובר לחשבון Claude יכול לראות אותם. יש להתחבר ל-claude.ai באותו דפדפן ולפתוח את הקישור שוב. בטלפון, אם הקישור נפתח מתוך וואטסאפ או מייל, כדאי לפתוח אותו בדפדפן הרגיל (Chrome או Safari).</p></div>`; $('#store-note').textContent = 'אין חיבור למאגר'; return; }
-  if(!ms.length && ui.tab!=='data' && ui.tab!=='match' && ui.tab!=='slip'){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין אין נתונים</h2><p>יש להעלות את שלושת הדוחות החודשיים בלשונית "קליטת נתונים".</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
-  ({slip:renderSlip, overview:renderOverview, dash:renderDash, plan:renderPlan, clients:renderClients, cost:renderCost, client:renderClient, match:renderMatch, data:renderData})[ui.tab](v);
+  if(!ms.length && ui.tab!=='data' && ui.tab!=='match' && ui.tab!=='slip' && ui.tab!=='yoy'){ v.innerHTML = `<div class="panel empty"><h2 style="margin-bottom:6px">עדיין אין נתונים</h2><p>יש להעלות את שלושת הדוחות החודשיים בלשונית "קליטת נתונים".</p><p style="margin-top:12px"><button class="btn primary" type="button" data-tab="data">לקליטת נתונים</button></p></div>`; return; }
+  ({slip:renderSlip, overview:renderOverview, dash:renderDash, plan:renderPlan, yoy:renderYoy, clients:renderClients, cost:renderCost, client:renderClient, match:renderMatch, data:renderData})[ui.tab](v);
 }
 
 /* ---------- סקירה ---------- */
@@ -3038,7 +3132,7 @@ function parseMaterials(wb){
 /* ---------- גיבוי ושחזור ----------
    גיבוי = קובץ JSON עם כל המסמכים המשותפים (דוחות חודשיים, התאמה, תכניות, עלויות ידניות, חומרים, הנהלה וכלליות, הפסקות).
    שכר העובדים (אזור פרטי) בקובץ נפרד. שחזור מחזיר את המאגר בדיוק למצב שבקובץ, אחרי אישור. */
-const SHARED_DOCS = ['settings/mapping','settings/plan','settings/manual','settings/materials','settings/ga','settings/breaks'], SHARED_COLS = ['months','ga'];
+const SHARED_DOCS = ['settings/mapping','settings/plan','settings/manual','settings/materials','settings/ga','settings/breaks','settings/history'], SHARED_COLS = ['months','ga'];
 let pendingRestore = null;
 function backupPanel(){
   const pr = pendingRestore;
@@ -3065,7 +3159,7 @@ async function collectShared(){
     for(const c of SHARED_COLS){ const q = await store.db.collection(c).get(); q.docs.forEach(d=>docs[c+'/'+d.id] = thaw(d.data())); }
   } else {
     const ls = k => { try{ return JSON.parse(localStorage.getItem(k)||'null'); }catch(e){ return null; } };
-    [['settings/mapping','coop-mapping'],['settings/plan','coop-plan'],['settings/manual','coop-manual'],['settings/materials','coop-materials'],['settings/ga','coop-ga'],['settings/breaks','coop-breaks']].forEach(([p,k])=>{ const v = ls(k); if(v) docs[p] = v; });
+    [['settings/mapping','coop-mapping'],['settings/plan','coop-plan'],['settings/manual','coop-manual'],['settings/materials','coop-materials'],['settings/ga','coop-ga'],['settings/breaks','coop-breaks'],['settings/history','coop-history']].forEach(([p,k])=>{ const v = ls(k); if(v) docs[p] = v; });
     for(const [ym, M] of Object.entries(months)) docs['months/'+ym] = thaw(M);
   }
   return docs;
@@ -3099,7 +3193,7 @@ async function doRestore(){
       for(const pth of Object.keys(cur)) if(!(pth in docs)) await store.db.doc(pth).delete();   // מסמכים שנוספו אחרי הגיבוי
       for(const [pth, d] of Object.entries(docs)) if(SHARED_DOCS.includes(pth) || SHARED_COLS.includes(pth.split('/')[0])) await store.db.doc(pth).set(d);
     } else {
-      const map = {'settings/mapping':'coop-mapping','settings/plan':'coop-plan','settings/manual':'coop-manual','settings/materials':'coop-materials','settings/ga':'coop-ga','settings/breaks':'coop-breaks'};
+      const map = {'settings/mapping':'coop-mapping','settings/plan':'coop-plan','settings/manual':'coop-manual','settings/materials':'coop-materials','settings/ga':'coop-ga','settings/breaks':'coop-breaks','settings/history':'coop-history'};
       for(const [p,k] of Object.entries(map)){ if(docs[p]) localStorage.setItem(k, JSON.stringify(docs[p])); else localStorage.removeItem(k); }
       const ms = {}; for(const [p,d] of Object.entries(docs)) if(p.startsWith('months/')) ms[p.slice(7)] = d;
       localStorage.setItem('coop-months', JSON.stringify(ms)); await store.init();
@@ -3224,6 +3318,14 @@ async function handleFiles(files){
       }
       if(type==='plan'){
         const p = parsePlan(wb, f.name);
+        // קובץ בפורמט התכנית לשנה שלפני שנת הנתונים = ביצוע שנה קודמת (להשוואת שנה מול שנה)
+        const curY = +((monthList().slice(-1)[0]||'').slice(0,4)) || new Date().getFullYear();
+        if(p.year < curY){
+          const br = guessPlanBranch(wb) || branchNames().find(b=>!history.years[p.year]?.[b] && b!==NO_BRANCH) || branchNames()[0] || '';
+          history.years[p.year] = {...(history.years[p.year]||{}), [br]:{file:p.file, sheet:p.sheet, year:p.year, uploadedAt:p.uploadedAt, months:p.months}};
+          await store.saveHistory(); ui.tab='yoy'; ui.yoyBranch = br;
+          toast(`ביצוע ${p.year} של ${br} נקלט מהגיליון "${p.sheet}" להשוואת שנה מול שנה. אם הסניף שגוי, אפשר לשנות בלשונית שנה מול שנה`); continue;
+        }
         p.branch = guessPlanBranch(wb) || branchNames().find(b=>!plans[b]) || branchNames()[0] || '';
         const prev = plans[p.branch]; if(prev){ p.lineSource = {...p.lineSource, ...prev.lineSource}; p.extraManual = prev.extraManual || p.extraManual; }  // עדכון תכנית: שומרים את ההגדרות
         plans = {...plans, [p.branch]:p}; await store.savePlan(); ui.tab='plan'; ui.planBranch = p.branch;
@@ -3357,6 +3459,13 @@ document.addEventListener('click', async e=>{
   }
   if(d.matdel){ const ym = ui.matYm; delete materials.byMonth[ym]?.[d.matdel]; delete materials.billByMonth[ym]?.[d.matdel]; await store.saveMaterials(); render(); return; }
   if(t.id==='ov-all'){ ui.branch=''; saveUi(); render(); return; }
+  if(t.id==='yoy-xlsx'){ yoyXlsx(); return; }
+  if(t.id==='yoy-move-go' || t.id==='yoy-del'){
+    const Yp = Object.keys(history.years).map(Number).sort((a,b)=>b-a)[0], from = ui.yoyBranch, H = history.years[Yp]; if(!H?.[from]) return;
+    if(t.id==='yoy-del'){ if(!confirm(`למחוק את הביצוע של ${Yp} של ${from}?`)) return; delete H[from]; if(!Object.keys(H).length) delete history.years[Yp]; ui.yoyBranch='__all'; }
+    else { const to = $('#yoy-move')?.value; if(!to || H[to]) return; H[to] = H[from]; delete H[from]; ui.yoyBranch = to; }
+    saveUi(); render(); await store.saveHistory(); toast('נשמר'); return;
+  }
   if(t.id==='plan-branch-move'){   // העברת תכנית לסניף אחר: רק בלחיצה מפורשת, ורק לסניף שאין לו תכנית. העלויות הידניות עוברות איתה
     const from = ui.planBranch, to = $('#plan-branch')?.value; if(!to || !plans[from] || plans[to]) return;
     const np = {...plans, [to]:{...plans[from], branch:to}}; delete np[from]; plans = np;
@@ -3413,6 +3522,8 @@ document.addEventListener('change', async e=>{
   else if(d.assignSite) await assign('site', d.assignSite, t.value);
   else if(d.assignClient) await assign('client', d.assignClient, t.value);
   else if(t.id==='plan-view'){ ui.planBranch=t.value; saveUi(); render(); }
+  else if(t.id==='yoy-br'){ ui.yoyBranch=t.value; saveUi(); render(); }
+  else if(t.id==='yoy-mode'){ ui.yoyMode=t.value; saveUi(); render(); }
   else if(d.linesrc){ const pl=plans[ui.planBranch]; pl.lineSource = {...(pl.lineSource||{}), [d.linesrc]:t.value}; render(); await store.savePlan(); }
   else if(t.id==='plan-addline'){ const pl=plans[ui.planBranch], n=normName(t.value); if(n && !manualLinesOf(pl).includes(n)){ pl.extraManual=[...(pl.extraManual||[]), n]; await store.savePlan(); render(); toast(`נוספה שורה ידנית: ${n}`); } }
   else if(t.id==='mat-ym'){ ui.matYm=t.value; render(); }
